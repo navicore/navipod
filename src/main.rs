@@ -34,7 +34,30 @@ async fn main() -> Result<(), kube::Error> {
     let pod_list: ObjectList<Pod> = pods.list(&lp).await?;
 
     for p in pod_list.items {
-        let metadata_name = p.metadata.name.unwrap();
+        let metadata = p.metadata.clone();
+        let metadata_name = metadata.name.unwrap();
+        let annotations = metadata.annotations.unwrap_or_default();
+
+        let scrape = annotations
+            .get("prometheus.io/scrape")
+            .cloned()
+            .unwrap_or_else(|| "false".to_string());
+        let path = annotations
+            .get("prometheus.io/path")
+            .cloned()
+            .unwrap_or_else(|| "/metrics".to_string());
+        let port = annotations
+            .get("prometheus.io/port")
+            .cloned()
+            .unwrap_or_else(|| "".to_string());
+
+        if scrape == "true" {
+            println!(
+                "Prometheus Metrics - Pod: {}, Path: {}, Port: {}",
+                metadata_name, path, port
+            );
+        }
+
         for container in p.spec.unwrap().containers {
             if let Some(readiness_probe) = container.readiness_probe {
                 if let Some(http_get) = readiness_probe.http_get {

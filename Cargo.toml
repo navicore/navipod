@@ -10,3 +10,4 @@ kube = { version = "0.83.0", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
 clap = { version = "4.3", features = ["derive"] }
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread", "signal"] }
+csv = "1.1"

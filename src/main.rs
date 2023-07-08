@@ -1,4 +1,5 @@
 use clap::Parser;
+use csv::Writer;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::ObjectList;
@@ -6,6 +7,7 @@ use kube::{
     api::{Api, ListParams},
     Client,
 };
+use std::io;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -23,21 +25,30 @@ fn get_port(p: IntOrString) -> String {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), kube::Error> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let namespace = args.namespace;
-    let client = Client::try_default().await?;
+    let client = Client::try_default()
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
     let pods: Api<Pod> = Api::namespaced(client, namespace.as_str());
     let lp = ListParams::default();
 
-    let pod_list: ObjectList<Pod> = pods.list(&lp).await?;
+    let pod_list: ObjectList<Pod> = pods
+        .list(&lp)
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    let mut wtr = Writer::from_writer(io::stdout());
+
+    // Write the headers
+    wtr.write_record(&["Type", "Pod", "Path", "Port"])?;
 
     for p in pod_list.items {
         let metadata = p.metadata.clone();
         let metadata_name = metadata.name.unwrap();
         let annotations = metadata.annotations.unwrap_or_default();
-
         let scrape = annotations
             .get("prometheus.io/scrape")
             .cloned()
@@ -52,36 +63,34 @@ async fn main() -> Result<(), kube::Error> {
             .unwrap_or_else(|| "".to_string());
 
         if scrape == "true" {
-            println!(
-                "Prometheus Metrics - Pod: {}, Path: {}, Port: {}",
-                metadata_name, path, port
-            );
+            wtr.write_record(&["Prometheus Metrics", &metadata_name, &path, &port])?;
         }
 
         for container in p.spec.unwrap().containers {
             if let Some(readiness_probe) = container.readiness_probe {
                 if let Some(http_get) = readiness_probe.http_get {
-                    println!(
-                        "Readiness Probe - Pod: {}, Path: {}, Port: {}",
-                        metadata_name,
-                        http_get.path.unwrap(),
-                        get_port(http_get.port)
-                    );
+                    wtr.write_record(&[
+                        "Readiness Probe",
+                        &metadata_name,
+                        &http_get.path.unwrap(),
+                        &get_port(http_get.port),
+                    ])?;
                 }
             }
 
             if let Some(liveness_probe) = container.liveness_probe {
                 if let Some(http_get) = liveness_probe.http_get {
-                    println!(
-                        "Liveness Probe - Pod: {}, Path: {}, Port: {}",
-                        metadata_name,
-                        http_get.path.unwrap(),
-                        get_port(http_get.port)
-                    );
+                    wtr.write_record(&[
+                        "Liveness Probe",
+                        &metadata_name,
+                        &http_get.path.unwrap(),
+                        &get_port(http_get.port),
+                    ])?;
                 }
             }
         }
     }
+    wtr.flush()?;
 
     Ok(())
 }

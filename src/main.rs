@@ -7,6 +7,8 @@ use kube::{
     api::{Api, ListParams},
     Client,
 };
+use regex::Regex;
+use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 use tokio::io::AsyncWriteExt;
@@ -18,6 +20,124 @@ struct Args {
     /// Name of the namespace to walk
     #[arg(short, long)]
     namespace: String,
+}
+
+fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+
+    // Check if there are at least 3 parts
+    if parts.len() < 3 {
+        return Err(From::from("Invalid line format"));
+    }
+
+    // Concatenate the first two parts to get the "first word"
+    let first_word = format!("{} {}", parts[0], parts[1]);
+
+    // Check if the first word is "# HELP" or "# TYPE"
+    if first_word != "# HELP" && first_word != "# TYPE" {
+        return Err(From::from("First word must be '# HELP' or '# TYPE'"));
+    }
+
+    let name = parts[2].to_string();
+
+    // Use the name as the default value
+    let mut value = name.replace("_", " ");
+
+    // If there are more parts, use the rest of the line as the value
+    if parts.len() > 3 {
+        value = parts[3..].join(" ");
+    }
+
+    Ok((name, value))
+}
+
+fn parse_metric(
+    metrics_text: &str,
+    k8p_description: &str,
+    k8p_type: &str,
+) -> Result<Vec<(String, String)>, Box<dyn Error>> {
+    let mut result = Vec::new();
+
+    if metrics_text.contains("{") {
+        // The metrics_text contains {}, so process it using the original approach
+        let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>[^}]*)\} (?P<value>.*)")?;
+        let caps = re
+            .captures(metrics_text)
+            .ok_or("Failed to parse the input string")?;
+
+        // Get the value for "k8p_metric_name" key
+        result.push((
+            "k8p_metric_name".to_string(),
+            caps["metric_name"].trim().to_string(),
+        ));
+
+        // Get the value for "k8p_value" key
+        result.push(("k8p_value".to_string(), caps["value"].trim().to_string()));
+
+        // Process the labels inside {}
+        let labels_text = &caps["labels"];
+        let labels = labels_text.split(',');
+
+        for label in labels {
+            if label.trim().is_empty() {
+                continue;
+            }
+
+            let key_value: Vec<&str> = label.split('=').collect();
+            if key_value.len() == 2 {
+                // Remove quotes around the value if present
+                let value = key_value[1].trim_matches('"');
+                result.push((key_value[0].to_string(), value.to_string()));
+            } else {
+                return Err(From::from("Failed to parse a label=value pair"));
+            }
+        }
+    } else {
+        // The metrics_text does not contain {}, split on whitespace
+        let split: Vec<&str> = metrics_text.split_whitespace().collect();
+        if split.len() != 2 {
+            warn!("Failed to parse the input string");
+            return Ok(Vec::new());
+        }
+
+        result.push(("k8p_metric_name".to_string(), split[0].to_string()));
+        result.push(("k8p_value".to_string(), split[1].to_string()));
+    }
+
+    // Append "k8p_description" and "k8p_type"
+    result.push(("k8p_description".to_string(), k8p_description.to_string()));
+    result.push(("k8p_type".to_string(), k8p_type.to_string()));
+
+    Ok(result)
+}
+
+fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
+    let mut result = Vec::new();
+    let mut k8p_description = String::new();
+    let mut k8p_type = String::new();
+
+    for line in metrics_text.lines() {
+        let line = line.trim();
+        if line.starts_with("# HELP") || line.starts_with("# TYPE") {
+            match parse_help_type(line) {
+                Ok((name, value)) => {
+                    if line.starts_with("# HELP") {
+                        k8p_description = value;
+                    } else {
+                        k8p_type = value;
+                    }
+                }
+                Err(err) => warn!("Failed to parse line '{}': {}", line, err),
+            }
+        } else if !line.is_empty() {
+            match parse_metric(line, &k8p_description, &k8p_type) {
+                Ok(metric) => result.push(metric),
+                Err(err) => warn!("Failed to parse line '{}': {}", line, err),
+            }
+        }
+    }
+
+    result
 }
 
 async fn process_metrics(
@@ -40,20 +160,25 @@ async fn process_metrics(
     port_stream.write_all(request.as_bytes()).await?;
 
     let mut response_stream = tokio_util::io::ReaderStream::new(port_stream);
+    let mut metrics_text = String::new();
 
-    // Read the response and write it to a file
-    if let Some(response) = response_stream.next().await {
+    // Read the response and write it to a string
+    while let Some(response) = response_stream.next().await {
         match response {
             Ok(bytes) => {
-                let metrics_text = std::str::from_utf8(&bytes[..])?;
-                let datetime: DateTime<Utc> = Utc::now();
-                let filename = format!("logs/{}-{}.txt", metadata_name, datetime);
-                let mut file = File::create(filename)?;
-                file.write_all(metrics_text.as_bytes())?;
+                metrics_text.push_str(std::str::from_utf8(&bytes[..])?);
             }
             Err(err) => println!("Error reading response: {:?}", err),
         }
     }
+
+    let _r = parse_all_metrics(&metrics_text);
+    //info!("got results: {:?}", _r.size());
+
+    let datetime: DateTime<Utc> = Utc::now();
+    let filename = format!("logs/{}-{}.txt", metadata_name, datetime);
+    let mut file = File::create(filename)?;
+    file.write_all(metrics_text.as_bytes())?;
 
     Ok(())
 }

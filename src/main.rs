@@ -1,13 +1,16 @@
+use chrono::{DateTime, Utc};
 use clap::Parser;
-use csv::Writer;
+use futures::StreamExt;
 use k8s_openapi::api::core::v1::Pod;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::ObjectList;
 use kube::{
     api::{Api, ListParams},
     Client,
 };
-use std::io;
+use std::fs::File;
+use std::io::Write;
+use tokio::io::AsyncWriteExt;
+use tracing::*;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -17,15 +20,47 @@ struct Args {
     namespace: String,
 }
 
-fn get_port(p: IntOrString) -> String {
-    match p {
-        k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(i) => i.to_string(),
-        k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(s) => s,
+async fn process_metrics(
+    pods: &Api<Pod>,
+    metadata_name: &str,
+    path: &str,
+    port: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("getting health from {}{}:{}", metadata_name, path, port);
+    let local_port: u16 = port.parse()?; // Convert the port to u16
+
+    let mut port_forwarder = pods.portforward(metadata_name, &[local_port]).await?;
+    let mut port_stream = port_forwarder.take_stream(local_port).unwrap();
+
+    // Write a HTTP GET request to the metrics path
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\r\n",
+        path
+    );
+    port_stream.write_all(request.as_bytes()).await?;
+
+    let mut response_stream = tokio_util::io::ReaderStream::new(port_stream);
+
+    // Read the response and write it to a file
+    if let Some(response) = response_stream.next().await {
+        match response {
+            Ok(bytes) => {
+                let metrics_text = std::str::from_utf8(&bytes[..])?;
+                let datetime: DateTime<Utc> = Utc::now();
+                let filename = format!("logs/{}-{}.txt", metadata_name, datetime);
+                let mut file = File::create(filename)?;
+                file.write_all(metrics_text.as_bytes())?;
+            }
+            Err(err) => println!("Error reading response: {:?}", err),
+        }
     }
+
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
     let args = Args::parse();
     let namespace = args.namespace;
     let client = Client::try_default()
@@ -39,11 +74,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .list(&lp)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-    let mut wtr = Writer::from_writer(io::stdout());
-
-    // Write the headers
-    wtr.write_record(&["Type", "Pod", "Path", "Port"])?;
 
     for p in pod_list.items {
         let metadata = p.metadata.clone();
@@ -63,34 +93,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|| "".to_string());
 
         if scrape == "true" {
-            wtr.write_record(&["Prometheus Metrics", &metadata_name, &path, &port])?;
-        }
-
-        for container in p.spec.unwrap().containers {
-            if let Some(readiness_probe) = container.readiness_probe {
-                if let Some(http_get) = readiness_probe.http_get {
-                    wtr.write_record(&[
-                        "Readiness Probe",
-                        &metadata_name,
-                        &http_get.path.unwrap(),
-                        &get_port(http_get.port),
-                    ])?;
-                }
-            }
-
-            if let Some(liveness_probe) = container.liveness_probe {
-                if let Some(http_get) = liveness_probe.http_get {
-                    wtr.write_record(&[
-                        "Liveness Probe",
-                        &metadata_name,
-                        &http_get.path.unwrap(),
-                        &get_port(http_get.port),
-                    ])?;
-                }
+            match process_metrics(&pods, metadata_name.as_str(), path.as_str(), port.as_str()).await
+            {
+                Ok(_) => (),
+                Err(e) => eprintln!("Error processing metrics for {}: {:?}", metadata_name, e),
             }
         }
     }
-    wtr.flush()?;
 
     Ok(())
 }

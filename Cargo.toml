@@ -2,15 +2,21 @@
 name = "k8p"
 version = "0.1.1"
 edition = "2021"
+license = "MIT"
+authors = ["Ed Sweeney <ed@onextent.com>"]
+description = "A cli tool for inspecting containers in Kubernetes"
+keywords = ["kubernetes", "commandline", "k8s", "prometheus", "metrics"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "k8p"
+path = "src/main.rs"
 
 [dependencies]
 kube = { version = "0.83.0", features = ["runtime", "derive", "client", "ws"] }
 k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
 clap = { version = "4.3", features = ["derive"] }
 tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread", "signal"] }
-csv = "1.1"
+csv = "1.2"
 reqwest = { version = "0.11", features = ["json"] }
 chrono = "0.4"
 futures = "0.3"

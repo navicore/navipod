@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let port = annotations
             .get("prometheus.io/port")
             .cloned()
-            .unwrap_or_else(|| "".to_string());
+            .unwrap_or_default();
 
         if scrape == "true" {
             match process_metrics(&pods, metadata_name.as_str(), path.as_str(), port.as_str()).await

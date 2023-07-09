@@ -9,8 +9,6 @@ use kube::{
 };
 use regex::Regex;
 use std::error::Error;
-use std::fs::File;
-use std::io::Write;
 use tokio::io::AsyncWriteExt;
 use tracing::*;
 
@@ -59,8 +57,7 @@ fn parse_metric(
     let mut result = Vec::new();
 
     if metrics_text.contains("{") {
-        // The metrics_text contains {}, so process it using the original approach
-        let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>[^}]*)\} (?P<value>.*)")?;
+        let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>.*)\} (?P<value>.*)")?;
         let caps = re
             .captures(metrics_text)
             .ok_or("Failed to parse the input string")?;
@@ -76,21 +73,11 @@ fn parse_metric(
 
         // Process the labels inside {}
         let labels_text = &caps["labels"];
-        let labels = labels_text.split(',');
-
-        for label in labels {
-            if label.trim().is_empty() {
-                continue;
-            }
-
-            let key_value: Vec<&str> = label.split('=').collect();
-            if key_value.len() == 2 {
-                // Remove quotes around the value if present
-                let value = key_value[1].trim_matches('"');
-                result.push((key_value[0].to_string(), value.to_string()));
-            } else {
-                return Err(From::from("Failed to parse a label=value pair"));
-            }
+        let label_re = Regex::new(r#"(?P<key>[^=]+)="(?P<value>[^"]*)""#)?;
+        for caps in label_re.captures_iter(labels_text) {
+            let key = caps["key"].trim();
+            let value = caps["value"].trim();
+            result.push((key.to_string(), value.to_string()));
         }
     } else {
         // The metrics_text does not contain {}, split on whitespace
@@ -120,7 +107,7 @@ fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
         let line = line.trim();
         if line.starts_with("# HELP") || line.starts_with("# TYPE") {
             match parse_help_type(line) {
-                Ok((name, value)) => {
+                Ok((_name, value)) => {
                     if line.starts_with("# HELP") {
                         k8p_description = value;
                     } else {
@@ -140,11 +127,31 @@ fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     result
 }
 
+fn persist_all_metrics(
+    metrics: Vec<Vec<(String, String)>>,
+    podname: &str,
+    appname: &str,
+    namespace: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let _datetime: DateTime<Utc> = Utc::now();
+    info!(
+        "storing {} metrics for app {} and pod {} in ns {}",
+        metrics.len(),
+        podname,
+        appname,
+        namespace
+    );
+
+    Ok(())
+}
+
 async fn process_metrics(
     pods: &Api<Pod>,
     metadata_name: &str,
     path: &str,
     port: &str,
+    appname: &str,
+    namespace: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("getting health from {}{}:{}", metadata_name, path, port);
     let local_port: u16 = port.parse()?; // Convert the port to u16
@@ -172,15 +179,8 @@ async fn process_metrics(
         }
     }
 
-    let _r = parse_all_metrics(&metrics_text);
-    //info!("got results: {:?}", _r.size());
-
-    let datetime: DateTime<Utc> = Utc::now();
-    let filename = format!("logs/{}-{}.txt", metadata_name, datetime);
-    let mut file = File::create(filename)?;
-    file.write_all(metrics_text.as_bytes())?;
-
-    Ok(())
+    let metrics = parse_all_metrics(&metrics_text);
+    persist_all_metrics(metrics, metadata_name, appname, namespace)
 }
 
 #[tokio::main]
@@ -203,6 +203,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for p in pod_list.items {
         let metadata = p.metadata.clone();
         let metadata_name = metadata.name.unwrap();
+        let labels = metadata.labels.unwrap_or_default();
+        let appname = labels
+            .get("app")
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
         let annotations = metadata.annotations.unwrap_or_default();
         let scrape = annotations
             .get("prometheus.io/scrape")
@@ -218,7 +223,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_default();
 
         if scrape == "true" {
-            match process_metrics(&pods, metadata_name.as_str(), path.as_str(), port.as_str()).await
+            match process_metrics(
+                &pods,
+                metadata_name.as_str(),
+                path.as_str(),
+                port.as_str(),
+                appname.as_str(),
+                namespace.as_str(),
+            )
+            .await
             {
                 Ok(_) => (),
                 Err(e) => eprintln!("Error processing metrics for {}: {:?}", metadata_name, e),

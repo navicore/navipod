@@ -12,7 +12,7 @@ name = "k8p"
 path = "src/main.rs"
 
 [dependencies]
-regex = "1.5"
+regex = "1.9"
 kube = { version = "0.83.0", features = ["runtime", "derive", "client", "ws"] }
 k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
 clap = { version = "4.3", features = ["derive"] }

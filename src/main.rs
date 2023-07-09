@@ -74,7 +74,6 @@ fn parse_metric(
 
         // Process the labels inside {}
         let labels_text = &caps["labels"];
-        //let label_re = Regex::new(r#"(?P<key>[^=]+)="(?P<value>[^"]*)""#)?;
         let label_re = Regex::new(r#"(?P<key>[^=,]+)="(?P<value>[^"]*)""#)?;
         for caps in label_re.captures_iter(labels_text) {
             let key = caps["key"].trim();
@@ -177,7 +176,7 @@ async fn process_metrics(
             Ok(bytes) => {
                 metrics_text.push_str(std::str::from_utf8(&bytes[..])?);
             }
-            Err(err) => println!("Error reading response: {:?}", err),
+            Err(err) => error!("Error reading response: {:?}", err),
         }
     }
 
@@ -236,7 +235,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             {
                 Ok(_) => (),
-                Err(e) => eprintln!("Error processing metrics for {}: {:?}", metadata_name, e),
+                Err(e) => error!("Error processing metrics for {}: {:?}", metadata_name, e),
             }
         }
     }

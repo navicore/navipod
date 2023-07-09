@@ -58,9 +58,10 @@ fn parse_metric(
 
     if metrics_text.contains("{") {
         let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>.*)\} (?P<value>.*)")?;
-        let caps = re
-            .captures(metrics_text)
-            .ok_or("Failed to parse the input string")?;
+        let caps = re.captures(metrics_text).ok_or(format!(
+            "Failed to parse the input string: {}",
+            metrics_text
+        ))?;
 
         // Get the value for "k8p_metric_name" key
         result.push((
@@ -73,7 +74,8 @@ fn parse_metric(
 
         // Process the labels inside {}
         let labels_text = &caps["labels"];
-        let label_re = Regex::new(r#"(?P<key>[^=]+)="(?P<value>[^"]*)""#)?;
+        //let label_re = Regex::new(r#"(?P<key>[^=]+)="(?P<value>[^"]*)""#)?;
+        let label_re = Regex::new(r#"(?P<key>[^=,]+)="(?P<value>[^"]*)""#)?;
         for caps in label_re.captures_iter(labels_text) {
             let key = caps["key"].trim();
             let value = caps["value"].trim();
@@ -83,7 +85,7 @@ fn parse_metric(
         // The metrics_text does not contain {}, split on whitespace
         let split: Vec<&str> = metrics_text.split_whitespace().collect();
         if split.len() != 2 {
-            warn!("Failed to parse the input string");
+            warn!("Failed to parse the input string: {}", metrics_text);
             return Ok(Vec::new());
         }
 
@@ -240,4 +242,89 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_help_type_valid() {
+        let result =
+            parse_help_type("# HELP http_requests_total The total number of HTTP requests.")
+                .unwrap();
+        assert_eq!(
+            (
+                "http_requests_total".to_string(),
+                "The total number of HTTP requests.".to_string()
+            ),
+            result
+        );
+
+        let result = parse_help_type("# TYPE http_requests_total counter").unwrap();
+        assert_eq!(
+            ("http_requests_total".to_string(), "counter".to_string()),
+            result
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid line format")]
+    fn test_parse_help_type_invalid_format() {
+        parse_help_type("# HELP").unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "First word must be '# HELP' or '# TYPE'")]
+    fn test_parse_help_type_invalid_first_word() {
+        parse_help_type("# INVALID http_requests_total counter").unwrap();
+    }
+
+    #[test]
+    fn test_parse_metric_with_labels() {
+        let result = parse_metric(
+            "http_requests_total{method=\"post\",code=\"200\"} 1027",
+            "The total number of HTTP requests.",
+            "counter",
+        )
+        .unwrap();
+        let expected = vec![
+            (
+                "k8p_metric_name".to_string(),
+                "http_requests_total".to_string(),
+            ),
+            ("k8p_value".to_string(), "1027".to_string()),
+            ("method".to_string(), "post".to_string()),
+            ("code".to_string(), "200".to_string()),
+            (
+                "k8p_description".to_string(),
+                "The total number of HTTP requests.".to_string(),
+            ),
+            ("k8p_type".to_string(), "counter".to_string()),
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_parse_metric_without_labels() {
+        let result = parse_metric(
+            "http_requests_total 1027",
+            "The total number of HTTP requests.",
+            "counter",
+        )
+        .unwrap();
+        let expected = vec![
+            (
+                "k8p_metric_name".to_string(),
+                "http_requests_total".to_string(),
+            ),
+            ("k8p_value".to_string(), "1027".to_string()),
+            (
+                "k8p_description".to_string(),
+                "The total number of HTTP requests.".to_string(),
+            ),
+            ("k8p_type".to_string(), "counter".to_string()),
+        ];
+        assert_eq!(expected, result);
+    }
 }

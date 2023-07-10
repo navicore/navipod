@@ -11,6 +11,7 @@ use regex::Regex;
 use std::error::Error;
 use tokio::io::AsyncWriteExt;
 use tracing::*;
+use uuid::Uuid;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -128,22 +129,50 @@ fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     result
 }
 
-fn persist_all_metrics(
-    metrics: Vec<Vec<(String, String)>>,
+fn persist_triples(
+    triples: Vec<Vec<(String, String, String)>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("persisting {} metrics", triples.len());
+
+    Ok(())
+}
+
+fn format_triples(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, String, String)>> {
+    tuples
+        .into_iter()
+        .map(|inner_vec| {
+            let my_uuid = Uuid::new_v4().to_string();
+            inner_vec
+                .into_iter()
+                .map(|(first, second)| (my_uuid.clone(), first, second))
+                .collect::<Vec<(String, String, String)>>()
+        })
+        .collect()
+}
+
+fn format_tuples(
+    mut metrics: Vec<Vec<(String, String)>>,
     podname: &str,
     appname: &str,
     namespace: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let _datetime: DateTime<Utc> = Utc::now();
+) -> Vec<Vec<(String, String)>> {
+    let datetime: DateTime<Utc> = Utc::now();
+    let date_string: String = datetime.to_rfc3339();
     info!(
-        "storing {} metrics for app {} and pod {} in ns {}",
+        "formating {} metrics for app {} and pod {} in ns {}",
         metrics.len(),
         podname,
         appname,
         namespace
     );
 
-    Ok(())
+    for observation in &mut *metrics {
+        observation.push(("k8s_datetime".to_string(), date_string.to_string()));
+        observation.push(("k8s_podname".to_string(), podname.to_string()));
+        observation.push(("k8s_appname".to_string(), appname.to_string()));
+        observation.push(("k8s_namespace".to_string(), namespace.to_string()));
+    }
+    metrics
 }
 
 async fn process_metrics(
@@ -181,7 +210,9 @@ async fn process_metrics(
     }
 
     let metrics = parse_all_metrics(&metrics_text);
-    persist_all_metrics(metrics, metadata_name, appname, namespace)
+    let tuples = format_tuples(metrics, metadata_name, appname, namespace);
+    let triples = format_triples(tuples);
+    persist_triples(triples)
 }
 
 #[tokio::main]

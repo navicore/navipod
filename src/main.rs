@@ -210,12 +210,18 @@ async fn process_metrics(
     let local_port: u16 = port.parse()?; // Convert the port to u16
 
     let mut port_forwarder = pods.portforward(metadata_name, &[local_port]).await?;
-    let mut port_stream = port_forwarder.take_stream(local_port).unwrap();
-
+    let mut port_stream = match port_forwarder.take_stream(local_port) {
+        Some(stream) => stream,
+        None => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Unable to take stream",
+            )))
+        }
+    };
     // Write a HTTP GET request to the metrics path
     let request = format!(
-        "GET {} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\r\n",
-        path
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\r\n"
     );
     port_stream.write_all(request.as_bytes()).await?;
 
@@ -245,13 +251,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let namespace = args.namespace;
 
     let db_location = args.db_location;
-    let db_url = format!("sqlite:{}", db_location);
+    let db_url = format!("sqlite:{db_location}");
     let db_path = Path::new(&db_location);
-    if !db_path.exists() {
+    if db_path.exists() {
+        info!("adding to db {}", db_url);
+    } else {
         info!("creating db {}", db_url);
         File::create(&db_location)?;
-    } else {
-        info!("adding to db {}", db_url);
     }
 
     let pool = SqlitePool::connect(&db_url).await?;
@@ -283,7 +289,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for p in pod_list.items {
         let metadata = p.metadata.clone();
-        let metadata_name = metadata.name.unwrap();
+        let metadata_name = metadata.name.unwrap_or_default();
         let labels = metadata.labels.unwrap_or_default();
         let appname = labels
             .get("app")
@@ -304,7 +310,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_default();
 
         if scrape == "true" {
-            match process_metrics(
+            let p = process_metrics(
                 &pool,
                 &pods,
                 metadata_name.as_str(),
@@ -313,8 +319,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 appname.as_str(),
                 namespace.as_str(),
             )
-            .await
-            {
+            .await;
+
+            match p {
                 Ok(_) => (),
                 Err(e) => error!("Error processing metrics for {}: {:?}", metadata_name, e),
             }

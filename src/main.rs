@@ -13,7 +13,7 @@ use std::error::Error;
 use std::fs::File;
 use std::path::Path;
 use tokio::io::AsyncWriteExt;
-use tracing::*;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[derive(Parser, Debug)]
@@ -44,13 +44,11 @@ fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
 
     let name = parts[2].to_string();
 
-    // Use the name as the default value
-    let mut value = name.replace('_', " ");
-
-    // If there are more parts, use the rest of the line as the value
-    if parts.len() > 3 {
-        value = parts[3..].join(" ");
-    }
+    let value = if parts.len() > 3 {
+        parts[3..].join(" ")
+    } else {
+        name.replace('_', " ")
+    };
 
     Ok((name, value))
 }
@@ -64,10 +62,9 @@ fn parse_metric(
 
     if metrics_text.contains('{') {
         let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>.*)\} (?P<value>.*)")?;
-        let caps = re.captures(metrics_text).ok_or(format!(
-            "Failed to parse the input string: {}",
-            metrics_text
-        ))?;
+        let caps = re
+            .captures(metrics_text)
+            .ok_or(format!("Failed to parse the input string: {metrics_text}"))?;
 
         // Get the value for "k8p_metric_name" key
         result.push((
@@ -210,15 +207,13 @@ async fn process_metrics(
     let local_port: u16 = port.parse()?; // Convert the port to u16
 
     let mut port_forwarder = pods.portforward(metadata_name, &[local_port]).await?;
-    let mut port_stream = match port_forwarder.take_stream(local_port) {
-        Some(stream) => stream,
-        None => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Unable to take stream",
-            )))
-        }
-    };
+    let Some(mut port_stream) = port_forwarder.take_stream(local_port) else {
+             return Err(Box::new(std::io::Error::new(
+                 std::io::ErrorKind::Other,
+                 "Unable to take stream",
+             )))
+         };
+
     // Write a HTTP GET request to the metrics path
     let request = format!(
         "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\r\n"

@@ -1,3 +1,29 @@
+//! # Kubernetes Metrics Collector
+//!
+//! This Rust program collects metrics from Kubernetes pods and stores them in a SQLite database.
+//! Metrics are obtained from pods exposing a Prometheus compatible `/metrics` endpoint.
+//!
+//! ## Overview
+//!
+//! 1. The program accepts command-line arguments for specifying a namespace and a location for
+//!    the SQLite database.
+//! 2. It then connects to a Kubernetes cluster using the default kubeconfig, and lists all the
+//!    pods in the specified namespace.
+//! 3. For each pod, it checks whether it exposes a `/metrics` endpoint by looking for certain
+//!    annotations in the pod's metadata.
+//! 4. If a pod exposes a `/metrics` endpoint, the program fetches the metrics by setting up a
+//!    port-forwarding session to the pod.
+//! 5. It then parses the metrics, extracts the useful information, and writes this data to the
+//!    SQLite database.
+//! 6. The extracted data is stored in the database as triples (subject, predicate, object),
+//!    where the subject is a UUID, the predicate is the metric's name, and the object is the
+//!    metric's value.
+//! 7. The program also includes error handling and logging for tracking its operation.
+//!
+//! ## Limitations
+//!
+//! - It assumes that metrics are exposed in a format compatible with Prometheus metrics.
+//!
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use futures::StreamExt;

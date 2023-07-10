@@ -9,17 +9,21 @@ use kube::{
 };
 use regex::Regex;
 use sqlx::sqlite::SqlitePool;
-use sqlx::Row;
 use std::error::Error;
+use std::fs::File;
+use std::path::Path;
 use tokio::io::AsyncWriteExt;
 use tracing::*;
 use uuid::Uuid;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Name of the namespace to walk
     #[arg(short, long)]
     namespace: String,
+    #[arg(short, long, default_value = "/tmp/k8p.db")]
+    db_location: String,
 }
 
 fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
@@ -240,7 +244,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let namespace = args.namespace;
 
-    let pool = SqlitePool::connect("sqlite::memory:").await?;
+    let db_location = args.db_location;
+    let db_url = format!("sqlite:{}", db_location);
+    let db_path = Path::new(&db_location);
+    if !db_path.exists() {
+        info!("creating db {}", db_url);
+        File::create(&db_location)?;
+    } else {
+        info!("adding to db {}", db_url);
+    }
+
+    let pool = SqlitePool::connect(&db_url).await?;
 
     sqlx::query(
         r#"

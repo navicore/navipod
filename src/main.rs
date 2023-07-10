@@ -412,3 +412,25 @@ mod tests {
         assert_eq!(expected, result);
     }
 }
+
+#[test]
+fn test_format_triples() {
+    let input = vec![vec![
+        (
+            "k8p_metric_name".to_string(),
+            "http_requests_total".to_string(),
+        ),
+        ("k8p_value".to_string(), "1027".to_string()),
+        ("method".to_string(), "post".to_string()),
+        ("code".to_string(), "200".to_string()),
+        (
+            "k8p_description".to_string(),
+            "The total number of HTTP requests.".to_string(),
+        ),
+        ("k8p_type".to_string(), "counter".to_string()),
+    ]];
+
+    let output = format_triples(input);
+    assert_eq!(output.len(), 1);
+    assert_eq!(output[0].len(), 6);
+}

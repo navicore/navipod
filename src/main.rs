@@ -45,7 +45,7 @@ fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
     let name = parts[2].to_string();
 
     // Use the name as the default value
-    let mut value = name.replace("_", " ");
+    let mut value = name.replace('_', " ");
 
     // If there are more parts, use the rest of the line as the value
     if parts.len() > 3 {
@@ -62,7 +62,7 @@ fn parse_metric(
 ) -> Result<Vec<(String, String)>, Box<dyn Error>> {
     let mut result = Vec::new();
 
-    if metrics_text.contains("{") {
+    if metrics_text.contains('{') {
         let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>.*)\} (?P<value>.*)")?;
         let caps = re.captures(metrics_text).ok_or(format!(
             "Failed to parse the input string: {}",

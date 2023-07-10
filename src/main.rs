@@ -8,11 +8,12 @@ use kube::{
     Client,
 };
 use regex::Regex;
+use sqlx::sqlite::SqlitePool;
+use sqlx::Row;
 use std::error::Error;
 use tokio::io::AsyncWriteExt;
 use tracing::*;
 use uuid::Uuid;
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -129,10 +130,27 @@ fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     result
 }
 
-fn persist_triples(
+async fn persist_triples(
     triples: Vec<Vec<(String, String, String)>>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    info!("persisting {} metrics", triples.len());
+    pool: &SqlitePool,
+) -> Result<(), Box<dyn Error>> {
+    debug!("persisting {} metrics", triples.len());
+
+    for vec in triples {
+        for (subject, predicate, object) in vec {
+            sqlx::query(
+                r#"
+                INSERT INTO triples (subject, predicate, object)
+                VALUES (?, ?, ?)
+                "#,
+            )
+            .bind(subject)
+            .bind(predicate)
+            .bind(object)
+            .execute(pool)
+            .await?;
+        }
+    }
 
     Ok(())
 }
@@ -176,6 +194,7 @@ fn format_tuples(
 }
 
 async fn process_metrics(
+    pool: &SqlitePool,
     pods: &Api<Pod>,
     metadata_name: &str,
     path: &str,
@@ -212,7 +231,7 @@ async fn process_metrics(
     let metrics = parse_all_metrics(&metrics_text);
     let tuples = format_tuples(metrics, metadata_name, appname, namespace);
     let triples = format_triples(tuples);
-    persist_triples(triples)
+    persist_triples(triples, pool).await
 }
 
 #[tokio::main]
@@ -220,6 +239,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
     let namespace = args.namespace;
+
+    let pool = SqlitePool::connect("sqlite::memory:").await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS triples (
+            id INTEGER PRIMARY KEY,
+            subject TEXT NOT NULL,
+            predicate TEXT NOT NULL,
+            object TEXT NOT NULL
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
     let client = Client::try_default()
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -256,6 +291,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if scrape == "true" {
             match process_metrics(
+                &pool,
                 &pods,
                 metadata_name.as_str(),
                 path.as_str(),

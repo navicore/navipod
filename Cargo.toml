@@ -26,3 +26,4 @@ tokio-util = "0.7"
 anyhow = "1.0.71"
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
+sqlx = { version = "0.6", features = [ "sqlite", "runtime-tokio-native-tls" ] }

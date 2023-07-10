@@ -15,7 +15,7 @@ using the convention:
         prometheus.io/port: "8081"
 ```
 
-Planed - formatted output and liveliness and readyness probe info
+Planned - formatted output and liveliness and readyness probe info
 in aggregated report form.
 
 Install

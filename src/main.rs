@@ -274,8 +274,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-    let pods: Api<Pod> = Api::namespaced(client, namespace.as_str());
     let lp = ListParams::default();
+    let pods: Api<Pod> = Api::namespaced(client.clone(), namespace.as_str());
+
+    drop(client);
 
     let pod_list: ObjectList<Pod> = pods
         .list(&lp)

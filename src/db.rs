@@ -1,3 +1,10 @@
+//!A module manages sqlite via sqlx.
+//!
+//!The DB has a table for triples with
+//!subject,predicate,object cols to enable
+//!open-ended scheema-less variable len record types.
+//!
+
 use sqlx::sqlite::SqlitePool;
 use std::fs::File;
 use std::path::Path;

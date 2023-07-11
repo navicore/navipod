@@ -11,16 +11,16 @@ use std::fs::File;
 use std::path::Path;
 use tracing::{error, info};
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Name of the namespace to walk
-    #[arg(short, long)]
-    namespace: String,
-    #[arg(short, long, default_value = "/tmp/k8p.db")]
-    db_location: String,
-}
-
+// #[derive(Parser, Debug)]
+// #[command(author, version, about, long_about = None)]
+// struct Args {
+//     /// Name of the namespace to walk
+//     #[arg(short, long)]
+//     namespace: String,
+//     #[arg(short, long, default_value = "/tmp/k8p.db")]
+//     db_location: String,
+// }
+//
 async fn init_db(db_location: String) -> Result<SqlitePool, Box<dyn std::error::Error>> {
     let db_url = format!("sqlite:{db_location}");
     let db_path = Path::new(&db_location);
@@ -121,12 +121,30 @@ async fn process_pod_metrics(
     Ok(())
 }
 
+#[derive(Parser, Debug, Clone)]
+enum Command {
+    ScanMetrics,
+    Report,
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Name of the namespace to walk
+    #[arg(short, long)]
+    namespace: Option<String>,
+    #[arg(short, long, default_value = "/tmp/k8p.db")]
+    db_location: String,
+
+    #[clap(subcommand)]
+    command: Command,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
     let namespace = args.namespace;
-
     let db_location = args.db_location;
 
     let pool = init_db(db_location).await?;
@@ -136,8 +154,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-    let (pod_list, pods) = fetch_pods(client, namespace.clone()).await?;
-    process_pod_metrics(&pool, pod_list, &pods, namespace).await?;
+    match args.command {
+        Command::ScanMetrics => {
+            let namespace = namespace.expect("A namespace is required for scan_metrics command");
+            let (pod_list, pods) = fetch_pods(client, namespace.clone()).await?;
+            process_pod_metrics(&pool, pod_list, &pods, namespace).await?;
+        }
+        Command::Report => {
+            // Here you will implement the reporting logic
+        }
+    }
 
     Ok(())
 }

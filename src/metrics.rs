@@ -1,3 +1,5 @@
+//!A module to encapsulate how the k8s data is marshaled into triples.
+//!
 use crate::triples;
 use crate::tuples;
 use futures::StreamExt;
@@ -9,6 +11,8 @@ use std::error::Error;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, warn};
 
+/// the metrics records often are accompanied by HELP and TYPE records to
+/// give us "description" and whether a metric is a gauge or an accumulator.
 fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
     let parts: Vec<&str> = line.split_whitespace().collect();
 
@@ -36,6 +40,7 @@ fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
     Ok((name, value))
 }
 
+/// break an individual record down into its parts.
 fn parse_metric(
     metrics_text: &str,
     k8p_description: &str,
@@ -85,6 +90,7 @@ fn parse_metric(
     Ok(result)
 }
 
+/// the data retrieved from the pod is a single crlf-delimited blob of text.
 fn parse_all(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     let mut result = Vec::new();
     let mut k8p_description = String::new();

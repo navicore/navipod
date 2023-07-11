@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use tracing::info;
 
-pub fn format_tuples(
+pub fn format(
     mut metrics: Vec<Vec<(String, String)>>,
     podname: &str,
     appname: &str,

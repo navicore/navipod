@@ -3,7 +3,7 @@ use std::error::Error;
 use tracing::debug;
 use uuid::Uuid;
 
-pub async fn persist_triples(
+pub async fn persist(
     triples: Vec<Vec<(String, String, String)>>,
     pool: &SqlitePool,
 ) -> Result<(), Box<dyn Error>> {
@@ -28,7 +28,7 @@ pub async fn persist_triples(
     Ok(())
 }
 
-pub fn format_triples(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, String, String)>> {
+pub fn format(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, String, String)>> {
     tuples
         .into_iter()
         .map(|inner_vec| {
@@ -42,7 +42,7 @@ pub fn format_triples(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, St
 }
 
 #[test]
-fn test_format_triples() {
+fn test_format() {
     let input = vec![vec![
         (
             "k8p_metric_name".to_string(),
@@ -58,7 +58,7 @@ fn test_format_triples() {
         ("k8p_type".to_string(), "counter".to_string()),
     ]];
 
-    let output = format_triples(input);
+    let output = format(input);
     assert_eq!(output.len(), 1);
     assert_eq!(output[0].len(), 6);
 }

@@ -1,5 +1,5 @@
 use clap::Parser;
-use k8p::metrics::*;
+use k8p::metrics::process_metrics;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ObjectList;
 use kube::{
@@ -101,8 +101,8 @@ async fn process_pod_metrics(
 
         if scrape == "true" {
             let p = process_metrics(
-                &pool,
-                &pods,
+                pool,
+                pods,
                 metadata_name.as_str(),
                 path.as_str(),
                 port.as_str(),
@@ -140,6 +140,7 @@ struct Args {
     command: Command,
 }
 
+#[allow(clippy::expect_used)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();

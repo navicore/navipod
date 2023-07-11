@@ -1,5 +1,5 @@
-use crate::triples::{format_triples, persist_triples};
-use crate::tuples::format_tuples;
+use crate::triples;
+use crate::tuples;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::Api;
@@ -154,9 +154,9 @@ pub async fn process_metrics(
     }
 
     let metrics = parse_all_metrics(&metrics_text);
-    let tuples = format_tuples(metrics, metadata_name, appname, namespace);
-    let triples = format_triples(tuples);
-    persist_triples(triples, pool).await
+    let tuples = tuples::format(metrics, metadata_name, appname, namespace);
+    let triples = triples::format(tuples);
+    triples::persist(triples, pool).await
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use std::error::Error;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, warn};
 
-pub fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
+fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
     let parts: Vec<&str> = line.split_whitespace().collect();
 
     // Check if there are at least 3 parts
@@ -36,7 +36,7 @@ pub fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
     Ok((name, value))
 }
 
-pub fn parse_metric(
+fn parse_metric(
     metrics_text: &str,
     k8p_description: &str,
     k8p_type: &str,
@@ -85,7 +85,7 @@ pub fn parse_metric(
     Ok(result)
 }
 
-pub fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
+fn parse_all(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     let mut result = Vec::new();
     let mut k8p_description = String::new();
     let mut k8p_type = String::new();
@@ -114,7 +114,10 @@ pub fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     result
 }
 
-pub async fn process_metrics(
+/// # Errors
+///
+/// Will return `Err` if access to k8s is not enabled via `kubeconfig`.
+pub async fn process(
     pool: &SqlitePool,
     pods: &Api<Pod>,
     metadata_name: &str,
@@ -153,7 +156,7 @@ pub async fn process_metrics(
         }
     }
 
-    let metrics = parse_all_metrics(&metrics_text);
+    let metrics = parse_all(&metrics_text);
     let tuples = tuples::format(metrics, metadata_name, appname, namespace);
     let triples = triples::format(tuples);
     triples::persist(triples, pool).await

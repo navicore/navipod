@@ -1,5 +1,5 @@
 use clap::Parser;
-use k8p::metrics::process_metrics;
+use k8p::metrics;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ObjectList;
 use kube::{
@@ -11,16 +11,6 @@ use std::fs::File;
 use std::path::Path;
 use tracing::{error, info};
 
-// #[derive(Parser, Debug)]
-// #[command(author, version, about, long_about = None)]
-// struct Args {
-//     /// Name of the namespace to walk
-//     #[arg(short, long)]
-//     namespace: String,
-//     #[arg(short, long, default_value = "/tmp/k8p.db")]
-//     db_location: String,
-// }
-//
 async fn init_db(db_location: String) -> Result<SqlitePool, Box<dyn std::error::Error>> {
     let db_url = format!("sqlite:{db_location}");
     let db_path = Path::new(&db_location);
@@ -100,7 +90,7 @@ async fn process_pod_metrics(
             .unwrap_or_default();
 
         if scrape == "true" {
-            let p = process_metrics(
+            let p = metrics::process(
                 pool,
                 pods,
                 metadata_name.as_str(),

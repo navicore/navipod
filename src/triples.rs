@@ -3,6 +3,9 @@ use std::error::Error;
 use tracing::debug;
 use uuid::Uuid;
 
+/// # Errors
+///
+/// Will return `Err` if `pool` does not represent a healthy db interface.
 pub async fn persist(
     triples: Vec<Vec<(String, String, String)>>,
     pool: &SqlitePool,
@@ -28,6 +31,7 @@ pub async fn persist(
     Ok(())
 }
 
+#[must_use]
 pub fn format(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, String, String)>> {
     tuples
         .into_iter()

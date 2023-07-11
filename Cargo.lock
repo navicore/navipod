@@ -1095,11 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "k8p"
-<<<<<<< HEAD
 version = "0.3.2"
-=======
-version = "0.3.0"
->>>>>>> 88f61307c3e729c5ed00ba7672a8bbbbfdccb18f
 dependencies = [
  "anyhow",
  "chrono",

@@ -1,20 +1,15 @@
-use chrono::{DateTime, Utc};
 use clap::Parser;
-use futures::StreamExt;
+use k8p::metrics::*;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ObjectList;
 use kube::{
     api::{Api, ListParams},
     Client,
 };
-use regex::Regex;
 use sqlx::sqlite::SqlitePool;
-use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use tokio::io::AsyncWriteExt;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tracing::{error, info};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -26,226 +21,7 @@ struct Args {
     db_location: String,
 }
 
-fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-
-    // Check if there are at least 3 parts
-    if parts.len() < 3 {
-        return Err(From::from("Invalid line format"));
-    }
-
-    // Concatenate the first two parts to get the "first word"
-    let first_word = format!("{} {}", parts[0], parts[1]);
-
-    // Check if the first word is "# HELP" or "# TYPE"
-    if first_word != "# HELP" && first_word != "# TYPE" {
-        return Err(From::from("First word must be '# HELP' or '# TYPE'"));
-    }
-
-    let name = parts[2].to_string();
-
-    let value = if parts.len() > 3 {
-        parts[3..].join(" ")
-    } else {
-        name.replace('_', " ")
-    };
-
-    Ok((name, value))
-}
-
-fn parse_metric(
-    metrics_text: &str,
-    k8p_description: &str,
-    k8p_type: &str,
-) -> Result<Vec<(String, String)>, Box<dyn Error>> {
-    let mut result = Vec::new();
-
-    if metrics_text.contains('{') {
-        let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>.*)\} (?P<value>.*)")?;
-        let caps = re
-            .captures(metrics_text)
-            .ok_or(format!("Failed to parse the input string: {metrics_text}"))?;
-
-        // Get the value for "k8p_metric_name" key
-        result.push((
-            "k8p_metric_name".to_string(),
-            caps["metric_name"].trim().to_string(),
-        ));
-
-        // Get the value for "k8p_value" key
-        result.push(("k8p_value".to_string(), caps["value"].trim().to_string()));
-
-        // Process the labels inside {}
-        let labels_text = &caps["labels"];
-        let label_re = Regex::new(r#"(?P<key>[^=,]+)="(?P<value>[^"]*)""#)?;
-        for caps in label_re.captures_iter(labels_text) {
-            let key = caps["key"].trim();
-            let value = caps["value"].trim();
-            result.push((key.to_string(), value.to_string()));
-        }
-    } else {
-        // The metrics_text does not contain {}, split on whitespace
-        let split: Vec<&str> = metrics_text.split_whitespace().collect();
-        if split.len() != 2 {
-            warn!("Failed to parse the input string: {}", metrics_text);
-            return Ok(Vec::new());
-        }
-
-        result.push(("k8p_metric_name".to_string(), split[0].to_string()));
-        result.push(("k8p_value".to_string(), split[1].to_string()));
-    }
-
-    // Append "k8p_description" and "k8p_type"
-    result.push(("k8p_description".to_string(), k8p_description.to_string()));
-    result.push(("k8p_type".to_string(), k8p_type.to_string()));
-
-    Ok(result)
-}
-
-fn parse_all_metrics(metrics_text: &str) -> Vec<Vec<(String, String)>> {
-    let mut result = Vec::new();
-    let mut k8p_description = String::new();
-    let mut k8p_type = String::new();
-
-    for line in metrics_text.lines() {
-        let line = line.trim();
-        if line.starts_with("# HELP") || line.starts_with("# TYPE") {
-            match parse_help_type(line) {
-                Ok((_name, value)) => {
-                    if line.starts_with("# HELP") {
-                        k8p_description = value;
-                    } else {
-                        k8p_type = value;
-                    }
-                }
-                Err(err) => warn!("Failed to parse line '{}': {}", line, err),
-            }
-        } else if !line.is_empty() {
-            match parse_metric(line, &k8p_description, &k8p_type) {
-                Ok(metric) => result.push(metric),
-                Err(err) => warn!("Failed to parse line '{}': {}", line, err),
-            }
-        }
-    }
-
-    result
-}
-
-async fn persist_triples(
-    triples: Vec<Vec<(String, String, String)>>,
-    pool: &SqlitePool,
-) -> Result<(), Box<dyn Error>> {
-    debug!("persisting {} metrics", triples.len());
-
-    for vec in triples {
-        for (subject, predicate, object) in vec {
-            sqlx::query(
-                r#"
-                INSERT INTO triples (subject, predicate, object)
-                VALUES (?, ?, ?)
-                "#,
-            )
-            .bind(subject)
-            .bind(predicate)
-            .bind(object)
-            .execute(pool)
-            .await?;
-        }
-    }
-
-    Ok(())
-}
-
-fn format_triples(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, String, String)>> {
-    tuples
-        .into_iter()
-        .map(|inner_vec| {
-            let my_uuid = Uuid::new_v4().to_string();
-            inner_vec
-                .into_iter()
-                .map(|(first, second)| (my_uuid.clone(), first, second))
-                .collect::<Vec<(String, String, String)>>()
-        })
-        .collect()
-}
-
-fn format_tuples(
-    mut metrics: Vec<Vec<(String, String)>>,
-    podname: &str,
-    appname: &str,
-    namespace: &str,
-) -> Vec<Vec<(String, String)>> {
-    let datetime: DateTime<Utc> = Utc::now();
-    let date_string: String = datetime.to_rfc3339();
-    info!(
-        "formating {} metrics for app {} and pod {} in ns {}",
-        metrics.len(),
-        podname,
-        appname,
-        namespace
-    );
-
-    for observation in &mut *metrics {
-        observation.push(("k8s_datetime".to_string(), date_string.to_string()));
-        observation.push(("k8s_podname".to_string(), podname.to_string()));
-        observation.push(("k8s_appname".to_string(), appname.to_string()));
-        observation.push(("k8s_namespace".to_string(), namespace.to_string()));
-    }
-    metrics
-}
-
-async fn process_metrics(
-    pool: &SqlitePool,
-    pods: &Api<Pod>,
-    metadata_name: &str,
-    path: &str,
-    port: &str,
-    appname: &str,
-    namespace: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    info!("getting health from {}{}:{}", metadata_name, path, port);
-    let local_port: u16 = port.parse()?; // Convert the port to u16
-
-    let mut port_forwarder = pods.portforward(metadata_name, &[local_port]).await?;
-    let Some(mut port_stream) = port_forwarder.take_stream(local_port) else {
-             return Err(Box::new(std::io::Error::new(
-                 std::io::ErrorKind::Other,
-                 "Unable to take stream",
-             )))
-         };
-
-    // Write a HTTP GET request to the metrics path
-    let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nAccept: */*\r\n\r\n"
-    );
-    port_stream.write_all(request.as_bytes()).await?;
-
-    let mut response_stream = tokio_util::io::ReaderStream::new(port_stream);
-    let mut metrics_text = String::new();
-
-    // Read the response and write it to a string
-    while let Some(response) = response_stream.next().await {
-        match response {
-            Ok(bytes) => {
-                metrics_text.push_str(std::str::from_utf8(&bytes[..])?);
-            }
-            Err(err) => error!("Error reading response: {:?}", err),
-        }
-    }
-
-    let metrics = parse_all_metrics(&metrics_text);
-    let tuples = format_tuples(metrics, metadata_name, appname, namespace);
-    let triples = format_triples(tuples);
-    persist_triples(triples, pool).await
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-    let args = Args::parse();
-    let namespace = args.namespace;
-
-    let db_location = args.db_location;
+async fn init_db(db_location: String) -> Result<SqlitePool, Box<dyn std::error::Error>> {
     let db_url = format!("sqlite:{db_location}");
     let db_path = Path::new(&db_location);
     if db_path.exists() {
@@ -256,7 +32,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let pool = SqlitePool::connect(&db_url).await?;
+    Ok(pool)
+}
 
+async fn create_table(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS triples (
@@ -265,25 +44,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             predicate TEXT NOT NULL,
             object TEXT NOT NULL
         );
+
+        CREATE INDEX IF NOT EXISTS idx_subject ON triples (subject);
+        CREATE INDEX IF NOT EXISTS idx_predicate ON triples (predicate);
+        CREATE INDEX IF NOT EXISTS idx_object ON triples (object);
         "#,
     )
-    .execute(&pool)
+    .execute(pool)
     .await?;
 
-    let client = Client::try_default()
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    Ok(())
+}
 
+async fn fetch_pods(
+    client: Client,
+    namespace: String,
+) -> Result<(ObjectList<Pod>, Api<Pod>), Box<dyn std::error::Error>> {
     let lp = ListParams::default();
     let pods: Api<Pod> = Api::namespaced(client.clone(), namespace.as_str());
-
-    drop(client);
 
     let pod_list: ObjectList<Pod> = pods
         .list(&lp)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
+    Ok((pod_list, pods))
+}
+
+async fn process_pod_metrics(
+    pool: &SqlitePool,
+    pod_list: ObjectList<Pod>,
+    pods: &Api<Pod>,
+    namespace: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     for p in pod_list.items {
         let metadata = p.metadata.clone();
         let metadata_name = metadata.name.unwrap_or_default();
@@ -328,109 +121,81 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt::init();
+    let args = Args::parse();
+    let namespace = args.namespace;
+
+    let db_location = args.db_location;
+
+    let pool = init_db(db_location).await?;
+    create_table(&pool).await?;
+
+    let client = Client::try_default()
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    let (pod_list, pods) = fetch_pods(client, namespace.clone()).await?;
+    process_pod_metrics(&pool, pod_list, &pods, namespace).await?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::{Connection, SqliteConnection};
+    use std::fs;
+    use tokio::runtime::Runtime;
 
     #[test]
-    fn test_parse_help_type_valid() {
-        let result =
-            parse_help_type("# HELP http_requests_total The total number of HTTP requests.")
+    fn test_init_db() {
+        let db_location = "/tmp/test_init_k8p.db";
+
+        // Ensure there's no db file before the test
+        let _ = fs::remove_file(db_location);
+
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let _pool = init_db(db_location.to_string()).await.unwrap();
+
+            // Check if the database has been created successfully
+            let mut conn = SqliteConnection::connect(&format!("sqlite:{}", db_location))
+                .await
                 .unwrap();
-        assert_eq!(
-            (
-                "http_requests_total".to_string(),
-                "The total number of HTTP requests.".to_string()
-            ),
-            result
-        );
+            assert!(conn.ping().await.is_ok());
+        });
 
-        let result = parse_help_type("# TYPE http_requests_total counter").unwrap();
-        assert_eq!(
-            ("http_requests_total".to_string(), "counter".to_string()),
-            result
-        );
+        // Clean up after the test
+        let _ = fs::remove_file(db_location);
     }
 
     #[test]
-    #[should_panic(expected = "Invalid line format")]
-    fn test_parse_help_type_invalid_format() {
-        parse_help_type("# HELP").unwrap();
+    fn test_create_table() {
+        let db_location = "/tmp/test_k8p.db";
+
+        // Ensure there's no db file before the test
+        let _ = fs::remove_file(db_location);
+
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let pool = init_db(db_location.to_string()).await.unwrap();
+
+            match create_table(&pool).await {
+                Ok(_) => (),
+                Err(e) => panic!("create_table failed with {:?}", e),
+            }
+
+            // Check if the table has been created
+            let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM triples")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            assert_eq!(row.0, 0);
+        });
+
+        // Clean up after the test
+        let _ = fs::remove_file(db_location);
     }
-
-    #[test]
-    #[should_panic(expected = "First word must be '# HELP' or '# TYPE'")]
-    fn test_parse_help_type_invalid_first_word() {
-        parse_help_type("# INVALID http_requests_total counter").unwrap();
-    }
-
-    #[test]
-    fn test_parse_metric_with_labels() {
-        let result = parse_metric(
-            "http_requests_total{method=\"post\",code=\"200\"} 1027",
-            "The total number of HTTP requests.",
-            "counter",
-        )
-        .unwrap();
-        let expected = vec![
-            (
-                "k8p_metric_name".to_string(),
-                "http_requests_total".to_string(),
-            ),
-            ("k8p_value".to_string(), "1027".to_string()),
-            ("method".to_string(), "post".to_string()),
-            ("code".to_string(), "200".to_string()),
-            (
-                "k8p_description".to_string(),
-                "The total number of HTTP requests.".to_string(),
-            ),
-            ("k8p_type".to_string(), "counter".to_string()),
-        ];
-        assert_eq!(expected, result);
-    }
-
-    #[test]
-    fn test_parse_metric_without_labels() {
-        let result = parse_metric(
-            "http_requests_total 1027",
-            "The total number of HTTP requests.",
-            "counter",
-        )
-        .unwrap();
-        let expected = vec![
-            (
-                "k8p_metric_name".to_string(),
-                "http_requests_total".to_string(),
-            ),
-            ("k8p_value".to_string(), "1027".to_string()),
-            (
-                "k8p_description".to_string(),
-                "The total number of HTTP requests.".to_string(),
-            ),
-            ("k8p_type".to_string(), "counter".to_string()),
-        ];
-        assert_eq!(expected, result);
-    }
-}
-
-#[test]
-fn test_format_triples() {
-    let input = vec![vec![
-        (
-            "k8p_metric_name".to_string(),
-            "http_requests_total".to_string(),
-        ),
-        ("k8p_value".to_string(), "1027".to_string()),
-        ("method".to_string(), "post".to_string()),
-        ("code".to_string(), "200".to_string()),
-        (
-            "k8p_description".to_string(),
-            "The total number of HTTP requests.".to_string(),
-        ),
-        ("k8p_type".to_string(), "counter".to_string()),
-    ]];
-
-    let output = format_triples(input);
-    assert_eq!(output.len(), 1);
-    assert_eq!(output[0].len(), 6);
 }

@@ -13,7 +13,7 @@ enum Command {
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Name of the file to export RDF to
-    #[arg(short, long, default_value = "k8p.rdf")]
+    #[arg(short, long, default_value = "k8p.nt")]
     rdf_filename: Option<String>,
     /// Name of the namespace to walk
     #[arg(short, long)]

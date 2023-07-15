@@ -5,12 +5,16 @@ use k8p::pods;
 #[derive(Parser, Debug, Clone)]
 enum Command {
     ScanMetrics,
+    ExportRDF,
     Report,
 }
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Name of the file to export RDF to
+    #[arg(short, long, default_value = "k8p.rdf")]
+    rdf_filename: Option<String>,
     /// Name of the namespace to walk
     #[arg(short, long)]
     namespace: Option<String>,
@@ -41,6 +45,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Report => {
             // Here you will implement the reporting logic
+        }
+        Command::ExportRDF => {
+            if let Some(rdf_filename) = args.rdf_filename {
+                let pool = db::init(db_location).await?;
+                db::export_to_rdf(&pool, &rdf_filename).await?;
+            } else {
+                println!("'rdf_filename' is required for export");
+            }
         }
     }
 

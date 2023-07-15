@@ -6,7 +6,9 @@
 //!
 
 use sqlx::sqlite::SqlitePool;
+use sqlx::Row;
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use tracing::info;
 
@@ -107,4 +109,32 @@ mod tests {
         // Clean up after the test
         let _ = fs::remove_file(db_location);
     }
+}
+
+const BASE_URI: &str = "http://k8p.navicore.tech";
+
+pub async fn export_to_rdf(pool: &SqlitePool, rdffile_name: &str) -> std::io::Result<()> {
+    let mut file = File::create(rdffile_name)?;
+
+    let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to fetch rows");
+
+    for row in rows {
+        let subject: String = row.get("subject");
+        let predicate: String = row.get("predicate");
+        let object: String = row.get("object");
+
+        let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
+        let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
+
+        writeln!(
+            file,
+            "<{}> <{}> \"{}\" .",
+            subject_uri, predicate_uri, object
+        )?;
+    }
+
+    Ok(())
 }

@@ -129,6 +129,8 @@ pub async fn export_to_rdf(pool: &SqlitePool, rdffile_name: &str) -> std::io::Re
         let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
         let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
 
+        let object = object.replace("\"", "\\\"");
+
         writeln!(
             file,
             "<{}> <{}> \"{}\" .",

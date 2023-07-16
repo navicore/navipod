@@ -7,6 +7,7 @@
 
 use sqlx::sqlite::SqlitePool;
 use sqlx::Row;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
@@ -49,6 +50,85 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Box<dyn std::error::E
     )
     .execute(pool)
     .await?;
+
+    Ok(())
+}
+
+const BASE_URI: &str = "http://k8p.navicore.tech";
+
+pub async fn export_to_nt_rdf(pool: &SqlitePool, rdffile_name: &str) -> std::io::Result<()> {
+    let mut file = File::create(rdffile_name)?;
+
+    let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to fetch rows");
+
+    for row in rows {
+        let subject: String = row.get("subject");
+        let predicate: String = row.get("predicate");
+        let object: String = row.get("object");
+
+        let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
+        let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
+
+        //let object = object.replace("\"", "\\\"");
+        let object = object.replace('\"', "\\\"");
+
+        writeln!(
+            file,
+            "<{}> <{}> \"{}\" .",
+            subject_uri, predicate_uri, object
+        )?;
+    }
+
+    Ok(())
+}
+
+pub async fn export_to_ttl_rdf(pool: &SqlitePool, ttlfile_name: &str) -> std::io::Result<()> {
+    let mut file = File::create(ttlfile_name)?;
+
+    let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
+        .fetch_all(pool)
+        .await
+        .expect("Failed to fetch rows");
+
+    let mut triples: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
+
+    for row in rows {
+        let subject: String = row.get("subject");
+        let predicate: String = row.get("predicate");
+        let object: String = row.get("object");
+
+        let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
+        let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
+
+        let object = object.replace('\"', "\\\"");
+
+        triples
+            .entry(subject_uri)
+            .or_insert_with(HashMap::new)
+            .entry(predicate_uri)
+            .or_insert_with(Vec::new)
+            .push(object);
+    }
+
+    for (subject, predicates) in triples {
+        writeln!(file, "<{}> ", subject)?;
+        let pred_vec: Vec<String> = predicates
+            .iter()
+            .map(|(predicate, objects)| {
+                let obj_str = objects
+                    .iter()
+                    .map(|obj| format!("\"{}\"", obj))
+                    .collect::<Vec<_>>()
+                    .join(" , ");
+                format!("    <{}> {} ;", predicate, obj_str)
+            })
+            .collect();
+        let predicates_str = pred_vec.join("\n");
+        writeln!(file, "{} .", predicates_str)?;
+    }
 
     Ok(())
 }
@@ -109,35 +189,4 @@ mod tests {
         // Clean up after the test
         let _ = fs::remove_file(db_location);
     }
-}
-
-const BASE_URI: &str = "http://k8p.navicore.tech";
-
-pub async fn export_to_rdf(pool: &SqlitePool, rdffile_name: &str) -> std::io::Result<()> {
-    let mut file = File::create(rdffile_name)?;
-
-    let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
-        .fetch_all(pool)
-        .await
-        .expect("Failed to fetch rows");
-
-    for row in rows {
-        let subject: String = row.get("subject");
-        let predicate: String = row.get("predicate");
-        let object: String = row.get("object");
-
-        let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
-        let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
-
-        //let object = object.replace("\"", "\\\"");
-        let object = object.replace('\"', "\\\"");
-
-        writeln!(
-            file,
-            "<{}> <{}> \"{}\" .",
-            subject_uri, predicate_uri, object
-        )?;
-    }
-
-    Ok(())
 }

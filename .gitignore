@@ -3,3 +3,5 @@
 /logs
 *.rdf
 *.nt
+*.ttl
+venv/

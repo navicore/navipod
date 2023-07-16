@@ -48,6 +48,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Report => {
             // Here you will implement the reporting logic
+            let report = db::report(&pool).await?;
+            println!("{report}");
         }
         Command::ExportTurtle => {
             if let Some(ttl_rdf_filename) = args.ttl_rdf_filename {

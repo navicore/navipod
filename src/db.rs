@@ -56,42 +56,74 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Box<dyn std::error::E
 
 const BASE_URI: &str = "http://k8p.navicore.tech";
 
-pub async fn export_to_nt_rdf(pool: &SqlitePool, rdffile_name: &str) -> std::io::Result<()> {
+/// # Errors
+///
+/// Will return `Err` if function cannot read db file
+pub async fn export_to_nt_rdf(
+    pool: &SqlitePool,
+    rdffile_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(rdffile_name)?;
 
     let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
         .fetch_all(pool)
-        .await
-        .expect("Failed to fetch rows");
+        .await?;
 
     for row in rows {
         let subject: String = row.get("subject");
         let predicate: String = row.get("predicate");
         let object: String = row.get("object");
 
-        let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
-        let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
+        let subject_uri = format!("{BASE_URI}/resource/{subject}");
+        let predicate_uri = format!("{BASE_URI}/property/{predicate}");
 
         //let object = object.replace("\"", "\\\"");
         let object = object.replace('\"', "\\\"");
 
-        writeln!(
-            file,
-            "<{}> <{}> \"{}\" .",
-            subject_uri, predicate_uri, object
-        )?;
+        writeln!(file, "<{subject_uri}> <{predicate_uri}> \"{object}\" .")?;
     }
 
     Ok(())
 }
 
-pub async fn export_to_ttl_rdf(pool: &SqlitePool, ttlfile_name: &str) -> std::io::Result<()> {
+/// # Errors
+///
+/// Will return `Err` if function cannot create db table
+pub async fn report(pool: &sqlx::SqlitePool) -> Result<String, sqlx::Error> {
+    let total_records: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM triples")
+        .fetch_one(pool)
+        .await?;
+
+    let unique_subjects: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT subject) FROM triples")
+        .fetch_one(pool)
+        .await?;
+
+    let unique_predicates: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT predicate) FROM triples")
+        .fetch_one(pool)
+        .await?;
+
+    let unique_objects: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT object) FROM triples")
+        .fetch_one(pool)
+        .await?;
+
+    Ok(format!(
+        "Records: {}\nSubjects: {}\nPredicates: {}\nObjects: {}",
+        total_records.0, unique_subjects.0, unique_predicates.0, unique_objects.0
+    ))
+}
+
+/// # Errors
+///
+/// Will return `Err` if function cannot read db file
+pub async fn export_to_ttl_rdf(
+    pool: &SqlitePool,
+    ttlfile_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(ttlfile_name)?;
 
     let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
         .fetch_all(pool)
-        .await
-        .expect("Failed to fetch rows");
+        .await?;
 
     let mut triples: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
 
@@ -100,8 +132,8 @@ pub async fn export_to_ttl_rdf(pool: &SqlitePool, ttlfile_name: &str) -> std::io
         let predicate: String = row.get("predicate");
         let object: String = row.get("object");
 
-        let subject_uri = format!("{}/resource/{}", BASE_URI, subject);
-        let predicate_uri = format!("{}/property/{}", BASE_URI, predicate);
+        let subject_uri = format!("{BASE_URI}/resource/{subject}");
+        let predicate_uri = format!("{BASE_URI}/property/{predicate}");
 
         let object = object.replace('\"', "\\\"");
 
@@ -114,20 +146,20 @@ pub async fn export_to_ttl_rdf(pool: &SqlitePool, ttlfile_name: &str) -> std::io
     }
 
     for (subject, predicates) in triples {
-        writeln!(file, "<{}> ", subject)?;
+        writeln!(file, "<{subject}> ")?;
         let pred_vec: Vec<String> = predicates
             .iter()
             .map(|(predicate, objects)| {
                 let obj_str = objects
                     .iter()
-                    .map(|obj| format!("\"{}\"", obj))
+                    .map(|obj| format!("\"{obj}\""))
                     .collect::<Vec<_>>()
                     .join(" , ");
-                format!("    <{}> {} ;", predicate, obj_str)
+                format!("    <{predicate}> {obj_str} ;")
             })
             .collect();
         let predicates_str = pred_vec.join("\n");
-        writeln!(file, "{} .", predicates_str)?;
+        writeln!(file, "{predicates_str} .")?;
     }
 
     Ok(())

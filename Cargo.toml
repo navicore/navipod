@@ -7,6 +7,7 @@ authors = ["Ed Sweeney <ed@onextent.com>"]
 description = "A cli tool for inspecting containers in Kubernetes"
 keywords = ["kubernetes", "commandline", "k8s", "prometheus", "metrics"]
 documentation = "https://docs.rs/k8p"
+repository = "https://github.com/navicore/k8p"
 
 [[bin]]
 name = "k8p"

@@ -13,6 +13,10 @@ use std::io::Write;
 use std::path::Path;
 use tracing::info;
 
+const BASE_URI: &str = "http://k8p.navicore.tech";
+const RESOURCE_PREFIX: &str = "res";
+const PROPERTY_PREFIX: &str = "prop";
+
 /// # Errors
 ///
 /// Will return `Err` if function cannot create db file
@@ -53,8 +57,6 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Box<dyn std::error::E
 
     Ok(())
 }
-
-const BASE_URI: &str = "http://k8p.navicore.tech";
 
 /// # Errors
 ///
@@ -121,6 +123,20 @@ pub async fn export_to_ttl_rdf(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(ttlfile_name)?;
 
+    // Define the prefixes
+    writeln!(
+        file,
+        "@prefix {prefix_res}: <{base_uri}/resource/> .\n",
+        prefix_res = RESOURCE_PREFIX,
+        base_uri = BASE_URI
+    )?;
+    writeln!(
+        file,
+        "@prefix {prefix_prop}: <{base_uri}/property/> .\n",
+        prefix_prop = PROPERTY_PREFIX,
+        base_uri = BASE_URI
+    )?;
+
     let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
         .fetch_all(pool)
         .await?;
@@ -132,8 +148,17 @@ pub async fn export_to_ttl_rdf(
         let predicate: String = row.get("predicate");
         let object: String = row.get("object");
 
-        let subject_uri = format!("{BASE_URI}/resource/{subject}");
-        let predicate_uri = format!("{BASE_URI}/property/{predicate}");
+        // Use the prefixes instead of the full URIs
+        let subject_uri = format!(
+            "{prefix_res}:{subject}",
+            prefix_res = RESOURCE_PREFIX,
+            subject = subject
+        );
+        let predicate_uri = format!(
+            "{prefix_prop}:{predicate}",
+            prefix_prop = PROPERTY_PREFIX,
+            predicate = predicate
+        );
 
         let object = object.replace('\"', "\\\"");
 
@@ -146,25 +171,28 @@ pub async fn export_to_ttl_rdf(
     }
 
     for (subject, predicates) in triples {
-        writeln!(file, "<{subject}> ")?;
+        writeln!(file, "{subject} ", subject = subject)?;
         let pred_vec: Vec<String> = predicates
             .iter()
             .map(|(predicate, objects)| {
                 let obj_str = objects
                     .iter()
-                    .map(|obj| format!("\"{obj}\""))
+                    .map(|obj| format!("\"{obj}\"", obj = obj))
                     .collect::<Vec<_>>()
                     .join(" , ");
-                format!("    <{predicate}> {obj_str} ;")
+                format!("    {predicate} {obj_str} ;", predicate = predicate)
             })
             .collect();
         let predicates_str = pred_vec.join("\n");
-        writeln!(file, "{predicates_str} .")?;
+        writeln!(
+            file,
+            "{predicates_str} .\n",
+            predicates_str = predicates_str
+        )?; // Add an empty line between records
     }
 
     Ok(())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

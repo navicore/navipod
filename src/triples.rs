@@ -1,4 +1,5 @@
-use sqlx::sqlite::SqlitePool;
+use sqlx::Pool;
+use sqlx::Sqlite;
 use std::error::Error;
 use tracing::debug;
 use uuid::Uuid;
@@ -8,7 +9,7 @@ use uuid::Uuid;
 /// Will return `Err` if `pool` does not represent a healthy db interface.
 pub async fn persist(
     triples: Vec<Vec<(String, String, String)>>,
-    pool: &SqlitePool,
+    pool: &Pool<Sqlite>,
 ) -> Result<(), Box<dyn Error>> {
     debug!("persisting {} metrics", triples.len());
 

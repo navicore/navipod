@@ -126,15 +126,11 @@ pub async fn export_to_ttl_rdf(
     // Define the prefixes
     writeln!(
         file,
-        "@prefix {prefix_res}: <{base_uri}/resource/> .\n",
-        prefix_res = RESOURCE_PREFIX,
-        base_uri = BASE_URI
+        "@prefix {RESOURCE_PREFIX}: <{BASE_URI}/resource/> .\n"
     )?;
     writeln!(
         file,
-        "@prefix {prefix_prop}: <{base_uri}/property/> .\n",
-        prefix_prop = PROPERTY_PREFIX,
-        base_uri = BASE_URI
+        "@prefix {PROPERTY_PREFIX}: <{BASE_URI}/property/> .\n"
     )?;
 
     let rows = sqlx::query("SELECT subject, predicate, object FROM triples")
@@ -149,16 +145,8 @@ pub async fn export_to_ttl_rdf(
         let object: String = row.get("object");
 
         // Use the prefixes instead of the full URIs
-        let subject_uri = format!(
-            "{prefix_res}:{subject}",
-            prefix_res = RESOURCE_PREFIX,
-            subject = subject
-        );
-        let predicate_uri = format!(
-            "{prefix_prop}:{predicate}",
-            prefix_prop = PROPERTY_PREFIX,
-            predicate = predicate
-        );
+        let subject_uri = format!("{RESOURCE_PREFIX}:{subject}");
+        let predicate_uri = format!("{PROPERTY_PREFIX}:{predicate}");
 
         let object = object.replace('\"', "\\\"");
 
@@ -171,24 +159,20 @@ pub async fn export_to_ttl_rdf(
     }
 
     for (subject, predicates) in triples {
-        writeln!(file, "{subject} ", subject = subject)?;
+        writeln!(file, "{subject} ")?;
         let pred_vec: Vec<String> = predicates
             .iter()
             .map(|(predicate, objects)| {
                 let obj_str = objects
                     .iter()
-                    .map(|obj| format!("\"{obj}\"", obj = obj))
+                    .map(|obj| format!("\"{obj}\""))
                     .collect::<Vec<_>>()
                     .join(" , ");
-                format!("    {predicate} {obj_str} ;", predicate = predicate)
+                format!("    {predicate} {obj_str} ;")
             })
             .collect();
         let predicates_str = pred_vec.join("\n");
-        writeln!(
-            file,
-            "{predicates_str} .\n",
-            predicates_str = predicates_str
-        )?; // Add an empty line between records
+        writeln!(file, "{predicates_str} .\n")?; // Add an empty line between records
     }
 
     Ok(())

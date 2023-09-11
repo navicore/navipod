@@ -4,9 +4,9 @@
 //!subject,predicate,object cols to enable
 //!open-ended scheema-less variable len record types.
 //!
-
-use sqlx::sqlite::SqlitePool;
+use sqlx::Pool;
 use sqlx::Row;
+use sqlx::Sqlite;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -20,7 +20,7 @@ const PROPERTY_PREFIX: &str = "prop";
 /// # Errors
 ///
 /// Will return `Err` if function cannot create db file
-pub async fn init(db_location: String) -> Result<SqlitePool, Box<dyn std::error::Error>> {
+pub async fn init(db_location: String) -> Result<Pool<Sqlite>, Box<dyn std::error::Error>> {
     let db_url = format!("sqlite:{db_location}");
     let db_path = Path::new(&db_location);
     if db_path.exists() {
@@ -30,14 +30,14 @@ pub async fn init(db_location: String) -> Result<SqlitePool, Box<dyn std::error:
         File::create(&db_location)?;
     }
 
-    let pool = SqlitePool::connect(&db_url).await?;
+    let pool = Pool::connect(&db_url).await?;
     Ok(pool)
 }
 
 /// # Errors
 ///
 /// Will return `Err` if function cannot create db table
-pub async fn create_table(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn create_table(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS triples (
@@ -62,7 +62,7 @@ pub async fn create_table(pool: &SqlitePool) -> Result<(), Box<dyn std::error::E
 ///
 /// Will return `Err` if function cannot read db file
 pub async fn export_to_nt_rdf(
-    pool: &SqlitePool,
+    pool: &Pool<Sqlite>,
     rdffile_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(rdffile_name)?;
@@ -118,7 +118,7 @@ pub async fn report(pool: &sqlx::SqlitePool) -> Result<String, sqlx::Error> {
 ///
 /// Will return `Err` if function cannot read db file
 pub async fn export_to_ttl_rdf(
-    pool: &SqlitePool,
+    pool: &Pool<Sqlite>,
     ttlfile_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = File::create(ttlfile_name)?;

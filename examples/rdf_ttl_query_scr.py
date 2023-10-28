@@ -6,10 +6,8 @@ g.parse("k8p.ttl", format="ttl")
 
 # Define the query
 query = '''
-    SELECT ?appname WHERE {
+    SELECT DISTINCT ?appname WHERE {
         ?s <http://k8p.navicore.tech/property/k8p_appname> ?appname .
-        ?s <http://k8p.navicore.tech/property/k8p_metric_name> ?metric .
-        FILTER regex(str(?metric), "jvm", "i")
     }
 '''
 

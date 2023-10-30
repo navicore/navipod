@@ -1,9 +1,11 @@
 use clap::Parser;
 use k8p::db;
+use k8p::pod;
 use k8p::pods;
 
 #[derive(Parser, Debug, Clone)]
 enum Command {
+    ExplainPod { podname: String },
     ScanMetrics,
     ExportTriples,
     ExportTurtle,
@@ -37,6 +39,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::init(db_location).await?;
 
     match args.command {
+        Command::ExplainPod { podname } => {
+            if let Some(namespace) = args.namespace {
+                pod::explain(&namespace, &podname).await?;
+            } else {
+                println!("'namespace' is required for info");
+            }
+        }
         Command::ScanMetrics => {
             if let Some(namespace) = args.namespace {
                 db::create_table(&pool).await?;

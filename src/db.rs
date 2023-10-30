@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use tracing::info;
+use tracing::debug;
 
 const BASE_URI: &str = "http://k8p.navicore.tech";
 const RESOURCE_PREFIX: &str = "res";
@@ -24,9 +24,9 @@ pub async fn init(db_location: String) -> Result<Pool<Sqlite>, Box<dyn std::erro
     let db_url = format!("sqlite:{db_location}");
     let db_path = Path::new(&db_location);
     if db_path.exists() {
-        info!("adding to db {}", db_url);
+        debug!("adding to db {}", db_url);
     } else {
-        info!("creating db {}", db_url);
+        debug!("creating db {}", db_url);
         File::create(&db_location)?;
     }
 

@@ -4,6 +4,7 @@ use k8s_openapi::api::core::v1::Service;
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
+use tracing::debug;
 
 /// # Errors
 ///
@@ -100,18 +101,23 @@ async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<
             if let Some(rules) = rules_ref.rules.clone() {
                 for rule in rules {
                     if let Some(http) = &rule.http {
-                        for path in &http.paths {
-                            if let Some(backend_service_name) = &path.backend.service {
-                                if services_for_pod.contains(&backend_service_name.name) {
-                                    if let Some(ingress_name) = ingress.metadata.name.as_ref() {
-                                        if let Some(port_info) = backend_service_name.port.clone() {
-                                            if let Some(port_num) = port_info.number {
-                                                if let Some(path_txt) = path.path.clone() {
-                                                    println!(
-                                            "Ingress {ingress_name} routes path {path_txt} to pod via Service {} on port {}",
+                        if let Some(host) = &rule.host {
+                            for path in &http.paths {
+                                if let Some(backend_service_name) = &path.backend.service {
+                                    debug!("checking ingress backend service: {backend_service_name:?}");
+                                    if services_for_pod.contains(&backend_service_name.name) {
+                                        if let Some(ingress_name) = ingress.metadata.name.as_ref() {
+                                            if let Some(port_info) =
+                                                backend_service_name.port.clone()
+                                            {
+                                                if let Some(port_num) = port_info.number {
+                                                    if let Some(path_txt) = path.path.clone() {
+                                                        println!(
+                                            "Ingress {ingress_name} routes {host}{path_txt} to pod via Service {} on port {}",
                                             backend_service_name.name,
                                             port_num
                                         );
+                                                    }
                                                 }
                                             }
                                         }

@@ -39,6 +39,7 @@ A cli tool for inspecting containers in Kubernetes
 Usage: k8p [OPTIONS] <COMMAND>
 
 Commands:
+  explain-pod <PODNAME>
   scan-metrics
   export-triples
   export-turtle
@@ -53,3 +54,11 @@ Options:
   -h, --help                                 Print help
   -V, --version                              Print version
 ```
+
+TODO
+--------
+
+1. list readiness and liveliness info and prometheus health port and path
+2. get probe health check info from ports
+3. get prometheus metrics check info from ports
+4. format output when -o yaml or -o json is used

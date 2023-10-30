@@ -123,25 +123,21 @@ fn parse_all(metrics_text: &str) -> Vec<Vec<(String, String)>> {
 /// # Errors
 ///
 /// Will return `Err` if access to k8s is not enabled via `kubeconfig`.
-pub async fn process(
-    pool: &SqlitePool,
+pub async fn get_text(
     pods: &Api<Pod>,
     metadata_name: &str,
     path: &str,
     port: &str,
-    appname: &str,
-    namespace: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    info!("getting health from {}{}:{}", metadata_name, path, port);
+) -> Result<String, Box<dyn std::error::Error>> {
     let local_port: u16 = port.parse()?; // Convert the port to u16
 
     let mut port_forwarder = pods.portforward(metadata_name, &[local_port]).await?;
     let Some(mut port_stream) = port_forwarder.take_stream(local_port) else {
-             return Err(Box::new(std::io::Error::new(
-                 std::io::ErrorKind::Other,
-                 "Unable to take stream",
-             )))
-         };
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Unable to take stream",
+        )));
+    };
 
     // Write a HTTP GET request to the metrics path
     let request = format!(
@@ -161,6 +157,24 @@ pub async fn process(
             Err(err) => error!("Error reading response: {:?}", err),
         }
     }
+
+    Ok(metrics_text)
+}
+
+/// # Errors
+///
+/// Will return `Err` if access to k8s is not enabled via `kubeconfig`.
+pub async fn process(
+    pool: &SqlitePool,
+    pods: &Api<Pod>,
+    metadata_name: &str,
+    path: &str,
+    port: &str,
+    appname: &str,
+    namespace: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("getting health from {}{}:{}", metadata_name, path, port);
+    let metrics_text = get_text(pods, metadata_name, path, port).await?;
 
     let metrics = parse_all(&metrics_text);
     let tuples = tuples::format(metrics, metadata_name, appname, namespace);

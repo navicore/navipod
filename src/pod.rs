@@ -4,7 +4,6 @@ use k8s_openapi::api::core::v1::Service;
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
-use tracing::debug;
 
 /// # Errors
 ///
@@ -92,43 +91,83 @@ fn matches_pod_labels(pod: &Pod, selector: &std::collections::BTreeMap<String, S
 
 async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<(), kube::Error> {
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);
-    let ingress_list = ingresses.list(&ListParams::default()).await?;
-    drop(ingresses);
     let services_for_pod = services_for_pod(client, pod, namespace).await?;
 
+    let ingress_list = ingresses.list(&ListParams::default()).await?;
+    drop(ingresses);
     for ingress in ingress_list.iter() {
         if let Some(rules_ref) = &ingress.spec.as_ref() {
-            if let Some(rules) = rules_ref.rules.clone() {
-                for rule in rules {
-                    if let Some(http) = &rule.http {
-                        if let Some(host) = &rule.host {
-                            for path in &http.paths {
-                                if let Some(backend_service_name) = &path.backend.service {
-                                    debug!("checking ingress backend service: {backend_service_name:?}");
-                                    if services_for_pod.contains(&backend_service_name.name) {
-                                        if let Some(ingress_name) = ingress.metadata.name.as_ref() {
-                                            if let Some(port_info) =
-                                                backend_service_name.port.clone()
-                                            {
-                                                let port_num = port_info.number.unwrap_or(0);
-                                                if let Some(path_txt) = path.path.clone() {
-                                                    println!(
-                                            "Ingress {ingress_name} routes {host}{path_txt} to pod via Service {} on port {}",
-                                            backend_service_name.name,
-                                            port_num
-                                        );
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            handle_ingress_rules(&rules_ref.rules, &services_for_pod, ingress);
         }
     }
 
     Ok(())
+}
+
+fn handle_ingress_rules(
+    rules: &Option<Vec<k8s_openapi::api::networking::v1::IngressRule>>,
+    services_for_pod: &[String],
+    ingress: &Ingress,
+) {
+    if let Some(rules) = rules {
+        for rule in rules {
+            handle_ingress_rule(rule, services_for_pod, ingress);
+        }
+    }
+}
+
+fn handle_ingress_rule(
+    rule: &k8s_openapi::api::networking::v1::IngressRule,
+    services_for_pod: &[String],
+    ingress: &Ingress,
+) {
+    if let Some(http) = &rule.http {
+        for path in &http.paths {
+            handle_http_path(path, services_for_pod, ingress, rule.host.as_deref());
+        }
+    }
+}
+
+fn handle_http_path(
+    path: &k8s_openapi::api::networking::v1::HTTPIngressPath,
+    services_for_pod: &[String],
+    ingress: &Ingress,
+    host: Option<&str>,
+) {
+    if let Some(backend_service_name) = &path.backend.service {
+        if services_for_pod.contains(&backend_service_name.name) {
+            print_ingress_info(ingress, host, path, backend_service_name);
+        }
+    }
+}
+
+fn print_ingress_info(
+    ingress: &Ingress,
+    host: Option<&str>,
+    path: &k8s_openapi::api::networking::v1::HTTPIngressPath,
+    backend_service_name: &k8s_openapi::api::networking::v1::IngressServiceBackend,
+) {
+    let ingress_name = ingress.metadata.name.as_deref().unwrap_or("");
+    let path_txt = path.path.clone().unwrap_or_default();
+    if let Some(port_info) = backend_service_name.port.clone() {
+        let port_num = port_info.number.unwrap_or(0);
+        if port_num <= 0 {
+            println!(
+                "Ingress {} routes {}{} to pod via Service {}",
+                ingress_name,
+                host.unwrap_or(""),
+                path_txt,
+                backend_service_name.name
+            );
+        } else {
+            println!(
+                "Ingress {} routes {}{} to pod via Service {} on port {}",
+                ingress_name,
+                host.unwrap_or(""),
+                path_txt,
+                backend_service_name.name,
+                port_num
+            );
+        }
+    }
 }

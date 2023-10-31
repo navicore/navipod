@@ -91,12 +91,13 @@ fn matches_pod_labels(pod: &Pod, selector: &std::collections::BTreeMap<String, S
 
 async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<(), kube::Error> {
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);
-    let ingress_list = ingresses.list(&ListParams::default()).await?;
     let services_for_pod = services_for_pod(client, pod, namespace).await?;
 
+    let ingress_list = ingresses.list(&ListParams::default()).await?;
+    drop(ingresses);
     for ingress in ingress_list.iter() {
         if let Some(rules_ref) = &ingress.spec.as_ref() {
-            handle_ingress_rules(&rules_ref.rules, &services_for_pod, &ingress);
+            handle_ingress_rules(&rules_ref.rules, &services_for_pod, ingress);
         }
     }
 
@@ -105,37 +106,37 @@ async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<
 
 fn handle_ingress_rules(
     rules: &Option<Vec<k8s_openapi::api::networking::v1::IngressRule>>,
-    services_for_pod: &Vec<String>,
+    services_for_pod: &[String],
     ingress: &Ingress,
 ) {
     if let Some(rules) = rules {
         for rule in rules {
-            handle_ingress_rule(&rule, services_for_pod, &ingress);
+            handle_ingress_rule(rule, services_for_pod, ingress);
         }
     }
 }
 
 fn handle_ingress_rule(
     rule: &k8s_openapi::api::networking::v1::IngressRule,
-    services_for_pod: &Vec<String>,
+    services_for_pod: &[String],
     ingress: &Ingress,
 ) {
     if let Some(http) = &rule.http {
         for path in &http.paths {
-            handle_http_path(&path, services_for_pod, &ingress, rule.host.as_deref());
+            handle_http_path(path, services_for_pod, ingress, rule.host.as_deref());
         }
     }
 }
 
 fn handle_http_path(
     path: &k8s_openapi::api::networking::v1::HTTPIngressPath,
-    services_for_pod: &Vec<String>,
+    services_for_pod: &[String],
     ingress: &Ingress,
     host: Option<&str>,
 ) {
     if let Some(backend_service_name) = &path.backend.service {
         if services_for_pod.contains(&backend_service_name.name) {
-            print_ingress_info(&ingress, host, path, &backend_service_name);
+            print_ingress_info(ingress, host, path, backend_service_name);
         }
     }
 }

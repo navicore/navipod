@@ -112,11 +112,14 @@ async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<
                                             {
                                                 let port_num = port_info.number.unwrap_or(0);
                                                 if let Some(path_txt) = path.path.clone() {
-                                                    println!(
-                                            "Ingress {ingress_name} routes {host}{path_txt} to pod via Service {} on port {}",
-                                            backend_service_name.name,
-                                            port_num
-                                        );
+                                                    if port_num <= 0 {
+                                                        println!("Ingress {ingress_name} routes {host}{path_txt} \
+                                                            to pod via Service {}", backend_service_name.name);
+                                                    } else {
+                                                        println!("Ingress {ingress_name} routes {host}{path_txt} \
+                                                            to pod via Service {} on port {}",
+                                                            backend_service_name.name, port_num);
+                                                    }
                                                 }
                                             }
                                         }

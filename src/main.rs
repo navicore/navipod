@@ -1,4 +1,5 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser}; // CommandFactory is needed for into_app()
+use clap_complete::{generate, Shell};
 use k8p::db;
 use k8p::pod;
 use k8p::pods;
@@ -10,9 +11,10 @@ enum Command {
     ExportTriples,
     ExportTurtle,
     Report,
+    GenerateCompletion { shell: Shell },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// export Turtle RDF file
@@ -39,6 +41,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pool = db::init(db_location).await?;
 
     match args.command {
+        Command::GenerateCompletion { shell } => {
+            let app = Args::command();
+            generate(
+                shell,
+                &mut app.clone(),
+                app.get_name(),
+                &mut std::io::stdout(),
+            );
+        }
         Command::ExplainPod { podname } => {
             if let Some(namespace) = args.namespace {
                 pod::explain(&namespace, &podname).await?;

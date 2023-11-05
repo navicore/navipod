@@ -28,6 +28,12 @@ cargo install k8p
 cargo install --path .
 ```
 
+Configure for tab completion:
+
+```bash
+k8p generate-completion zsh > /usr/local/share/zsh/site-functions/_k8p
+```
+
 Usage
 ---------
 

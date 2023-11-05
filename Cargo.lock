@@ -1044,28 +1044,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k8p"
-version = "0.4.11"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "clap_complete",
- "csv",
- "futures",
- "k8s-openapi",
- "kube",
- "regex",
- "reqwest",
- "sqlx",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "k8s-openapi"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1305,6 +1283,28 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
+]
+
+[[package]]
+name = "navipod"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "csv",
+ "futures",
+ "k8s-openapi",
+ "kube",
+ "regex",
+ "reqwest",
+ "sqlx",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

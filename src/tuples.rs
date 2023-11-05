@@ -18,10 +18,10 @@ pub fn format(
     );
 
     for observation in &mut *metrics {
-        observation.push(("k8p_datetime".to_string(), date_string.to_string()));
-        observation.push(("k8p_podname".to_string(), podname.to_string()));
-        observation.push(("k8p_appname".to_string(), appname.to_string()));
-        observation.push(("k8p_namespace".to_string(), namespace.to_string()));
+        observation.push(("navipod_datetime".to_string(), date_string.to_string()));
+        observation.push(("navipod_podname".to_string(), podname.to_string()));
+        observation.push(("navipod_appname".to_string(), appname.to_string()));
+        observation.push(("navipod_namespace".to_string(), namespace.to_string()));
     }
     metrics
 }

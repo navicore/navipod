@@ -14,15 +14,15 @@ using the convention:
 
 The cli supports exporting the db to both N-Triple and Turtle RDF files.
 
-Planned - formatted output and liveliness and readyness probe info
+Planned - formatted output and liveliness and readiness probe info
 in aggregated report form.
 
 Install
 ----------
 
 ```bash
-#latest stable version via https://crates.io/crates/k8p
-cargo install k8p
+#latest stable version via https://crates.io/crates/navipod
+cargo install navipod
 
 #or from this repo:
 cargo install --path .
@@ -31,18 +31,18 @@ cargo install --path .
 Configure for tab completion:
 
 ```bash
-k8p generate-completion zsh > /usr/local/share/zsh/site-functions/_k8p
+navipod generate-completion zsh > /usr/local/share/zsh/site-functions/_navipod
 ```
 
 Usage
 ---------
 
-from `k8p -h`
+from `navipod -h`
 
 ```
 A cli tool for inspecting containers in Kubernetes
 
-Usage: k8p [OPTIONS] <COMMAND>
+Usage: navipod [OPTIONS] <COMMAND>
 
 Commands:
   explain-pod <PODNAME>
@@ -53,10 +53,10 @@ Commands:
   help            Print this message or the help of the given subcommand(s)
 
 Options:
-  -t, --ttl-rdf-filename <TTL_RDF_FILENAME>  export Turtle RDF file [default: k8p.ttl]
-  -r, --rdf-filename <RDF_FILENAME>          export N-Triples RDF file [default: k8p.nt]
+  -t, --ttl-rdf-filename <TTL_RDF_FILENAME>  export Turtle RDF file [default: navipod.ttl]
+  -r, --rdf-filename <RDF_FILENAME>          export N-Triples RDF file [default: navipod.nt]
   -n, --namespace <NAMESPACE>                Name of the namespace to walk
-  -d, --db-location <DB_LOCATION>            [default: /tmp/k8p.db]
+  -d, --db-location <DB_LOCATION>            [default: /tmp/navipod.db]
   -h, --help                                 Print help
   -V, --version                              Print version
 ```

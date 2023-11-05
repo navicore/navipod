@@ -40,13 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let db_location = args.db_location;
     let pool = db::init(db_location).await?;
-    let namespace = match args.namespace {
-        Some(n) => n,
-        _ => {
-            let config = Config::from_kubeconfig(&KubeConfigOptions::default()).await?;
-            let ns = config.default_namespace;
-            ns
-        }
+    let namespace = if let Some(n) = args.namespace {
+        n
+    } else {
+        let config = Config::from_kubeconfig(&KubeConfigOptions::default()).await?;
+        config.default_namespace
     };
 
     match args.command {

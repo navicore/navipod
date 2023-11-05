@@ -3,6 +3,7 @@ use clap_complete::{generate, Shell};
 use k8p::db;
 use k8p::pod;
 use k8p::pods;
+use kube::{config::KubeConfigOptions, Config};
 
 #[derive(Parser, Debug, Clone)]
 enum Command {
@@ -39,6 +40,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let db_location = args.db_location;
     let pool = db::init(db_location).await?;
+    let namespace = if let Some(n) = args.namespace {
+        n
+    } else {
+        let config = Config::from_kubeconfig(&KubeConfigOptions::default()).await?;
+        config.default_namespace
+    };
 
     match args.command {
         Command::GenerateCompletion { shell } => {
@@ -51,20 +58,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         Command::ExplainPod { podname } => {
-            if let Some(namespace) = args.namespace {
-                pod::explain(&namespace, &podname).await?;
-            } else {
-                println!("'namespace' is required for info");
-            }
+            pod::explain(&namespace, &podname).await?;
         }
         Command::ScanMetrics => {
-            if let Some(namespace) = args.namespace {
-                db::create_table(&pool).await?;
-                let (pod_list, pods) = pods::fetch(namespace.clone()).await?;
-                pods::gather_metrics(&pool, pod_list, &pods, namespace).await;
-            } else {
-                println!("'namespace' is required for scanning");
-            }
+            db::create_table(&pool).await?;
+            let (pod_list, pods) = pods::fetch(namespace.clone()).await?;
+            pods::gather_metrics(&pool, pod_list, &pods, namespace).await;
         }
         Command::Report => {
             // Here you will implement the reporting logic

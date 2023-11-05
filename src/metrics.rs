@@ -43,8 +43,8 @@ fn parse_help_type(line: &str) -> Result<(String, String), Box<dyn Error>> {
 /// break an individual record down into its parts.
 fn parse_metric(
     metrics_text: &str,
-    k8p_description: &str,
-    k8p_type: &str,
+    navipod_description: &str,
+    navipod_type: &str,
 ) -> Result<Vec<(String, String)>, Box<dyn Error>> {
     let mut result = Vec::new();
 
@@ -54,14 +54,17 @@ fn parse_metric(
             .captures(metrics_text)
             .ok_or(format!("Failed to parse the input string: {metrics_text}"))?;
 
-        // Get the value for "k8p_metric_name" key
+        // Get the value for "navipod_metric_name" key
         result.push((
-            "k8p_metric_name".to_string(),
+            "navipod_metric_name".to_string(),
             caps["metric_name"].trim().to_string(),
         ));
 
-        // Get the value for "k8p_value" key
-        result.push(("k8p_value".to_string(), caps["value"].trim().to_string()));
+        // Get the value for "navipod_value" key
+        result.push((
+            "navipod_value".to_string(),
+            caps["value"].trim().to_string(),
+        ));
 
         // Process the labels inside {}
         let labels_text = &caps["labels"];
@@ -79,13 +82,16 @@ fn parse_metric(
             return Ok(Vec::new());
         }
 
-        result.push(("k8p_metric_name".to_string(), split[0].to_string()));
-        result.push(("k8p_value".to_string(), split[1].to_string()));
+        result.push(("navipod_metric_name".to_string(), split[0].to_string()));
+        result.push(("navipod_value".to_string(), split[1].to_string()));
     }
 
-    // Append "k8p_description" and "k8p_type"
-    result.push(("k8p_description".to_string(), k8p_description.to_string()));
-    result.push(("k8p_type".to_string(), k8p_type.to_string()));
+    // Append "navipod_description" and "navipod_type"
+    result.push((
+        "navipod_description".to_string(),
+        navipod_description.to_string(),
+    ));
+    result.push(("navipod_type".to_string(), navipod_type.to_string()));
 
     Ok(result)
 }
@@ -93,8 +99,8 @@ fn parse_metric(
 /// the data retrieved from the pod is a single crlf-delimited blob of text.
 fn parse_all(metrics_text: &str) -> Vec<Vec<(String, String)>> {
     let mut result = Vec::new();
-    let mut k8p_description = String::new();
-    let mut k8p_type = String::new();
+    let mut navipod_description = String::new();
+    let mut navipod_type = String::new();
 
     for line in metrics_text.lines() {
         let line = line.trim();
@@ -102,15 +108,15 @@ fn parse_all(metrics_text: &str) -> Vec<Vec<(String, String)>> {
             match parse_help_type(line) {
                 Ok((_name, value)) => {
                     if line.starts_with("# HELP") {
-                        k8p_description = value;
+                        navipod_description = value;
                     } else {
-                        k8p_type = value;
+                        navipod_type = value;
                     }
                 }
                 Err(err) => warn!("Failed to parse line '{}': {}", line, err),
             }
         } else if !line.is_empty() {
-            match parse_metric(line, &k8p_description, &k8p_type) {
+            match parse_metric(line, &navipod_description, &navipod_type) {
                 Ok(metric) => result.push(metric),
                 Err(err) => warn!("Failed to parse line '{}': {}", line, err),
             }
@@ -228,17 +234,17 @@ mod tests {
         .unwrap();
         let expected = vec![
             (
-                "k8p_metric_name".to_string(),
+                "navipod_metric_name".to_string(),
                 "http_requests_total".to_string(),
             ),
-            ("k8p_value".to_string(), "1027".to_string()),
+            ("navipod_value".to_string(), "1027".to_string()),
             ("method".to_string(), "post".to_string()),
             ("code".to_string(), "200".to_string()),
             (
-                "k8p_description".to_string(),
+                "navipod_description".to_string(),
                 "The total number of HTTP requests.".to_string(),
             ),
-            ("k8p_type".to_string(), "counter".to_string()),
+            ("navipod_type".to_string(), "counter".to_string()),
         ];
         assert_eq!(expected, result);
     }
@@ -253,15 +259,15 @@ mod tests {
         .unwrap();
         let expected = vec![
             (
-                "k8p_metric_name".to_string(),
+                "navipod_metric_name".to_string(),
                 "http_requests_total".to_string(),
             ),
-            ("k8p_value".to_string(), "1027".to_string()),
+            ("navipod_value".to_string(), "1027".to_string()),
             (
-                "k8p_description".to_string(),
+                "navipod_description".to_string(),
                 "The total number of HTTP requests.".to_string(),
             ),
-            ("k8p_type".to_string(), "counter".to_string()),
+            ("navipod_type".to_string(), "counter".to_string()),
         ];
         assert_eq!(expected, result);
     }

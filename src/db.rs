@@ -13,7 +13,7 @@ use std::io::Write;
 use std::path::Path;
 use tracing::debug;
 
-const BASE_URI: &str = "http://k8p.navicore.tech";
+const BASE_URI: &str = "http://navipod.navicore.tech";
 const RESOURCE_PREFIX: &str = "res";
 const PROPERTY_PREFIX: &str = "prop";
 
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_init_db() {
-        let db_location = "/tmp/test_init_k8p.db";
+        let db_location = "/tmp/test_init_navipod.db";
 
         // Ensure there's no db file before the test
         let _ = fs::remove_file(db_location);
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_create_table() {
-        let db_location = "/tmp/test_k8p.db";
+        let db_location = "/tmp/test_navipod.db";
 
         // Ensure there's no db file before the test
         let _ = fs::remove_file(db_location);

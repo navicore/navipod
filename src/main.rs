@@ -1,9 +1,9 @@
 use clap::{CommandFactory, Parser}; // CommandFactory is needed for into_app()
 use clap_complete::{generate, Shell};
-use k8p::db;
-use k8p::pod;
-use k8p::pods;
 use kube::{config::KubeConfigOptions, Config};
+use navipod::db;
+use navipod::pod;
+use navipod::pods;
 
 #[derive(Parser, Debug, Clone)]
 enum Command {
@@ -19,15 +19,15 @@ enum Command {
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// export Turtle RDF file
-    #[arg(short, long, default_value = "k8p.ttl")]
+    #[arg(short, long, default_value = "navipod.ttl")]
     ttl_rdf_filename: Option<String>,
     /// export N-Triples RDF file
-    #[arg(short, long, default_value = "k8p.nt")]
+    #[arg(short, long, default_value = "navipod.nt")]
     rdf_filename: Option<String>,
     /// Name of the namespace to walk
     #[arg(short, long)]
     namespace: Option<String>,
-    #[arg(short, long, default_value = "/tmp/k8p.db")]
+    #[arg(short, long, default_value = "/tmp/navipod.db")]
     db_location: String,
 
     #[clap(subcommand)]

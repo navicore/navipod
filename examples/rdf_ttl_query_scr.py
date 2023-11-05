@@ -2,12 +2,12 @@ from rdflib import Graph
 
 # Load the RDF file
 g = Graph()
-g.parse("k8p.ttl", format="ttl")
+g.parse("navipod.ttl", format="ttl")
 
 # Define the query
 query = '''
     SELECT DISTINCT ?appname WHERE {
-        ?s <http://k8p.navicore.tech/property/k8p_appname> ?appname .
+        ?s <http://navipod.navicore.tech/property/navipod_appname> ?appname .
     }
 '''
 

@@ -152,9 +152,9 @@ pub async fn export_to_ttl_rdf(
 
         triples
             .entry(subject_uri)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(predicate_uri)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(object);
     }
 

@@ -70,7 +70,7 @@ pub async fn gather_metrics(
             .await;
 
             match p {
-                Ok(_) => (),
+                Ok(()) => (),
                 Err(e) => error!("Error processing metrics for {}: {:?}", metadata_name, e),
             }
         }

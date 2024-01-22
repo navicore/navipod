@@ -14,7 +14,7 @@ name = "navipod"
 path = "src/main.rs"
 
 [dependencies]
-uuid = { version = "1.6.1", features = [ "v4" ] }
+uuid = { version = "1.7.0", features = [ "v4" ] }
 regex = "1.10"
 kube = { version = "0.87.2", features = ["runtime", "derive", "client", "ws"] }
 k8s-openapi = { version = "0.20.0", features = ["v1_26"] }

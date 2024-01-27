@@ -26,6 +26,8 @@ jobs:
     - name: Install Navicore Charts
       run :
         helm install my-navitain https://www.navicore.tech/charts/navitain-0.1.10.tgz
+    - name: Wait for Deployment Readiness
+      run :
         bash ./tests/scripts/check-test-deploymnet.sh
     - uses: actions/checkout@v4
     - name: Build

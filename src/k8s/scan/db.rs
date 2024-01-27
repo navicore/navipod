@@ -39,7 +39,7 @@ pub async fn init(db_location: String) -> Result<Pool<Sqlite>, Box<dyn std::erro
 /// Will return `Err` if function cannot create db table
 pub async fn create_table(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error::Error>> {
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS triples (
             id INTEGER PRIMARY KEY,
             subject TEXT NOT NULL,
@@ -50,7 +50,7 @@ pub async fn create_table(pool: &Pool<Sqlite>) -> Result<(), Box<dyn std::error:
         CREATE INDEX IF NOT EXISTS idx_subject ON triples (subject);
         CREATE INDEX IF NOT EXISTS idx_predicate ON triples (predicate);
         CREATE INDEX IF NOT EXISTS idx_object ON triples (object);
-        "#,
+        ",
     )
     .execute(pool)
     .await?;

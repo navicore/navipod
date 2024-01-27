@@ -1,7 +1,7 @@
 //!A module to encapsulate how the k8s data is marshaled into triples.
 //!
-use crate::triples;
-use crate::tuples;
+use crate::k8s::scan::triples;
+use crate::k8s::scan::tuples;
 use futures::StreamExt;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::Api;

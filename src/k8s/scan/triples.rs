@@ -16,10 +16,10 @@ pub async fn persist(
     for vec in triples {
         for (subject, predicate, object) in vec {
             sqlx::query(
-                r#"
+                r"
                 INSERT INTO triples (subject, predicate, object)
                 VALUES (?, ?, ?)
-                "#,
+                ",
             )
             .bind(subject)
             .bind(predicate)

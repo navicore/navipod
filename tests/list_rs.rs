@@ -17,6 +17,7 @@ async fn test_list_rs() {
     assert!(matches!(rs_list_result, Ok(..),));
     let rs_list = rs_list_result.unwrap();
 
+    assert_eq!(rs_list.items.len(), 1);
     for rs in rs_list.iter() {
         if let Some(owners) = rs.metadata.owner_references.clone() {
             for owner in owners {
@@ -32,6 +33,8 @@ async fn test_list_rs() {
                 let kind = owner.kind;
                 let name = owner.name;
                 println!("{instance_name:?} belongs to {kind} {name} - pods: {desired_replicas}/{actual_replicas}");
+                assert_eq!(kind, "Deployment", "not a deployment");
+                assert_ne!(kind, "StatefulSet", "not a deployment");
             }
         }
     }

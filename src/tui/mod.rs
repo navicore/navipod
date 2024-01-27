@@ -1,5 +1,5 @@
 mod container_app;
-mod data;
+pub mod data;
 mod pod_app;
 mod rs_app;
 mod style;

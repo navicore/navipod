@@ -1,5 +1,6 @@
 use crate::tui::rs_app::app::App;
 use crate::tui::style::INFO_TEXT;
+use crate::tui::table_ui::TuiTableState;
 use ratatui::{
     prelude::*,
     widgets::{
@@ -7,7 +8,6 @@ use ratatui::{
         ScrollbarOrientation, Table,
     },
 };
-use crate::tui::table_ui::TuiTableState;
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let rects = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(f.size());
@@ -29,7 +29,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Replica Sets", "Description", "Age", "P", "C"]
+    let header = ["Replica Set", "Owner", "Description", "Age", "P", "C"]
         .iter()
         .copied()
         .map(Cell::from)
@@ -59,6 +59,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(app.longest_item_lens.2 + 2),
             Constraint::Min(app.longest_item_lens.3 + 2),
             Constraint::Min(app.longest_item_lens.4 + 2),
+            Constraint::Min(app.longest_item_lens.5 + 2),
         ],
     )
     .header(header)

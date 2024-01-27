@@ -19,14 +19,6 @@ jobs:
     steps:
     - name: Create Cluster
       uses: helm/kind-action@v1.8.0
-    - name: 'Install Charts'
-      uses: 'deliverybot/helm@v1'
-      with:
-        release: 'my-navitain'
-        namespace: 'default'
-        chart: 'navicore/navitain'
-        repo: 'https://www.navicore.tech/charts'
-        repo-alias: navicore
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose

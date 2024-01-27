@@ -1,9 +1,9 @@
 use clap::{CommandFactory, Parser}; // CommandFactory is needed for into_app()
 use clap_complete::{generate, Shell};
 use kube::{config::KubeConfigOptions, Config};
-use navipod::db;
-use navipod::pod;
-use navipod::pods;
+use navipod::k8s::pod_ingress;
+use navipod::k8s::scan::db;
+use navipod::k8s::scan::pods;
 
 #[derive(Parser, Debug, Clone)]
 enum Command {
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         Command::ExplainPod { podname } => {
-            pod::explain(&namespace, &podname).await?;
+            pod_ingress::explain(&namespace, &podname).await?;
         }
         Command::ScanMetrics => {
             db::create_table(&pool).await?;

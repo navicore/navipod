@@ -8,14 +8,17 @@ mod table_ui;
 use std::rc::Rc;
 use std::{error::Error, io};
 
+use crate::tui::table_ui::TuiTableState;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
-use crate::tui::table_ui::TuiTableState;
 
+/// # Errors
+///
+/// Will return `Err` if function cannot access a terminal or render a ui
 pub fn run() -> Result<(), Box<dyn Error>> {
     // setup terminal
     enable_raw_mode()?;

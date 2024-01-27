@@ -4,9 +4,11 @@ use kube::{config::KubeConfigOptions, Config};
 use navipod::k8s::pod_ingress;
 use navipod::k8s::scan::db;
 use navipod::k8s::scan::pods;
+use navipod::tui;
 
 #[derive(Parser, Debug, Clone)]
 enum Command {
+    Tui,
     ExplainPod { podname: String },
     ScanMetrics,
     ExportTriples,
@@ -48,6 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     match args.command {
+        Command::Tui => {
+            tui::run()?;
+        }
         Command::GenerateCompletion { shell } => {
             let app = Args::command();
             generate(

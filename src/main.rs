@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match args.command {
         Command::Tui => {
-            tui::run()?;
+            tui::run().await?;
         }
         Command::GenerateCompletion { shell } => {
             let app = Args::command();

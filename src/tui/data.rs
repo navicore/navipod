@@ -137,32 +137,6 @@ impl Rs {
     }
 }
 
-#[must_use]
-pub fn generate_rs_recs() -> Vec<Rs> {
-    use fakeit::generator;
-
-    (0..20)
-        .map(|_| {
-            let owner = generator::generate("replica###".to_string());
-            let name = generator::generate("{owner}-??#?#?##".to_string());
-            let description = "Deployment".to_string();
-            let age = "200d".to_string();
-            let pods = "4/4".to_string();
-            let containers = "8/8".to_string();
-
-            Rs {
-                name,
-                owner,
-                description,
-                age,
-                pods,
-                containers,
-            }
-        })
-        .sorted_by(|a, b| a.name.cmp(&b.name))
-        .collect_vec()
-}
-
 #[allow(clippy::cast_possible_truncation)]
 pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16, u16) {
     let name_len = items

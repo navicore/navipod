@@ -1,4 +1,4 @@
-use crate::tui::data::{generate_rs_recs, rs_constraint_len_calculator, Rs};
+use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use ratatui::widgets::{ScrollbarState, TableState};
@@ -47,12 +47,16 @@ impl TuiTableState for App {
     }
 }
 impl App {
-    pub fn new() -> Self {
-        let data_vec = generate_rs_recs();
+    pub fn new(data_vec: Vec<Rs>) -> Self {
+        let scroll_state = if data_vec.is_empty() {
+            ScrollbarState::new((data_vec.len() - 1) * ITEM_HEIGHT)
+        } else {
+            ScrollbarState::new(0)
+        };
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: rs_constraint_len_calculator(&data_vec),
-            scroll_state: ScrollbarState::new((data_vec.len() - 1) * ITEM_HEIGHT),
+            scroll_state,
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
             items: data_vec,

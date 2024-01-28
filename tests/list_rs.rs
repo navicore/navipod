@@ -2,7 +2,7 @@ use navipod::k8s::rs::list_replicas;
 
 #[tokio::test]
 async fn test_list_replicas() {
-    let data_result = list_replicas("default").await;
+    let data_result = list_replicas().await;
     assert!(matches!(data_result, Ok(..),));
     let data = &data_result.unwrap();
     assert_eq!(data.len(), 1);

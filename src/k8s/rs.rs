@@ -7,10 +7,10 @@ use kube::{Api, Client};
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
-pub async fn list_replicas(namespace: &str) -> Result<Vec<Rs>, kube::Error> {
+pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
     let client = Client::try_default().await?;
 
-    let rs_list: ObjectList<ReplicaSet> = Api::namespaced(client.clone(), namespace)
+    let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone())
         .list(&ListParams::default())
         .await?;
 
@@ -28,6 +28,9 @@ pub async fn list_replicas(namespace: &str) -> Result<Vec<Rs>, kube::Error> {
                     .spec
                     .as_ref()
                     .map_or(0, |spec| spec.replicas.unwrap_or(0));
+                if desired_replicas <= &0 {
+                    continue;
+                };
                 let actual_replicas = &rs.status.as_ref().map_or(0, |status| status.replicas);
                 let kind = owner.kind;
                 let owner_name = owner.name;

@@ -8,6 +8,7 @@ mod table_ui;
 use std::rc::Rc;
 use std::{error::Error, io};
 
+use crate::k8s::rs::list_replicas;
 use crate::tui::table_ui::TuiTableState;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
@@ -19,7 +20,7 @@ use ratatui::prelude::*;
 /// # Errors
 ///
 /// Will return `Err` if function cannot access a terminal or render a ui
-pub fn run() -> Result<(), Box<dyn Error>> {
+pub async fn run() -> Result<(), Box<dyn Error>> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -27,7 +28,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run_app(&mut terminal);
+    let res = run_app(&mut terminal).await;
 
     // restore terminal
     disable_raw_mode()?;
@@ -52,9 +53,13 @@ enum Apps {
     Container { app: container_app::app::App },
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>) -> io::Result<()> {
+async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()> {
+    let data_vec = match list_replicas().await {
+        Ok(d) => d,
+        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+    };
     let mut app_holder = Apps::Rs {
-        app: rs_app::app::App::new(),
+        app: rs_app::app::App::new(data_vec),
     };
     let mut history: Vec<Rc<Apps>> = Vec::new();
     loop {

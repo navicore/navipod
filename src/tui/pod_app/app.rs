@@ -1,4 +1,4 @@
-use crate::tui::data::{generate_pod_recs, pod_constraint_len_calculator, RsPod};
+use crate::tui::data::{pod_constraint_len_calculator, RsPod};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use ratatui::widgets::{ScrollbarState, TableState};
@@ -49,8 +49,7 @@ impl TuiTableState for App {
 }
 
 impl App {
-    pub fn new() -> Self {
-        let data_vec = generate_pod_recs();
+    pub fn new(data_vec: Vec<RsPod>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: pod_constraint_len_calculator(&data_vec),

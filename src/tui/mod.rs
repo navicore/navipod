@@ -1,13 +1,14 @@
 mod container_app;
+use std::sync::Arc;
 pub mod data;
 mod pod_app;
 mod rs_app;
 mod style;
 mod table_ui;
 
-use std::rc::Rc;
 use std::{error::Error, io};
 
+use crate::k8s::pods::list_rspods;
 use crate::k8s::rs::list_replicas;
 use crate::tui::table_ui::TuiTableState;
 use crossterm::{
@@ -61,7 +62,9 @@ async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()
     let mut app_holder = Apps::Rs {
         app: rs_app::app::App::new(data_vec),
     };
-    let mut history: Vec<Rc<Apps>> = Vec::new();
+
+    let mut history: Vec<Arc<Apps>> = Vec::new();
+    //let mut history: Vec<Rc<Apps>> = Vec::new();
     loop {
         match &mut app_holder {
             Apps::Rs { app: rs_app } => {
@@ -75,11 +78,24 @@ async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()
                             Char('k') | Up => rs_app.previous(),
                             Char('c' | 'C') => rs_app.next_color(),
                             Enter => {
-                                let new_app_holder = Apps::Pod {
-                                    app: pod_app::app::App::new(),
+                                if let Some(selection) = rs_app.get_selected_item() {
+                                    if let Some(selector) = selection.selectors.clone() {
+                                        let data_vec = match list_rspods(selector).await {
+                                            Ok(d) => d,
+                                            Err(e) => {
+                                                return Err(io::Error::new(
+                                                    io::ErrorKind::Other,
+                                                    e.to_string(),
+                                                ))
+                                            }
+                                        };
+                                        let new_app_holder = Apps::Pod {
+                                            app: pod_app::app::App::new(data_vec),
+                                        };
+                                        history.push(Arc::new(app_holder.clone())); // Save current state
+                                        app_holder = new_app_holder;
+                                    };
                                 };
-                                history.push(Rc::new(app_holder.clone())); // Save current state
-                                app_holder = new_app_holder;
                             }
                             _ => {}
                         }
@@ -100,7 +116,7 @@ async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()
                                 let new_app_holder = Apps::Container {
                                     app: container_app::app::App::new(),
                                 };
-                                history.push(Rc::new(app_holder.clone())); // Save current state
+                                history.push(Arc::new(app_holder.clone())); // Save current state
                                 app_holder = new_app_holder;
                             }
                             Esc => {

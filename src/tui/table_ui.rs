@@ -1,4 +1,4 @@
-use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
+use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{ScrollbarState, TableState};
 
 pub trait TuiTableState {
@@ -42,6 +42,11 @@ pub trait TuiTableState {
         //self.colors = TableColors::new(&PALETTES[self.color_index]);
         let new_colors = TableColors::new(&PALETTES[self.get_color_index()]);
         self.set_table_colors(new_colors);
+    }
+
+    fn get_selected_item(&mut self) -> Option<&Self::Item> {
+        let s = self.get_state();
+        s.selected().map(|seleted| &self.get_items()[seleted])
     }
 
     fn get_items(&self) -> &[Self::Item];

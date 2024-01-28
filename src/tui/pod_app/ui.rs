@@ -1,5 +1,6 @@
 use crate::tui::pod_app::app::App;
 use crate::tui::style::INFO_TEXT;
+use crate::tui::table_ui::TuiTableState;
 use ratatui::{
     prelude::*,
     widgets::{
@@ -7,7 +8,6 @@ use ratatui::{
         ScrollbarOrientation, Table,
     },
 };
-use crate::tui::table_ui::TuiTableState;
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let rects = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(f.size());

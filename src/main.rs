@@ -8,12 +8,19 @@ use navipod::tui;
 
 #[derive(Parser, Debug, Clone)]
 enum Command {
+    /// start text-based UI
     Tui,
+    /// report on pod external ingress
     ExplainPod { podname: String },
+    /// collect pod metrics and write to db
     ScanMetrics,
+    /// export db data to RDF nt files
     ExportTriples,
+    /// export db data to RDF turtle files
     ExportTurtle,
+    /// show db stats
     Report,
+    /// generate completion script for bash and zsh
     GenerateCompletion { shell: Shell },
 }
 

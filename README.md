@@ -3,6 +3,9 @@ A CLI for Inspecting Containers in Kubernetes
 
 ![alt text](docs/demo.png)
 
+UNDER CONSTRUCTION
+-----------
+
 Currently, the command will use a local kubecontext to access a cluster
 and get all the Prometheus data available from pods annotated for Prometheus
 using the convention:

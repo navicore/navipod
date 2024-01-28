@@ -50,13 +50,14 @@ A cli tool for inspecting containers in Kubernetes
 Usage: navipod [OPTIONS] <COMMAND>
 
 Commands:
-  tui
-  explain-pod <PODNAME>
-  scan-metrics
-  export-triples
-  export-turtle
-  report
-  help            Print this message or the help of the given subcommand(s)
+  tui                  start text-based UI
+  explain-pod          report on pod external ingress
+  scan-metrics         collect pod metrics and write to db
+  export-triples       export db data to RDF nt files
+  export-turtle        export db data to RDF turtle files
+  report               show db stats
+  generate-completion  generate completion script for bash and zsh
+  help                 Print this message or the help of the given subcommand(s)
 
 Options:
   -t, --ttl-rdf-filename <TTL_RDF_FILENAME>  export Turtle RDF file [default: navipod.ttl]

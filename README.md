@@ -1,6 +1,8 @@
 A CLI for Inspecting Containers in Kubernetes
 ============
 
+![alt text](docs/demo.png)
+
 Currently, the command will use a local kubecontext to access a cluster
 and get all the Prometheus data available from pods annotated for Prometheus
 using the convention:
@@ -45,6 +47,7 @@ A cli tool for inspecting containers in Kubernetes
 Usage: navipod [OPTIONS] <COMMAND>
 
 Commands:
+  tui
   explain-pod <PODNAME>
   scan-metrics
   export-triples

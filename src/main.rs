@@ -7,6 +7,7 @@ use navipod::k8s::scan::pods;
 use navipod::tui;
 
 #[derive(Parser, Debug, Clone)]
+#[command(author, version, about, long_about = None)]
 enum Command {
     /// start text-based UI
     Tui,

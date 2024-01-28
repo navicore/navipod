@@ -21,6 +21,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
+use std::collections::BTreeMap;
 use std::{error::Error, io};
 use tracing::error;
 
@@ -60,6 +61,17 @@ enum Apps {
     Container { app: container_app::app::App },
 }
 
+async fn create_rspod_data_vec(
+    selector: BTreeMap<String, String>,
+) -> Result<Vec<data::RsPod>, io::Error> {
+    match list_rspods(selector).await {
+        Ok(d) => Ok(d),
+        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+    }
+}
+
+// todo: fix mess - issue is letting the enter key change the app_holder across fn calls
+#[allow(clippy::too_many_lines)]
 async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let mut key_events = async_key_events(should_stop.clone());
@@ -91,15 +103,7 @@ async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()
                             Enter => {
                                 if let Some(selection) = rs_app.get_selected_item() {
                                     if let Some(selector) = selection.selectors.clone() {
-                                        let data_vec = match list_rspods(selector).await {
-                                            Ok(d) => d,
-                                            Err(e) => {
-                                                return Err(io::Error::new(
-                                                    io::ErrorKind::Other,
-                                                    e.to_string(),
-                                                ))
-                                            }
-                                        };
+                                        let data_vec = create_rspod_data_vec(selector).await?;
                                         let new_app_holder = Apps::Pod {
                                             app: pod_app::app::App::new(data_vec),
                                         };

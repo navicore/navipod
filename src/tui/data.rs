@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use std::collections::BTreeMap;
 use unicode_width::UnicodeWidthStr;
 
@@ -22,30 +21,13 @@ impl Container {
     }
 }
 
-#[must_use]
-pub fn generate_container_recs() -> Vec<Container> {
-    use fakeit::generator;
-
-    (0..2)
-        .map(|_| {
-            let container = generator::generate("???????????".to_string());
-            let description = "Pod Container".to_string();
-
-            Container {
-                name: container,
-                description,
-            }
-        })
-        .sorted_by(|a, b| a.name.cmp(&b.name))
-        .collect_vec()
-}
-
 #[derive(Clone, Debug)]
 pub struct RsPod {
     pub name: String,
     pub description: String,
     pub age: String,
     pub containers: String,
+    pub container_names: Vec<Container>,
 }
 
 impl RsPod {
@@ -70,27 +52,6 @@ impl RsPod {
     }
 }
 
-#[must_use]
-pub fn generate_pod_recs() -> Vec<RsPod> {
-    use fakeit::generator;
-
-    (0..20)
-        .map(|_| {
-            let podname = generator::generate("replica###-??#?#?##-??#?#?#".to_string());
-            let description = "Deployment Pod".to_string();
-            let age = "200d".to_string();
-            let containers = "2/2".to_string();
-
-            RsPod {
-                name: podname,
-                description,
-                age,
-                containers,
-            }
-        })
-        .sorted_by(|a, b| a.name.cmp(&b.name))
-        .collect_vec()
-}
 #[derive(Clone, Debug)]
 pub struct Rs {
     pub name: String,
@@ -275,12 +236,14 @@ mod tests {
                 description: "Deployment".to_string(),
                 age: "150d".to_string(),
                 containers: "2/2".to_string(),
+                container_names: vec![],
             },
             RsPod {
                 name: "replica-923450-987654".to_string(),
                 description: "Deployment".to_string(),
                 age: "10d".to_string(),
                 containers: "2/2".to_string(),
+                container_names: vec![],
             },
         ];
         let (

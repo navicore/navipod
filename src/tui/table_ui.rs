@@ -39,7 +39,6 @@ pub trait TuiTableState {
     }
 
     fn set_colors(&mut self) {
-        //self.colors = TableColors::new(&PALETTES[self.color_index]);
         let new_colors = TableColors::new(&PALETTES[self.get_color_index()]);
         self.set_table_colors(new_colors);
     }

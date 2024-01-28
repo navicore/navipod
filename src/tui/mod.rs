@@ -113,11 +113,14 @@ async fn run_app<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()
                             Char('k') | Up => pod_app.previous(),
                             Char('c' | 'C') => pod_app.next_color(),
                             Enter => {
-                                let new_app_holder = Apps::Container {
-                                    app: container_app::app::App::new(),
-                                };
-                                history.push(Arc::new(app_holder.clone())); // Save current state
-                                app_holder = new_app_holder;
+                                if let Some(selection) = pod_app.get_selected_item() {
+                                    let data_vec = selection.container_names.clone();
+                                    let new_app_holder = Apps::Container {
+                                        app: container_app::app::App::new(data_vec),
+                                    };
+                                    history.push(Arc::new(app_holder.clone())); // Save current state
+                                    app_holder = new_app_holder;
+                                }
                             }
                             Esc => {
                                 if let Some(previous_app) = history.pop() {

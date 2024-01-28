@@ -1,7 +1,7 @@
+use crate::tui::data::{container_constraint_len_calculator, Container};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
-use ratatui::widgets::{ScrollbarState, TableState};
-use crate::tui::data::{Container, container_constraint_len_calculator, generate_container_recs};
 use crate::tui::table_ui::TuiTableState;
+use ratatui::widgets::{ScrollbarState, TableState};
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -50,8 +50,7 @@ impl TuiTableState for App {
 }
 
 impl App {
-    pub fn new() -> Self {
-        let data_vec = generate_container_recs();
+    pub fn new(data_vec: Vec<Container>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: container_constraint_len_calculator(&data_vec),

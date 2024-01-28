@@ -17,7 +17,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Create Cluster
+      uses: helm/kind-action@v1.8.0
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.14.0
+    - name: Install Navicore Charts
+      run :
+        helm install my-navitain https://www.navicore.tech/charts/navitain-0.1.10.tgz
     - uses: actions/checkout@v4
+    - name: Wait for Deployment Readiness
+      run :
+        bash ./tests/scripts/check-test-deployment.sh
     - name: Build
       run: cargo build --verbose
     - name: Run tests

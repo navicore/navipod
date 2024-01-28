@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use std::collections::BTreeMap;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Debug)]
@@ -40,14 +41,14 @@ pub fn generate_container_recs() -> Vec<Container> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Pod {
-    pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) age: String,
-    pub(crate) containers: String,
+pub struct RsPod {
+    pub name: String,
+    pub description: String,
+    pub age: String,
+    pub containers: String,
 }
 
-impl Pod {
+impl RsPod {
     pub(crate) const fn ref_array(&self) -> [&String; 4] {
         [&self.name, &self.description, &self.age, &self.containers]
     }
@@ -70,7 +71,7 @@ impl Pod {
 }
 
 #[must_use]
-pub fn generate_pod_recs() -> Vec<Pod> {
+pub fn generate_pod_recs() -> Vec<RsPod> {
     use fakeit::generator;
 
     (0..20)
@@ -80,7 +81,7 @@ pub fn generate_pod_recs() -> Vec<Pod> {
             let age = "200d".to_string();
             let containers = "2/2".to_string();
 
-            Pod {
+            RsPod {
                 name: podname,
                 description,
                 age,
@@ -98,6 +99,7 @@ pub struct Rs {
     pub age: String,
     pub pods: String,
     pub containers: String,
+    pub selectors: Option<BTreeMap<String, String>>,
 }
 
 impl Rs {
@@ -188,29 +190,29 @@ pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16, u
 }
 
 #[allow(clippy::cast_possible_truncation)]
-pub fn pod_constraint_len_calculator(items: &[Pod]) -> (u16, u16, u16, u16) {
+pub fn pod_constraint_len_calculator(items: &[RsPod]) -> (u16, u16, u16, u16) {
     let name_len = items
         .iter()
-        .map(Pod::podname)
+        .map(RsPod::podname)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
     let description_len = items
         .iter()
-        .map(Pod::description)
+        .map(RsPod::description)
         .flat_map(str::lines)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
     let age_len = items
         .iter()
-        .map(Pod::age)
+        .map(RsPod::age)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
     let containers_len = items
         .iter()
-        .map(Pod::containers)
+        .map(RsPod::containers)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
@@ -244,7 +246,7 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16) {
 mod tests {
     use crate::tui::data::{
         container_constraint_len_calculator, pod_constraint_len_calculator,
-        rs_constraint_len_calculator, Container, Pod, Rs,
+        rs_constraint_len_calculator, Container, Rs, RsPod,
     };
 
     #[test]
@@ -268,13 +270,13 @@ mod tests {
     #[test]
     fn test_pod_constraint_len_calculator() {
         let test_data = vec![
-            Pod {
+            RsPod {
                 name: "replica-123456-123456".to_string(),
                 description: "Deployment".to_string(),
                 age: "150d".to_string(),
                 containers: "2/2".to_string(),
             },
-            Pod {
+            RsPod {
                 name: "replica-923450-987654".to_string(),
                 description: "Deployment".to_string(),
                 age: "10d".to_string(),
@@ -303,6 +305,7 @@ mod tests {
                 age: "300d".to_string(),
                 pods: "10/10".to_string(),
                 containers: "19/30".to_string(),
+                selectors: None,
             },
             Rs {
                 name: "my-replica-923450".to_string(),
@@ -311,6 +314,7 @@ mod tests {
                 age: "10d".to_string(),
                 pods: "1/1".to_string(),
                 containers: "2/2".to_string(),
+                selectors: None,
             },
         ];
         let (

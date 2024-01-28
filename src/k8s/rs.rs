@@ -19,6 +19,8 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
     for rs in rs_list.items {
         if let Some(owners) = rs.metadata.owner_references {
             for owner in owners {
+                let selectors = rs.metadata.labels.as_ref().map(std::clone::Clone::clone);
+
                 let instance_name = &rs
                     .metadata
                     .name
@@ -42,6 +44,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     age: "???".to_string(),
                     pods: format!("{actual_replicas}/{desired_replicas}"),
                     containers: "?/?".to_string(),
+                    selectors,
                 };
 
                 rs_vec.push(data);

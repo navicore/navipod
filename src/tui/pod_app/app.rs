@@ -1,12 +1,12 @@
+use crate::tui::data::{generate_pod_recs, pod_constraint_len_calculator, RsPod};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
-use ratatui::widgets::{ScrollbarState, TableState};
-use crate::tui::data::{generate_pod_recs, Pod, pod_constraint_len_calculator};
 use crate::tui::table_ui::TuiTableState;
+use ratatui::widgets::{ScrollbarState, TableState};
 
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) state: TableState,
-    pub(crate) items: Vec<Pod>,
+    pub(crate) items: Vec<RsPod>,
     pub(crate) longest_item_lens: (u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
@@ -14,7 +14,7 @@ pub struct App {
 }
 
 impl TuiTableState for App {
-    type Item = Pod;
+    type Item = RsPod;
 
     fn get_items(&self) -> &[Self::Item] {
         &self.items
@@ -47,6 +47,7 @@ impl TuiTableState for App {
         self.color_index = color_index;
     }
 }
+
 impl App {
     pub fn new() -> Self {
         let data_vec = generate_pod_recs();
@@ -59,6 +60,4 @@ impl App {
             items: data_vec,
         }
     }
-
-
 }

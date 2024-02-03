@@ -2,6 +2,7 @@ use crate::tui::data::{pod_constraint_len_calculator, RsPod};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use ratatui::widgets::{ScrollbarState, TableState};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -10,7 +11,8 @@ pub struct App {
     pub(crate) longest_item_lens: (u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
-    color_index: usize,
+    pub(crate) color_index: usize,
+    pub(crate) selector: BTreeMap<String, String>,
 }
 
 impl TuiTableState for App {
@@ -49,7 +51,7 @@ impl TuiTableState for App {
 }
 
 impl App {
-    pub fn new(data_vec: Vec<RsPod>) -> Self {
+    pub fn new(selector: BTreeMap<String, String>, data_vec: Vec<RsPod>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: pod_constraint_len_calculator(&data_vec),
@@ -57,6 +59,7 @@ impl App {
             colors: TableColors::new(&PALETTES[0]),
             color_index: 1,
             items: data_vec,
+            selector,
         }
     }
 }

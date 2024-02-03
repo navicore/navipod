@@ -1,7 +1,7 @@
 A CLI for Inspecting Containers in Kubernetes
 ============
 
-![alt text](docs/demo.png)
+![alt text](docs/demo.gif)
 
 UNDER CONSTRUCTION
 -----------

@@ -10,7 +10,7 @@ pub struct App {
     pub(crate) longest_item_lens: (u16, u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
-    color_index: usize,
+    pub(crate) color_index: usize,
 }
 impl TuiTableState for App {
     type Item = Rs;

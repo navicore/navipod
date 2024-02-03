@@ -30,10 +30,10 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     .spec
                     .as_ref()
                     .map_or(0, |spec| spec.replicas.unwrap_or(0));
-                if desired_replicas <= &0 {
-                    continue;
-                };
-                let actual_replicas = &rs.status.as_ref().map_or(0, |status| status.replicas);
+                let ready_replicas = &rs
+                    .status
+                    .as_ref()
+                    .map_or(0, |status| status.ready_replicas.unwrap_or(0));
                 let kind = owner.kind;
                 let owner_name = owner.name;
 
@@ -42,11 +42,14 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     owner: owner_name,
                     description: kind,
                     age: "???".to_string(),
-                    pods: format!("{actual_replicas}/{desired_replicas}"),
+                    pods: format!("{ready_replicas}/{desired_replicas}"),
                     containers: "?/?".to_string(),
                     selectors,
                 };
 
+                if desired_replicas <= &0 {
+                    continue;
+                };
                 rs_vec.push(data);
             }
         }

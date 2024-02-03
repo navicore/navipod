@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 fn format_label_selector(selector: &BTreeMap<String, String>) -> String {
     selector
         .iter()
-        .map(|(key, value)| format!("{}={}", key, value))
+        .map(|(key, value)| format!("{key}={value}"))
         .collect::<Vec<String>>()
         .join(",")
 }

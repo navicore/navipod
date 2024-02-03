@@ -25,6 +25,8 @@ use std::collections::BTreeMap;
 use std::{error::Error, io};
 use tracing::{debug, error};
 
+const POLL_MS: u64 = 5000;
+
 /// # Errors
 ///
 /// Will return `Err` if function cannot access a terminal or render a ui
@@ -75,46 +77,62 @@ async fn run_rs_app<B: Backend + Send>(
     app: &mut rs_app::app::App,
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
-    let mut key_events = async_key_events(should_stop.clone());
+    let key_events = async_key_events(should_stop.clone());
+    let data_events = async_rs_events(should_stop.clone());
+    let mut events = futures::stream::select(key_events, data_events);
+
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Rs { app: app.clone() });
 
     loop {
         terminal.draw(|f| rs_app::ui::ui(f, &mut app.clone()))?;
-        if let Some(Event::Key(key)) = key_events.next().await {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Enter, Up};
-                match key.code {
-                    Char('q') => {
-                        app_holder = None;
-                        debug!("quiting...");
-                        break;
-                    }
-                    Char('j') | Down => {
-                        app.next();
-                    }
-                    Char('k') | Up => {
-                        app.previous();
-                    }
-                    Char('c' | 'C') => {
-                        app.next_color();
-                    }
-                    Enter => {
-                        if let Some(selection) = app.get_selected_item() {
-                            if let Some(selector) = selection.selectors.clone() {
-                                let data_vec = create_rspod_data_vec(selector).await?;
-                                let new_app_holder = Apps::Pod {
-                                    app: pod_app::app::App::new(data_vec),
+        match events.next().await {
+            Some(StreamEvent::Key(Event::Key(key))) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Up};
+                    match key.code {
+                        Char('q') => {
+                            app_holder = None;
+                            debug!("quiting...");
+                            break;
+                        }
+                        Char('j') | Down => {
+                            app.next();
+                        }
+                        Char('k') | Up => {
+                            app.previous();
+                        }
+                        Char('c' | 'C') => {
+                            app.next_color();
+                        }
+                        Enter => {
+                            if let Some(selection) = app.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
+                                    let data_vec = create_rspod_data_vec(selector.clone()).await?;
+                                    let new_app_holder = Apps::Pod {
+                                        app: pod_app::app::App::new(selector, data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to pod...");
+                                    break;
                                 };
-                                app_holder = Some(new_app_holder);
-                                debug!("changing app from rs to pod...");
-                                break;
                             };
-                        };
+                        }
+                        _ => {} //noop
                     }
-                    _ => {} //noop
                 }
             }
+            Some(StreamEvent::Rs(data_vec)) => {
+                debug!("updating rs app data...");
+                let new_app = rs_app::app::App {
+                    items: data_vec,
+                    ..app.clone()
+                };
+                let new_app_holder = Apps::Rs { app: new_app };
+                app_holder = Some(new_app_holder);
+                break;
+            }
+            _ => {}
         }
     }
     should_stop.store(true, Ordering::Relaxed);
@@ -126,42 +144,58 @@ async fn run_pod_app<B: Backend + Send>(
     app: &mut pod_app::app::App,
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
-    let mut key_events = async_key_events(should_stop.clone());
+    let key_events = async_key_events(should_stop.clone());
+    let data_events = async_pod_events(app.selector.clone(), should_stop.clone());
+    let mut events = futures::stream::select(key_events, data_events);
+
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Pod { app: app.clone() });
 
     loop {
         terminal.draw(|f| pod_app::ui::ui(f, &mut app.clone()))?;
-        if let Some(Event::Key(key)) = key_events.next().await {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Enter, Esc, Up};
-                match key.code {
-                    Char('q') | Esc => {
-                        app_holder = None;
-                        break;
-                    }
-                    Char('j') | Down => {
-                        app.next();
-                    }
-                    Char('k') | Up => {
-                        app.previous();
-                    }
-                    Char('c' | 'C') => {
-                        app.next_color();
-                    }
-                    Enter => {
-                        if let Some(selection) = app.get_selected_item() {
-                            let data_vec = selection.container_names.clone();
-                            let new_app_holder = Apps::Container {
-                                app: container_app::app::App::new(data_vec),
-                            };
-                            app_holder = Some(new_app_holder);
+        match events.next().await {
+            Some(StreamEvent::Key(Event::Key(key))) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Esc, Up};
+                    match key.code {
+                        Char('q') | Esc => {
+                            app_holder = None;
                             break;
                         }
+                        Char('j') | Down => {
+                            app.next();
+                        }
+                        Char('k') | Up => {
+                            app.previous();
+                        }
+                        Char('c' | 'C') => {
+                            app.next_color();
+                        }
+                        Enter => {
+                            if let Some(selection) = app.get_selected_item() {
+                                let data_vec = selection.container_names.clone();
+                                let new_app_holder = Apps::Container {
+                                    app: container_app::app::App::new(data_vec),
+                                };
+                                app_holder = Some(new_app_holder);
+                                break;
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
+            Some(StreamEvent::Pod(data_vec)) => {
+                debug!("updating pod app data...");
+                let new_app = pod_app::app::App {
+                    items: data_vec,
+                    ..app.clone()
+                };
+                let new_app_holder = Apps::Pod { app: new_app };
+                app_holder = Some(new_app_holder);
+                break;
+            }
+            _ => {}
         }
     }
     should_stop.store(true, Ordering::Relaxed);
@@ -179,7 +213,7 @@ async fn run_container_app<B: Backend + Send>(
 
     loop {
         terminal.draw(|f| container_app::ui::ui(f, &mut app.clone()))?;
-        if let Some(Event::Key(key)) = key_events.next().await {
+        if let Some(StreamEvent::Key(Event::Key(key))) = key_events.next().await {
             if key.kind == KeyEventKind::Press {
                 use KeyCode::{Char, Down, Esc, Up};
                 match key.code {
@@ -253,7 +287,13 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
     Ok(())
 }
 
-fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = Event> {
+enum StreamEvent {
+    Key(Event),
+    Pod(Vec<data::RsPod>),
+    Rs(Vec<data::Rs>),
+}
+
+fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
     let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
 
     tokio::spawn(async move {
@@ -261,11 +301,91 @@ fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = Event> {
             match poll(Duration::from_millis(100)) {
                 Ok(true) => {
                     if let Ok(event) = read() {
-                        if tx.send(event).await.is_err() {
-                            error!("Error sending event");
+                        let sevent = StreamEvent::Key(event);
+                        if tx.send(sevent).await.is_err() {
+                            //error!("Error sending event");
                             break;
                         }
                     }
+                }
+                Ok(false) => {
+                    // No event, continue the loop to check should_stop again
+                }
+                Err(e) => {
+                    error!("Error polling for events: {e}");
+                    break;
+                }
+            }
+            // The loop will also check the should_stop flag here
+        }
+    });
+
+    ReceiverStream::new(rx)
+}
+
+// todo: add selector to app state so that we have it when the pod app loop starts.... only then
+// will data show
+
+fn async_pod_events(
+    selector: BTreeMap<String, String>,
+    should_stop: Arc<AtomicBool>,
+) -> impl Stream<Item = StreamEvent> {
+    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+
+    tokio::spawn(async move {
+        while !should_stop.load(Ordering::Relaxed) {
+            match poll(Duration::from_millis(POLL_MS)) {
+                Ok(true) => {
+                    //get Vec and send
+                    match list_rspods(selector.clone()).await {
+                        Ok(d) => {
+                            let sevent = StreamEvent::Pod(d);
+                            if tx.send(sevent).await.is_err() {
+                                //error!("Error sending event");
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error listing pods: {e}");
+                            break;
+                        }
+                    }
+                }
+                Ok(false) => {
+                    // No event, continue the loop to check should_stop again
+                }
+                Err(e) => {
+                    error!("Error polling for events: {e}");
+                    break;
+                }
+            }
+            // The loop will also check the should_stop flag here
+        }
+    });
+
+    ReceiverStream::new(rx)
+}
+
+fn async_rs_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
+    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+
+    tokio::spawn(async move {
+        while !should_stop.load(Ordering::Relaxed) {
+            match poll(Duration::from_millis(POLL_MS)) {
+                Ok(true) => {
+                    //get Vec and send
+                    match list_replicas().await {
+                        Ok(d) => {
+                            let sevent = StreamEvent::Rs(d);
+                            if tx.send(sevent).await.is_err() {
+                                //break;
+                            }
+                        }
+                        Err(_e) => {
+                            //error!("Error listing replicas: {e}");
+                            break;
+                        }
+                    };
                 }
                 Ok(false) => {
                     // No event, continue the loop to check should_stop again

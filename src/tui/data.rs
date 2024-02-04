@@ -25,6 +25,7 @@ impl Container {
 #[derive(Clone, Debug)]
 pub struct RsPod {
     pub name: String,
+    pub status: String,
     pub description: String,
     pub age: String,
     pub containers: String,
@@ -32,11 +33,21 @@ pub struct RsPod {
 }
 
 impl RsPod {
-    pub(crate) const fn ref_array(&self) -> [&String; 4] {
-        [&self.name, &self.description, &self.age, &self.containers]
+    pub(crate) const fn ref_array(&self) -> [&String; 5] {
+        [
+            &self.name,
+            &self.status,
+            &self.containers,
+            &self.age,
+            &self.description,
+        ]
     }
 
-    pub(crate) fn podname(&self) -> &str {
+    pub(crate) fn status(&self) -> &str {
+        &self.status
+    }
+
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
@@ -68,11 +79,11 @@ impl Rs {
     pub(crate) const fn ref_array(&self) -> [&String; 6] {
         [
             &self.name,
-            &self.owner,
-            &self.description,
-            &self.age,
             &self.pods,
             &self.containers,
+            &self.age,
+            &self.description,
+            &self.owner,
         ]
     }
 
@@ -143,19 +154,25 @@ pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16, u
 
     (
         name_len as u16,
-        owner_len as u16,
-        description_len as u16,
-        age_len as u16,
         pods_len as u16,
         containers_len as u16,
+        age_len as u16,
+        description_len as u16,
+        owner_len as u16,
     )
 }
 
 #[allow(clippy::cast_possible_truncation)]
-pub fn pod_constraint_len_calculator(items: &[RsPod]) -> (u16, u16, u16, u16) {
+pub fn pod_constraint_len_calculator(items: &[RsPod]) -> (u16, u16, u16, u16, u16) {
     let name_len = items
         .iter()
-        .map(RsPod::podname)
+        .map(RsPod::name)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let status_len = items
+        .iter()
+        .map(RsPod::status)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
@@ -181,11 +198,13 @@ pub fn pod_constraint_len_calculator(items: &[RsPod]) -> (u16, u16, u16, u16) {
 
     (
         name_len as u16,
-        description_len as u16,
-        age_len as u16,
+        status_len as u16,
         containers_len as u16,
+        age_len as u16,
+        description_len as u16,
     )
 }
+
 #[allow(clippy::cast_possible_truncation)]
 pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16) {
     let name_len = items
@@ -204,11 +223,12 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16) {
 
     (name_len as u16, description_len as u16)
 }
+
 #[cfg(test)]
 mod tests {
     use crate::tui::data::{
-        Container, container_constraint_len_calculator,
-        pod_constraint_len_calculator, Rs, rs_constraint_len_calculator, RsPod,
+        container_constraint_len_calculator, pod_constraint_len_calculator,
+        rs_constraint_len_calculator, Container, Rs, RsPod,
     };
 
     #[test]
@@ -234,6 +254,7 @@ mod tests {
         let test_data = vec![
             RsPod {
                 name: "replica-123456-123456".to_string(),
+                status: "Running".to_string(),
                 description: "Deployment".to_string(),
                 age: "150d".to_string(),
                 containers: "2/2".to_string(),
@@ -241,6 +262,7 @@ mod tests {
             },
             RsPod {
                 name: "replica-923450-987654".to_string(),
+                status: "Terminating".to_string(),
                 description: "Deployment".to_string(),
                 age: "10d".to_string(),
                 containers: "2/2".to_string(),
@@ -249,12 +271,14 @@ mod tests {
         ];
         let (
             longest_pod_name_len,
-            longest_description_len,
-            longest_age_len,
+            longest_status_len,
             longest_containers_len,
+            longest_age_len,
+            longest_description_len,
         ) = pod_constraint_len_calculator(&test_data);
 
         assert_eq!(21, longest_pod_name_len);
+        assert_eq!(11, longest_status_len);
         assert_eq!(10, longest_description_len);
         assert_eq!(4, longest_age_len);
         assert_eq!(3, longest_containers_len);
@@ -283,11 +307,11 @@ mod tests {
         ];
         let (
             longest_name_len,
-            longest_owner_len,
-            longest_description_len,
-            longest_age_len,
             longest_pods_len,
             longest_containers_len,
+            longest_age_len,
+            longest_description_len,
+            longest_owner_len,
         ) = rs_constraint_len_calculator(&test_data);
 
         assert_eq!(17, longest_name_len);

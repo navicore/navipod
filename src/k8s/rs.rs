@@ -1,9 +1,35 @@
 use k8s_openapi::api::apps::v1::ReplicaSet;
-use kube::{Api, Client};
 use kube::api::ListParams;
 use kube::api::ObjectList;
+use kube::{Api, Client};
 
 use crate::tui::data::Rs;
+
+use chrono::{DateTime, Duration, Utc};
+
+fn format_duration(duration: Duration) -> String {
+    if duration.num_days() > 0 {
+        format!("{}d", duration.num_days())
+    } else if duration.num_hours() > 0 {
+        format!("{}h", duration.num_hours())
+    } else if duration.num_minutes() > 0 {
+        format!("{}m", duration.num_minutes())
+    } else {
+        format!("{}s", duration.num_seconds())
+    }
+}
+
+fn calculate_age(rs: &ReplicaSet) -> String {
+    rs.metadata.creation_timestamp.as_ref().map_or_else(
+        || "Unk".to_string(),
+        |creation_timestamp| {
+            let ts: DateTime<_> = creation_timestamp.0;
+            let now = Utc::now();
+            let duration = now.signed_duration_since(ts);
+            format_duration(duration)
+        },
+    )
+}
 
 /// # Errors
 ///
@@ -18,10 +44,11 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
     let mut rs_vec = Vec::new();
 
     for rs in rs_list.items {
-        if let Some(owners) = rs.metadata.owner_references {
+        if let Some(owners) = &rs.metadata.owner_references {
             for owner in owners {
                 let selectors = rs.metadata.labels.as_ref().map(std::clone::Clone::clone);
 
+                let age = calculate_age(&rs);
                 let instance_name = &rs
                     .metadata
                     .name
@@ -35,16 +62,16 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     .status
                     .as_ref()
                     .map_or(0, |status| status.ready_replicas.unwrap_or(0));
-                let kind = owner.kind;
-                let owner_name = owner.name;
+                let kind = &owner.kind;
+                let owner_name = &owner.name;
 
                 let data = Rs {
                     name: instance_name.to_string(),
-                    owner: owner_name,
-                    description: kind,
-                    age: "???".to_string(),
                     pods: format!("{ready_replicas}/{desired_replicas}"),
                     containers: "?/?".to_string(),
+                    age,
+                    description: kind.to_string(),
+                    owner: owner_name.to_owned(),
                     selectors,
                 };
 

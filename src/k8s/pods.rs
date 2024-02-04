@@ -1,11 +1,37 @@
 use std::collections::BTreeMap;
 
 use k8s_openapi::api::core::v1::Pod;
-use kube::{Api, Client};
 use kube::api::ListParams;
 use kube::api::ObjectList;
+use kube::{Api, Client};
 
 use crate::tui::data::{Container, RsPod};
+
+use chrono::{DateTime, Duration, Utc};
+
+fn format_duration(duration: Duration) -> String {
+    if duration.num_days() > 0 {
+        format!("{}d", duration.num_days())
+    } else if duration.num_hours() > 0 {
+        format!("{}h", duration.num_hours())
+    } else if duration.num_minutes() > 0 {
+        format!("{}m", duration.num_minutes())
+    } else {
+        format!("{}s", duration.num_seconds())
+    }
+}
+
+fn calculate_age(pod: &Pod) -> String {
+    pod.metadata.creation_timestamp.as_ref().map_or_else(
+        || "Unk".to_string(),
+        |creation_timestamp| {
+            let ts: DateTime<_> = creation_timestamp.0;
+            let now = Utc::now();
+            let duration = now.signed_duration_since(ts);
+            format_duration(duration)
+        },
+    )
+}
 
 fn format_label_selector(selector: &BTreeMap<String, String>) -> String {
     selector
@@ -35,6 +61,38 @@ fn get_container_names(pod: &Pod) -> Vec<String> {
     })
 }
 
+fn get_pod_state(pod: &Pod) -> String {
+    // Check if the pod is marked for deletion
+    if pod.metadata.deletion_timestamp.is_some() {
+        return "Terminating".to_string();
+    }
+
+    // Then proceed to check the pod's status as before
+    if let Some(status) = &pod.status {
+        if let Some(phase) = &status.phase {
+            return match phase.as_str() {
+                "Pending" => "Pending".to_string(),
+                "Running" => {
+                    if status.conditions.as_ref().map_or(false, |conds| {
+                        conds
+                            .iter()
+                            .any(|c| c.type_ == "Ready" && c.status == "True")
+                    }) {
+                        "Running".to_string()
+                    } else {
+                        "Starting".to_string() // This might be a more accurate state for non-ready running pods
+                    }
+                }
+                "Succeeded" => "Succeeded".to_string(),
+                "Failed" => "Failed".to_string(),
+                _ => "Unknown".to_string(),
+            };
+        }
+    }
+
+    "Unknown".to_string()
+}
+
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
@@ -53,7 +111,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
 
     for pod in pod_list.items {
         let container_names = get_container_names(&pod);
-        if let Some(owners) = pod.metadata.owner_references {
+        if let Some(owners) = &pod.metadata.owner_references {
             for owner in owners {
                 let instance_name = &pod
                     .metadata
@@ -68,12 +126,15 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                 // Desired container count
                 let desired_container_count =
                     pod.spec.as_ref().map_or(0, |spec| spec.containers.len());
-                let kind = owner.kind;
+                let kind = &owner.kind;
 
+                let age = calculate_age(&pod);
+                let status = get_pod_state(&pod);
                 let data = RsPod {
                     name: instance_name.to_string(),
-                    description: kind,
-                    age: "???".to_string(),
+                    status: status.to_string(),
+                    description: kind.to_string(),
+                    age,
                     containers: format!("{actual_container_count}/{desired_container_count}"),
                     container_names: convert_to_containers(container_names.clone()),
                 };

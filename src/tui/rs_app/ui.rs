@@ -29,7 +29,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Replica Set", "Owner", "Description", "Age", "P", "C"]
+    let header = ["Replica Set", "P", "C", "Age", "Description", "Owner"]
         .iter()
         .copied()
         .map(Cell::from)

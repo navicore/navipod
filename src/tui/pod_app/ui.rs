@@ -29,7 +29,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Pod Name", "Description", "Age", "C"]
+    let header = ["Pod Name", "Status", "C", "Age", "Description"]
         .iter()
         .copied()
         .map(Cell::from)
@@ -58,6 +58,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(app.longest_item_lens.1 + 2),
             Constraint::Min(app.longest_item_lens.2 + 2),
             Constraint::Min(app.longest_item_lens.3 + 2),
+            Constraint::Min(app.longest_item_lens.4 + 2),
         ],
     )
     .header(header)

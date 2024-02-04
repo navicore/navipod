@@ -3,14 +3,14 @@ use std::collections::BTreeMap;
 use ratatui::widgets::{ScrollbarState, TableState};
 
 use crate::tui::data::{pod_constraint_len_calculator, RsPod};
-use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
+use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) state: TableState,
     pub(crate) items: Vec<RsPod>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16),
+    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     pub(crate) color_index: usize,

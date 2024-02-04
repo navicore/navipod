@@ -1,4 +1,4 @@
-use crate::tui::rs_app::app::App;
+use crate::tui::ingress_app::app::App;
 use crate::tui::style::INFO_TEXT;
 use crate::tui::table_ui::TuiTableState;
 use ratatui::{
@@ -29,7 +29,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Replica Set", "P", "Age", "Description", "Owner"]
+    let header = ["Name", "Host", "Path", "Backend", "Port"]
         .iter()
         .copied()
         .map(Cell::from)

@@ -8,7 +8,7 @@ pub const PALETTES: [tailwind::Palette; 4] = [
     tailwind::INDIGO,
 ];
 pub const INFO_TEXT: &str =
-    "(q) quit | (Esc) previous | (↑) move up | (↓) move down | (c) next color";
+    "(q) quit | (Esc) previous | (↑) up | (↓) down | (c) color | (i) ingress";
 
 pub const ITEM_HEIGHT: usize = 4;
 

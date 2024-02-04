@@ -20,12 +20,15 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error};
 
 use crate::k8s::pods::list_rspods;
+use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;
+use crate::k8s::rs_ingress::list_ingresses;
 use crate::tui::table_ui::TuiTableState;
 
 // Assuming you're using crossterm for events
 mod container_app;
 pub mod data;
+mod ingress_app;
 mod pod_app;
 mod rs_app;
 mod style;
@@ -67,6 +70,22 @@ enum Apps {
     Rs { app: rs_app::app::App },
     Pod { app: pod_app::app::App },
     Container { app: container_app::app::App },
+    Ingress { app: ingress_app::app::App },
+}
+
+async fn create_ingress_data_vec(
+    selector: BTreeMap<String, String>,
+) -> Result<Vec<data::Ingress>, io::Error> {
+    match get_replicaset(selector).await {
+        Ok(rso) => match rso {
+            Some(rs) => match list_ingresses(&rs, "").await {
+                Ok(ingress) => Ok(ingress),
+                Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            },
+            _ => Ok(vec![]),
+        },
+        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+    }
 }
 
 async fn create_rspod_data_vec(
@@ -110,6 +129,20 @@ async fn run_rs_app<B: Backend + Send>(
                         }
                         Char('c' | 'C') => {
                             app.next_color();
+                        }
+                        Char('i' | 'I') => {
+                            if let Some(selection) = app.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
+                                    let data_vec =
+                                        create_ingress_data_vec(selector.clone()).await?;
+                                    let new_app_holder = Apps::Ingress {
+                                        app: ingress_app::app::App::new(data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to ingress...");
+                                    break;
+                                };
+                            };
                         }
                         Enter => {
                             if let Some(selection) = app.get_selected_item() {
@@ -245,6 +278,43 @@ async fn run_container_app<B: Backend + Send>(
     Ok(app_holder)
 }
 
+async fn run_ingress_app<B: Backend + Send>(
+    terminal: &mut Terminal<B>,
+    app: &mut ingress_app::app::App,
+) -> Result<Option<Apps>, io::Error> {
+    let should_stop = Arc::new(AtomicBool::new(false));
+    let mut key_events = async_key_events(should_stop.clone());
+    #[allow(unused_assignments)] // we might quit or ESC
+    let mut app_holder = Some(Apps::Ingress { app: app.clone() });
+
+    loop {
+        terminal.draw(|f| ingress_app::ui::ui(f, &mut app.clone()))?;
+        if let Some(StreamEvent::Key(Event::Key(key))) = key_events.next().await {
+            if key.kind == KeyEventKind::Press {
+                use KeyCode::{Char, Down, Esc, Up};
+                match key.code {
+                    Char('q') | Esc => {
+                        app_holder = None;
+                        break;
+                    }
+                    Char('j') | Down => {
+                        app.next();
+                    }
+                    Char('k') | Up => {
+                        app.previous();
+                    }
+                    Char('c' | 'C') => {
+                        app.next_color();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    should_stop.store(true, Ordering::Relaxed);
+    Ok(app_holder)
+}
+
 /// runs a stack of apps where navigation is "<Enter>" into and "<Esc>" out of
 async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()> {
     let data_vec = match list_replicas().await {
@@ -290,6 +360,17 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Container { app } => {
                 if let Some(new_app_holder) = run_container_app(terminal, app).await? {
+                    history.push(Arc::new(app_holder.clone())); // Save current state
+                    app_holder = new_app_holder;
+                } else if let Some(previous_app) = history.pop() {
+                    app_holder = (*previous_app).clone();
+                } else {
+                    break;
+                }
+            }
+
+            Apps::Ingress { app } => {
+                if let Some(new_app_holder) = run_ingress_app(terminal, app).await? {
                     history.push(Arc::new(app_holder.clone())); // Save current state
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {

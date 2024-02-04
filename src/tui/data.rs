@@ -71,16 +71,14 @@ pub struct Rs {
     pub description: String,
     pub age: String,
     pub pods: String,
-    pub containers: String,
     pub selectors: Option<BTreeMap<String, String>>,
 }
 
 impl Rs {
-    pub(crate) const fn ref_array(&self) -> [&String; 6] {
+    pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
             &self.name,
             &self.pods,
-            &self.containers,
             &self.age,
             &self.description,
             &self.owner,
@@ -106,23 +104,107 @@ impl Rs {
     pub(crate) fn pods(&self) -> &str {
         &self.pods
     }
+}
 
-    pub(crate) fn containers(&self) -> &str {
-        &self.containers
+#[derive(Clone, Debug)]
+pub struct Ingress {
+    pub name: String,
+    pub host: String,
+    pub path: String,
+    pub backend_svc: String,
+    pub port: String,
+}
+
+impl Ingress {
+    pub(crate) const fn ref_array(&self) -> [&String; 5] {
+        [
+            &self.name,
+            &self.host,
+            &self.path,
+            &self.backend_svc,
+            &self.port,
+        ]
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub(crate) fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub(crate) fn backend_svc(&self) -> &str {
+        &self.backend_svc
+    }
+
+    pub(crate) fn port(&self) -> &str {
+        &self.port
     }
 }
 
 #[allow(clippy::cast_possible_truncation)]
-pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16, u16) {
+pub fn ingress_constraint_len_calculator(items: &[Ingress]) -> (u16, u16, u16, u16, u16) {
+    let name_len = items
+        .iter()
+        .map(Ingress::name)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let host_len = items
+        .iter()
+        .map(Ingress::host)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let path_len = items
+        .iter()
+        .map(Ingress::path)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let backend_svc_len = items
+        .iter()
+        .map(Ingress::backend_svc)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let port_len = items
+        .iter()
+        .map(Ingress::port)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    (
+        name_len as u16,
+        host_len as u16,
+        path_len as u16,
+        backend_svc_len as u16,
+        port_len as u16,
+    )
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16) {
     let name_len = items
         .iter()
         .map(Rs::name)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
-    let owner_len = items
+    let pods_len = items
         .iter()
-        .map(Rs::owner)
+        .map(Rs::pods)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let age_len = items
+        .iter()
+        .map(Rs::age)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
@@ -133,21 +215,9 @@ pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16, u
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
-    let age_len = items
+    let owner_len = items
         .iter()
-        .map(Rs::age)
-        .map(UnicodeWidthStr::width)
-        .max()
-        .unwrap_or(0);
-    let pods_len = items
-        .iter()
-        .map(Rs::pods)
-        .map(UnicodeWidthStr::width)
-        .max()
-        .unwrap_or(0);
-    let containers_len = items
-        .iter()
-        .map(Rs::containers)
+        .map(Rs::owner)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
@@ -155,7 +225,6 @@ pub fn rs_constraint_len_calculator(items: &[Rs]) -> (u16, u16, u16, u16, u16, u
     (
         name_len as u16,
         pods_len as u16,
-        containers_len as u16,
         age_len as u16,
         description_len as u16,
         owner_len as u16,
@@ -292,7 +361,6 @@ mod tests {
                 description: "Deployment".to_string(),
                 age: "300d".to_string(),
                 pods: "10/10".to_string(),
-                containers: "19/30".to_string(),
                 selectors: None,
             },
             Rs {
@@ -301,14 +369,12 @@ mod tests {
                 description: "Deployment".to_string(),
                 age: "10d".to_string(),
                 pods: "1/1".to_string(),
-                containers: "2/2".to_string(),
                 selectors: None,
             },
         ];
         let (
             longest_name_len,
             longest_pods_len,
-            longest_containers_len,
             longest_age_len,
             longest_description_len,
             longest_owner_len,
@@ -319,6 +385,5 @@ mod tests {
         assert_eq!(10, longest_description_len);
         assert_eq!(4, longest_age_len);
         assert_eq!(5, longest_pods_len);
-        assert_eq!(5, longest_containers_len);
     }
 }

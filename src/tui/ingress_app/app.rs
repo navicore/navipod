@@ -1,20 +1,21 @@
 use ratatui::widgets::{ScrollbarState, TableState};
 
-use crate::tui::data::{rs_constraint_len_calculator, Rs};
+use crate::tui::data::{ingress_constraint_len_calculator, Ingress};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) state: TableState,
-    pub(crate) items: Vec<Rs>,
+    pub(crate) items: Vec<Ingress>,
     pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
-    pub(crate) color_index: usize,
+    color_index: usize,
 }
+
 impl TuiTableState for App {
-    type Item = Rs;
+    type Item = Ingress;
 
     fn get_items(&self) -> &[Self::Item] {
         &self.items
@@ -31,6 +32,7 @@ impl TuiTableState for App {
     fn set_scroll_state(&mut self, scroll_state: ScrollbarState) {
         self.scroll_state = scroll_state;
     }
+
     fn get_table_colors(&self) -> &TableColors {
         &self.colors
     }
@@ -47,19 +49,20 @@ impl TuiTableState for App {
         self.color_index = color_index;
     }
 }
+
 impl App {
-    pub fn new(data_vec: Vec<Rs>) -> Self {
-        let scroll_state = if data_vec.is_empty() {
-            ScrollbarState::new((data_vec.len() - 1) * ITEM_HEIGHT)
+    pub fn new(data_vec: Vec<Ingress>) -> Self {
+        let scroll_state_pos = if data_vec.len() > 0 {
+            (data_vec.len() - 1) * ITEM_HEIGHT
         } else {
-            ScrollbarState::new(0)
+            0
         };
         Self {
             state: TableState::default().with_selected(0),
-            longest_item_lens: rs_constraint_len_calculator(&data_vec),
-            scroll_state,
+            longest_item_lens: ingress_constraint_len_calculator(&data_vec),
+            scroll_state: ScrollbarState::new(scroll_state_pos),
             colors: TableColors::new(&PALETTES[0]),
-            color_index: 0,
+            color_index: 3,
             items: data_vec,
         }
     }

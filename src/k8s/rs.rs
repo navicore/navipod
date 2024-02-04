@@ -2,6 +2,7 @@ use k8s_openapi::api::apps::v1::ReplicaSet;
 use kube::api::ListParams;
 use kube::api::ObjectList;
 use kube::{Api, Client};
+use std::collections::BTreeMap;
 
 use crate::tui::data::Rs;
 
@@ -68,7 +69,6 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                 let data = Rs {
                     name: instance_name.to_string(),
                     pods: format!("{ready_replicas}/{desired_replicas}"),
-                    containers: "?/?".to_string(),
                     age,
                     description: kind.to_string(),
                     owner: owner_name.to_owned(),
@@ -84,4 +84,32 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
     }
 
     Ok(rs_vec)
+}
+
+fn format_label_selector(selector: &BTreeMap<String, String>) -> String {
+    selector
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<String>>()
+        .join(",")
+}
+
+/// # Errors
+///
+/// Will return `Err` if data can not be retrieved from k8s cluster api
+pub async fn get_replicaset(
+    selector: BTreeMap<String, String>,
+) -> Result<Option<ReplicaSet>, kube::Error> {
+    let client = Client::try_default().await?;
+
+    // Format the label selector from the BTreeMap
+    let label_selector = format_label_selector(&selector);
+
+    // Apply the label selector in ListParams
+    let lp = ListParams::default().labels(&label_selector);
+
+    let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone()).list(&lp).await?;
+
+    let rs = rs_list.into_iter().next();
+    Ok(rs)
 }

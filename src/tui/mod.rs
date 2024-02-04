@@ -4,6 +4,7 @@ use futures::stream::StreamExt; // Needed for the `.next()` method
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::time::sleep;
 use tokio_stream::wrappers::ReceiverStream; // Assuming you're using crossterm for events
 mod container_app;
 use std::sync::Arc;
@@ -79,7 +80,7 @@ async fn run_rs_app<B: Backend + Send>(
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
     let data_events = async_rs_events(should_stop.clone());
-    let mut events = futures::stream::select(key_events, data_events);
+    let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Rs { app: app.clone() });
@@ -118,7 +119,7 @@ async fn run_rs_app<B: Backend + Send>(
                                 };
                             };
                         }
-                        _ => {} //noop
+                        _k => {}
                     }
                 }
             }
@@ -146,7 +147,7 @@ async fn run_pod_app<B: Backend + Send>(
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
     let data_events = async_pod_events(app.selector.clone(), should_stop.clone());
-    let mut events = futures::stream::select(key_events, data_events);
+    let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Pod { app: app.clone() });
@@ -181,7 +182,7 @@ async fn run_pod_app<B: Backend + Send>(
                                 break;
                             }
                         }
-                        _ => {}
+                        _k => {}
                     }
                 }
             }
@@ -344,28 +345,18 @@ fn async_pod_events(
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
-            match poll(Duration::from_millis(POLL_MS)) {
-                Ok(true) => {
-                    //get Vec and send
-                    match list_rspods(selector.clone()).await {
-                        Ok(d) => {
-                            let sevent = StreamEvent::Pod(d);
-                            if tx.send(sevent).await.is_err() {
-                                //error!("Error sending event");
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error listing pods: {e}");
-                            break;
-                        }
+            sleep(Duration::from_millis(POLL_MS)).await;
+            //get Vec and send
+            match list_rspods(selector.clone()).await {
+                Ok(d) => {
+                    let sevent = StreamEvent::Pod(d);
+                    if tx.send(sevent).await.is_err() {
+                        //error!("Error sending event");
+                        break;
                     }
                 }
-                Ok(false) => {
-                    // No event, continue the loop to check should_stop again
-                }
                 Err(e) => {
-                    error!("Error polling for events: {e}");
+                    error!("Error listing pods: {e}");
                     break;
                 }
             }
@@ -381,30 +372,20 @@ fn async_rs_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEve
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
-            match poll(Duration::from_millis(POLL_MS)) {
-                Ok(true) => {
-                    //get Vec and send
-                    match list_replicas().await {
-                        Ok(d) => {
-                            let sevent = StreamEvent::Rs(d);
-                            if tx.send(sevent).await.is_err() {
-                                //break;
-                            }
-                        }
-                        Err(_e) => {
-                            //error!("Error listing replicas: {e}");
-                            break;
-                        }
-                    };
+            sleep(Duration::from_millis(POLL_MS)).await;
+            //get Vec and send
+            match list_replicas().await {
+                Ok(d) => {
+                    let sevent = StreamEvent::Rs(d);
+                    if tx.send(sevent).await.is_err() {
+                        //break;
+                    }
                 }
-                Ok(false) => {
-                    // No event, continue the loop to check should_stop again
-                }
-                Err(e) => {
-                    error!("Error polling for events: {e}");
+                Err(_e) => {
+                    //error!("Error listing replicas: {e}");
                     break;
                 }
-            }
+            };
             // The loop will also check the should_stop flag here
         }
     });

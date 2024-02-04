@@ -52,10 +52,10 @@ impl TuiTableState for App {
 
 impl App {
     pub fn new(data_vec: Vec<Ingress>) -> Self {
-        let scroll_state_pos = if data_vec.len() > 0 {
-            (data_vec.len() - 1) * ITEM_HEIGHT
-        } else {
+        let scroll_state_pos = if data_vec.is_empty() {
             0
+        } else {
+            (data_vec.len() - 1) * ITEM_HEIGHT
         };
         Self {
             state: TableState::default().with_selected(0),

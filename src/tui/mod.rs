@@ -1,30 +1,35 @@
-use crossterm::event::{poll, read};
-use futures::stream::Stream;
-use futures::stream::StreamExt; // Needed for the `.next()` method
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::{error::Error, io};
+// Needed for the `.next()` method
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::time::sleep;
-use tokio_stream::wrappers::ReceiverStream; // Assuming you're using crossterm for events
-mod container_app;
-use std::sync::Arc;
-pub mod data;
-mod pod_app;
-mod rs_app;
-mod style;
-mod table_ui;
-use crate::k8s::pods::list_rspods;
-use crate::k8s::rs::list_replicas;
-use crate::tui::table_ui::TuiTableState;
+
+use crossterm::event::{poll, read};
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures::stream::Stream;
+use futures::stream::StreamExt;
 use ratatui::prelude::*;
-use std::collections::BTreeMap;
-use std::{error::Error, io};
+use tokio::sync::mpsc;
+use tokio::time::sleep;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error};
+
+use crate::k8s::pods::list_rspods;
+use crate::k8s::rs::list_replicas;
+use crate::tui::table_ui::TuiTableState;
+
+// Assuming you're using crossterm for events
+mod container_app;
+pub mod data;
+mod pod_app;
+mod rs_app;
+mod style;
+mod table_ui;
 
 const POLL_MS: u64 = 5000;
 
@@ -305,7 +310,7 @@ enum StreamEvent {
 }
 
 fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+    let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
@@ -314,34 +319,27 @@ fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEv
                     if let Ok(event) = read() {
                         let sevent = StreamEvent::Key(event);
                         if tx.send(sevent).await.is_err() {
-                            //error!("Error sending event");
                             break;
                         }
                     }
                 }
-                Ok(false) => {
-                    // No event, continue the loop to check should_stop again
-                }
+                Ok(false) => {}
                 Err(e) => {
                     error!("Error polling for events: {e}");
                     break;
                 }
             }
-            // The loop will also check the should_stop flag here
         }
     });
 
     ReceiverStream::new(rx)
 }
 
-// todo: add selector to app state so that we have it when the pod app loop starts.... only then
-// will data show
-
 fn async_pod_events(
     selector: BTreeMap<String, String>,
     should_stop: Arc<AtomicBool>,
 ) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+    let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
@@ -351,7 +349,6 @@ fn async_pod_events(
                 Ok(d) => {
                     let sevent = StreamEvent::Pod(d);
                     if tx.send(sevent).await.is_err() {
-                        //error!("Error sending event");
                         break;
                     }
                 }
@@ -360,7 +357,6 @@ fn async_pod_events(
                     break;
                 }
             }
-            // The loop will also check the should_stop flag here
         }
     });
 
@@ -368,25 +364,20 @@ fn async_pod_events(
 }
 
 fn async_rs_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+    let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
             sleep(Duration::from_millis(POLL_MS)).await;
-            //get Vec and send
             match list_replicas().await {
                 Ok(d) => {
                     let sevent = StreamEvent::Rs(d);
-                    if tx.send(sevent).await.is_err() {
-                        //break;
-                    }
+                    if tx.send(sevent).await.is_err() {}
                 }
                 Err(_e) => {
-                    //error!("Error listing replicas: {e}");
                     break;
                 }
             };
-            // The loop will also check the should_stop flag here
         }
     });
 

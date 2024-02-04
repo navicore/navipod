@@ -1,7 +1,8 @@
-use crate::tui::data::{rs_constraint_len_calculator, Rs};
-use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
-use crate::tui::table_ui::TuiTableState;
 use ratatui::widgets::{ScrollbarState, TableState};
+
+use crate::tui::data::{Rs, rs_constraint_len_calculator};
+use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
+use crate::tui::table_ui::TuiTableState;
 
 #[derive(Clone, Debug)]
 pub struct App {

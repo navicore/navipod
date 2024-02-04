@@ -1,6 +1,8 @@
-use clap::{CommandFactory, Parser}; // CommandFactory is needed for into_app()
+use clap::{CommandFactory, Parser};
+// CommandFactory is needed for into_app()
 use clap_complete::{generate, Shell};
-use kube::{config::KubeConfigOptions, Config};
+use kube::{Config, config::KubeConfigOptions};
+
 use navipod::k8s::pod_ingress;
 use navipod::k8s::scan::db;
 use navipod::k8s::scan::pods;

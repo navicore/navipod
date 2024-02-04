@@ -2,8 +2,8 @@ use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::api::core::v1::Service;
 use k8s_openapi::api::networking::v1::Ingress;
-use kube::api::ListParams;
 use kube::{Api, Client};
+use kube::api::ListParams;
 
 /// # Errors
 ///

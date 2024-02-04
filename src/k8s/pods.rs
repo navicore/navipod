@@ -1,9 +1,11 @@
-use crate::tui::data::{Container, RsPod};
+use std::collections::BTreeMap;
+
 use k8s_openapi::api::core::v1::Pod;
+use kube::{Api, Client};
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use kube::{Api, Client};
-use std::collections::BTreeMap;
+
+use crate::tui::data::{Container, RsPod};
 
 fn format_label_selector(selector: &BTreeMap<String, String>) -> String {
     selector

@@ -22,15 +22,15 @@ fn format_duration(duration: Duration) -> String {
 }
 
 fn calculate_age(pod: &Pod) -> String {
-    let metadata = &pod.metadata;
-    if let Some(creation_timestamp) = &metadata.creation_timestamp {
-        let ts: DateTime<_> = creation_timestamp.0;
-        let now = Utc::now();
-        let duration = now.signed_duration_since(ts);
-        format_duration(duration)
-    } else {
-        "Unk".to_string()
-    }
+    pod.metadata.creation_timestamp.as_ref().map_or_else(
+        || "Unk".to_string(),
+        |creation_timestamp| {
+            let ts: DateTime<_> = creation_timestamp.0;
+            let now = Utc::now();
+            let duration = now.signed_duration_since(ts);
+            format_duration(duration)
+        },
+    )
 }
 
 fn format_label_selector(selector: &BTreeMap<String, String>) -> String {
@@ -85,7 +85,6 @@ fn get_pod_state(pod: &Pod) -> String {
                 }
                 "Succeeded" => "Succeeded".to_string(),
                 "Failed" => "Failed".to_string(),
-                "Unknown" => "Unknown".to_string(),
                 _ => "Unknown".to_string(),
             };
         }

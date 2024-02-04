@@ -272,13 +272,13 @@ mod tests {
         let (
             longest_pod_name_len,
             longest_status_len,
-            longest_description_len,
-            longest_age_len,
             longest_containers_len,
+            longest_age_len,
+            longest_description_len,
         ) = pod_constraint_len_calculator(&test_data);
 
         assert_eq!(21, longest_pod_name_len);
-        assert_eq!(21, longest_status_len);
+        assert_eq!(11, longest_status_len);
         assert_eq!(10, longest_description_len);
         assert_eq!(4, longest_age_len);
         assert_eq!(3, longest_containers_len);
@@ -307,11 +307,11 @@ mod tests {
         ];
         let (
             longest_name_len,
-            longest_owner_len,
-            longest_description_len,
-            longest_age_len,
             longest_pods_len,
             longest_containers_len,
+            longest_age_len,
+            longest_description_len,
+            longest_owner_len,
         ) = rs_constraint_len_calculator(&test_data);
 
         assert_eq!(17, longest_name_len);

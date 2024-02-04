@@ -20,15 +20,15 @@ fn format_duration(duration: Duration) -> String {
 }
 
 fn calculate_age(rs: &ReplicaSet) -> String {
-    let metadata = &rs.metadata;
-    if let Some(creation_timestamp) = &metadata.creation_timestamp {
-        let ts: DateTime<_> = creation_timestamp.0;
-        let now = Utc::now();
-        let duration = now.signed_duration_since(ts);
-        format_duration(duration)
-    } else {
-        "Unk".to_string()
-    }
+    rs.metadata.creation_timestamp.as_ref().map_or_else(
+        || "Unk".to_string(),
+        |creation_timestamp| {
+            let ts: DateTime<_> = creation_timestamp.0;
+            let now = Utc::now();
+            let duration = now.signed_duration_since(ts);
+            format_duration(duration)
+        },
+    )
 }
 
 /// # Errors

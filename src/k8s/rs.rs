@@ -1,8 +1,9 @@
-use crate::tui::data::Rs;
 use k8s_openapi::api::apps::v1::ReplicaSet;
+use kube::{Api, Client};
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use kube::{Api, Client};
+
+use crate::tui::data::Rs;
 
 /// # Errors
 ///

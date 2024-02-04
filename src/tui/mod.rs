@@ -1,29 +1,35 @@
-use crossterm::event::{poll, read};
-use futures::stream::Stream;
-use futures::stream::StreamExt; // Needed for the `.next()` method
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::{error::Error, io};
+// Needed for the `.next()` method
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream; // Assuming you're using crossterm for events
-mod container_app;
-use std::sync::Arc;
-pub mod data;
-mod pod_app;
-mod rs_app;
-mod style;
-mod table_ui;
-use crate::k8s::pods::list_rspods;
-use crate::k8s::rs::list_replicas;
-use crate::tui::table_ui::TuiTableState;
+
+use crossterm::event::{poll, read};
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures::stream::Stream;
+use futures::stream::StreamExt;
 use ratatui::prelude::*;
-use std::collections::BTreeMap;
-use std::{error::Error, io};
+use tokio::sync::mpsc;
+use tokio::time::sleep;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error};
+
+use crate::k8s::pods::list_rspods;
+use crate::k8s::rs::list_replicas;
+use crate::tui::table_ui::TuiTableState;
+
+// Assuming you're using crossterm for events
+mod container_app;
+pub mod data;
+mod pod_app;
+mod rs_app;
+mod style;
+mod table_ui;
 
 const POLL_MS: u64 = 5000;
 
@@ -79,7 +85,7 @@ async fn run_rs_app<B: Backend + Send>(
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
     let data_events = async_rs_events(should_stop.clone());
-    let mut events = futures::stream::select(key_events, data_events);
+    let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Rs { app: app.clone() });
@@ -118,7 +124,7 @@ async fn run_rs_app<B: Backend + Send>(
                                 };
                             };
                         }
-                        _ => {} //noop
+                        _k => {}
                     }
                 }
             }
@@ -146,7 +152,7 @@ async fn run_pod_app<B: Backend + Send>(
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
     let data_events = async_pod_events(app.selector.clone(), should_stop.clone());
-    let mut events = futures::stream::select(key_events, data_events);
+    let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Pod { app: app.clone() });
@@ -181,7 +187,7 @@ async fn run_pod_app<B: Backend + Send>(
                                 break;
                             }
                         }
-                        _ => {}
+                        _k => {}
                     }
                 }
             }
@@ -254,7 +260,12 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
         match &mut app_holder {
             Apps::Rs { app } => {
                 if let Some(new_app_holder) = run_rs_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // Save current state
+                    match new_app_holder.clone() {
+                        Apps::Rs { app: _ } => {}
+                        _ => {
+                            history.push(Arc::new(app_holder.clone())); // Save current state
+                        }
+                    }
                     app_holder = new_app_holder;
                 } else {
                     break; //quit
@@ -263,7 +274,12 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Pod { app } => {
                 if let Some(new_app_holder) = run_pod_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // Save current state
+                    match new_app_holder.clone() {
+                        Apps::Pod { app: _ } => {}
+                        _ => {
+                            history.push(Arc::new(app_holder.clone())); // Save current state
+                        }
+                    }
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();
@@ -294,7 +310,7 @@ enum StreamEvent {
 }
 
 fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+    let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
@@ -303,63 +319,44 @@ fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEv
                     if let Ok(event) = read() {
                         let sevent = StreamEvent::Key(event);
                         if tx.send(sevent).await.is_err() {
-                            //error!("Error sending event");
                             break;
                         }
                     }
                 }
-                Ok(false) => {
-                    // No event, continue the loop to check should_stop again
-                }
+                Ok(false) => {}
                 Err(e) => {
                     error!("Error polling for events: {e}");
                     break;
                 }
             }
-            // The loop will also check the should_stop flag here
         }
     });
 
     ReceiverStream::new(rx)
 }
 
-// todo: add selector to app state so that we have it when the pod app loop starts.... only then
-// will data show
-
 fn async_pod_events(
     selector: BTreeMap<String, String>,
     should_stop: Arc<AtomicBool>,
 ) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+    let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
-            match poll(Duration::from_millis(POLL_MS)) {
-                Ok(true) => {
-                    //get Vec and send
-                    match list_rspods(selector.clone()).await {
-                        Ok(d) => {
-                            let sevent = StreamEvent::Pod(d);
-                            if tx.send(sevent).await.is_err() {
-                                //error!("Error sending event");
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error listing pods: {e}");
-                            break;
-                        }
+            sleep(Duration::from_millis(POLL_MS)).await;
+            //get Vec and send
+            match list_rspods(selector.clone()).await {
+                Ok(d) => {
+                    let sevent = StreamEvent::Pod(d);
+                    if tx.send(sevent).await.is_err() {
+                        break;
                     }
                 }
-                Ok(false) => {
-                    // No event, continue the loop to check should_stop again
-                }
                 Err(e) => {
-                    error!("Error polling for events: {e}");
+                    error!("Error listing pods: {e}");
                     break;
                 }
             }
-            // The loop will also check the should_stop flag here
         }
     });
 
@@ -367,35 +364,20 @@ fn async_pod_events(
 }
 
 fn async_rs_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100); // `100` is the capacity of the channel
+    let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
-            match poll(Duration::from_millis(POLL_MS)) {
-                Ok(true) => {
-                    //get Vec and send
-                    match list_replicas().await {
-                        Ok(d) => {
-                            let sevent = StreamEvent::Rs(d);
-                            if tx.send(sevent).await.is_err() {
-                                //break;
-                            }
-                        }
-                        Err(_e) => {
-                            //error!("Error listing replicas: {e}");
-                            break;
-                        }
-                    };
+            sleep(Duration::from_millis(POLL_MS)).await;
+            match list_replicas().await {
+                Ok(d) => {
+                    let sevent = StreamEvent::Rs(d);
+                    if tx.send(sevent).await.is_err() {}
                 }
-                Ok(false) => {
-                    // No event, continue the loop to check should_stop again
-                }
-                Err(e) => {
-                    error!("Error polling for events: {e}");
+                Err(_e) => {
                     break;
                 }
-            }
-            // The loop will also check the should_stop flag here
+            };
         }
     });
 

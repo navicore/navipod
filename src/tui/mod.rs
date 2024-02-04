@@ -254,7 +254,12 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
         match &mut app_holder {
             Apps::Rs { app } => {
                 if let Some(new_app_holder) = run_rs_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // Save current state
+                    match new_app_holder.clone() {
+                        Apps::Rs { app: _ } => {}
+                        _ => {
+                            history.push(Arc::new(app_holder.clone())); // Save current state
+                        }
+                    }
                     app_holder = new_app_holder;
                 } else {
                     break; //quit
@@ -263,7 +268,12 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Pod { app } => {
                 if let Some(new_app_holder) = run_pod_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // Save current state
+                    match new_app_holder.clone() {
+                        Apps::Pod { app: _ } => {}
+                        _ => {
+                            history.push(Arc::new(app_holder.clone())); // Save current state
+                        }
+                    }
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();

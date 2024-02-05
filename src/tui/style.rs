@@ -10,7 +10,7 @@ pub const PALETTES: [tailwind::Palette; 4] = [
 pub const INFO_TEXT: &str =
     "(q) quit | (Esc) previous | (↑) up | (↓) down | (c) color | (i) ingress";
 
-pub const ITEM_HEIGHT: usize = 4;
+pub const ITEM_HEIGHT: usize = 3;
 
 #[derive(Clone, Debug)]
 pub struct TableColors {

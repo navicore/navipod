@@ -47,7 +47,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
             .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
             .collect::<Row>()
             .style(Style::new().fg(app.colors.row_fg).bg(color))
-            .height(4)
+            .height(3) //height
     });
     let bar = " █ ";
     let t = Table::new(

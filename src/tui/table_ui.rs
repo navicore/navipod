@@ -5,32 +5,27 @@ pub trait TuiTableState {
     type Item; // if items are of a specific type
 
     fn next(&mut self) {
-        let i = self.get_state().selected().map_or(0, |i| {
-            if i >= self.get_items().len() - 1 {
-                0
-            } else {
-                i + 1
-            }
-        });
+        let pos = self.get_state().selected().unwrap_or(0);
+        if pos < self.get_items().len() - 1 {
+            // don't wrap
+            let new_pos = pos + 1;
+            self.get_state().select(Some(new_pos));
+            let new_scroll_state = self.get_scroll_state().position(new_pos * ITEM_HEIGHT);
 
-        self.get_state().select(Some(i));
-        let new_scroll_state = self.get_scroll_state().position(i * ITEM_HEIGHT);
-        self.set_scroll_state(new_scroll_state);
+            self.set_scroll_state(new_scroll_state);
+        }
     }
 
     fn previous(&mut self) {
-        let i = self.get_state().selected().map_or(0, |i| {
-            if i == 0 {
-                self.get_items().len() - 1
-            } else {
-                i - 1
-            }
-        });
+        let pos = self.get_state().selected().unwrap_or(0);
+        if pos > 0 {
+            // don't wrap
+            let new_pos = pos - 1;
+            self.get_state().select(Some(new_pos));
+            let new_scroll_state = self.get_scroll_state().position((new_pos) * ITEM_HEIGHT);
 
-        self.get_state().select(Some(i));
-        let new_scroll_state = self.get_scroll_state().position(i * ITEM_HEIGHT);
-
-        self.set_scroll_state(new_scroll_state);
+            self.set_scroll_state(new_scroll_state);
+        }
     }
     fn next_color(&mut self) {
         //self.color_index = (self.color_index + 1) % PALETTES.len();

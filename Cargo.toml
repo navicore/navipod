@@ -27,16 +27,22 @@ k8s-openapi = { version = "0.21", features = ["v1_26"] }
 kube = { version = "0.88", features = ["runtime", "derive", "client", "ws"] }
 ratatui = "0.26"
 regex = "1.10"
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", features = ["rustls-tls", "json"] }
+rustls = "0.20"
 sqlx = { version = "0.7", features = [ "sqlite", "runtime-tokio-native-tls" ] }
 thiserror = "1"
+time = "0.3" # For handling dates in the certificate
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tokio-rustls = "0.23"
 tokio-stream = "0.1"
 tokio-util = "0.7"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 unicode-width = "0.1"
 uuid = { version = "1", features = [ "v4" ] }
+webpki = "0.22"
+webpki-roots = "0.22"
+x509-parser = "0.15.1"
 
 [dev-dependencies]
 anyhow = "1"

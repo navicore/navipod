@@ -1,6 +1,35 @@
 use std::collections::BTreeMap;
-
 use unicode_width::UnicodeWidthStr;
+
+#[derive(Clone, Debug)]
+pub struct Cert {
+    pub host: String,
+    pub is_valid: String,
+    pub expires: String,
+    pub issued_by: String,
+}
+
+impl Cert {
+    pub(crate) const fn ref_array(&self) -> [&String; 4] {
+        [&self.host, &self.is_valid, &self.expires, &self.issued_by]
+    }
+
+    pub(crate) fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub(crate) fn is_valid(&self) -> &str {
+        &self.is_valid
+    }
+
+    pub(crate) fn expires(&self) -> &str {
+        &self.expires
+    }
+
+    pub(crate) fn issued_by(&self) -> &str {
+        &self.issued_by
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Container {
@@ -271,6 +300,41 @@ pub fn pod_constraint_len_calculator(items: &[RsPod]) -> (u16, u16, u16, u16, u1
         containers_len as u16,
         age_len as u16,
         description_len as u16,
+    )
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn cert_constraint_len_calculator(items: &[Cert]) -> (u16, u16, u16, u16) {
+    let host_len = items
+        .iter()
+        .map(Cert::host)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let valid_len = items
+        .iter()
+        .map(Cert::is_valid)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let expires_len = items
+        .iter()
+        .map(Cert::expires)
+        .flat_map(str::lines)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let issued_by_len = items
+        .iter()
+        .map(Cert::issued_by)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    (
+        host_len as u16,
+        valid_len as u16,
+        expires_len as u16,
+        issued_by_len as u16,
     )
 }
 

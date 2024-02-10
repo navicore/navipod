@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::{error::Error, io};
-// Needed for the `.next()` method
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use std::{error::Error, io};
+use time::OffsetDateTime;
+use x509_parser::time::ASN1Time; // Import time::Duration as TimeDuration to avoid name clash
 
 use crossterm::event::{poll, read};
 use crossterm::{
@@ -23,9 +24,11 @@ use crate::k8s::pods::list_rspods;
 use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;
 use crate::k8s::rs_ingress::list_ingresses;
+use crate::net::analyze_tls_certificate;
 use crate::tui::table_ui::TuiTableState;
 
 // Assuming you're using crossterm for events
+mod cert_app;
 mod container_app;
 pub mod data;
 mod ingress_app;
@@ -71,6 +74,7 @@ enum Apps {
     Pod { app: pod_app::app::App },
     Container { app: container_app::app::App },
     Ingress { app: ingress_app::app::App },
+    Cert { app: cert_app::app::App },
 }
 
 async fn create_ingress_data_vec(
@@ -85,6 +89,38 @@ async fn create_ingress_data_vec(
             _ => Ok(vec![]),
         },
         Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+    }
+}
+
+fn asn1time_to_future_days_string(asn1_time: &ASN1Time) -> String {
+    let now = OffsetDateTime::now_utc();
+
+    // Directly get OffsetDateTime from ASN1Time
+    let target_time = asn1_time.to_datetime();
+
+    // Calculate the difference in days
+    let duration = target_time - now;
+    let days_difference = duration.whole_days();
+
+    // Return the difference in days as a String with a "d" suffix
+    format!("{days_difference}d")
+}
+
+async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Error> {
+    match analyze_tls_certificate(host).await {
+        Ok(cinfo) => {
+            let d = data::Cert {
+                host: host.to_string(),
+                is_valid: cinfo.is_valid.to_string(),
+                expires: asn1time_to_future_days_string(&cinfo.expires),
+                issued_by: cinfo.issued_by,
+            };
+            Ok(vec![d])
+        }
+        Err(e) => {
+            let emsg = format!("host: {host} error: {e}");
+            Err(io::Error::new(io::ErrorKind::Other, emsg))
+        }
     }
 }
 
@@ -241,6 +277,43 @@ async fn run_pod_app<B: Backend + Send>(
     Ok(app_holder)
 }
 
+async fn run_cert_app<B: Backend + Send>(
+    terminal: &mut Terminal<B>,
+    app: &mut cert_app::app::App,
+) -> Result<Option<Apps>, io::Error> {
+    let should_stop = Arc::new(AtomicBool::new(false));
+    let mut key_events = async_key_events(should_stop.clone());
+    #[allow(unused_assignments)] // we might quit or ESC
+    let mut app_holder = Some(Apps::Cert { app: app.clone() });
+
+    loop {
+        terminal.draw(|f| cert_app::ui::ui(f, &mut app.clone()))?;
+        if let Some(StreamEvent::Key(Event::Key(key))) = key_events.next().await {
+            if key.kind == KeyEventKind::Press {
+                use KeyCode::{Char, Down, Esc, Up};
+                match key.code {
+                    Char('q') | Esc => {
+                        app_holder = None;
+                        break;
+                    }
+                    Char('j') | Down => {
+                        app.next();
+                    }
+                    Char('k') | Up => {
+                        app.previous();
+                    }
+                    Char('c' | 'C') => {
+                        app.next_color();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    should_stop.store(true, Ordering::Relaxed);
+    Ok(app_holder)
+}
+
 async fn run_container_app<B: Backend + Send>(
     terminal: &mut Terminal<B>,
     app: &mut container_app::app::App,
@@ -291,7 +364,7 @@ async fn run_ingress_app<B: Backend + Send>(
         terminal.draw(|f| ingress_app::ui::ui(f, &mut app.clone()))?;
         if let Some(StreamEvent::Key(Event::Key(key))) = key_events.next().await {
             if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Esc, Up};
+                use KeyCode::{Char, Down, Enter, Esc, Up};
                 match key.code {
                     Char('q') | Esc => {
                         app_holder = None;
@@ -306,6 +379,19 @@ async fn run_ingress_app<B: Backend + Send>(
                     Char('c' | 'C') => {
                         app.next_color();
                     }
+                    Enter => {
+                        if let Some(selection) = app.get_selected_item() {
+                            let host = &selection.host;
+                            let data_vec = create_cert_data_vec(&host.clone()).await?;
+                            let new_app_holder = Apps::Cert {
+                                app: cert_app::app::App::new(data_vec),
+                            };
+                            app_holder = Some(new_app_holder);
+                            debug!("changing app from pod to cert...");
+                            break;
+                        };
+                    }
+
                     _ => {}
                 }
             }
@@ -360,6 +446,17 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Container { app } => {
                 if let Some(new_app_holder) = run_container_app(terminal, app).await? {
+                    history.push(Arc::new(app_holder.clone())); // Save current state
+                    app_holder = new_app_holder;
+                } else if let Some(previous_app) = history.pop() {
+                    app_holder = (*previous_app).clone();
+                } else {
+                    break;
+                }
+            }
+
+            Apps::Cert { app } => {
+                if let Some(new_app_holder) = run_cert_app(terminal, app).await? {
                     history.push(Arc::new(app_holder.clone())); // Save current state
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {

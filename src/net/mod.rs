@@ -1,7 +1,7 @@
 use der_parser::oid::Oid;
-use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use std::sync::Arc;
 use tokio::net::TcpStream;
+use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::TlsConnector;
 use webpki_roots::TLS_SERVER_ROOTS;
 use x509_parser::prelude::*;

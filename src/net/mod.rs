@@ -25,7 +25,7 @@ pub async fn analyze_tls_certificate(
     let tcp_stream = TcpStream::connect(addr).await?;
 
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_server_trust_anchors(TLS_SERVER_ROOTS.iter().map(|ta| {
+    root_cert_store.add_trust_anchors(TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,

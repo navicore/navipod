@@ -1,24 +1,18 @@
 use crate::tui::pod_app::app::App;
-use crate::tui::style::INFO_TEXT;
 use crate::tui::table_ui::TuiTableState;
 use ratatui::{
     prelude::*,
-    widgets::{
-        Block, BorderType, Borders, Cell, HighlightSpacing, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, Table,
-    },
+    widgets::{Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table},
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
-    let rects = Layout::vertical([Constraint::Min(5), Constraint::Length(3)]).split(f.size());
+    let rects = Layout::vertical([Constraint::Min(5)]).split(f.size());
 
     app.set_colors();
 
     render_table(f, app, rects[0]);
 
     render_scrollbar(f, app, rects[0]);
-
-    render_footer(f, app, rects[1]);
 }
 
 fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
@@ -86,17 +80,4 @@ fn render_scrollbar(f: &mut Frame, app: &mut App, area: Rect) {
         }),
         &mut app.scroll_state,
     );
-}
-
-fn render_footer(f: &mut Frame, app: &App, area: Rect) {
-    let info_footer = Paragraph::new(Line::from(INFO_TEXT))
-        .style(Style::new().fg(app.colors.row_fg).bg(app.colors.buffer_bg))
-        .alignment(Alignment::Center)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::new().fg(app.colors.footer_border_color))
-                .border_type(BorderType::Double),
-        );
-    f.render_widget(info_footer, area);
 }

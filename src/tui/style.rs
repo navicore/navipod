@@ -7,8 +7,6 @@ pub const PALETTES: [tailwind::Palette; 4] = [
     tailwind::EMERALD,
     tailwind::INDIGO,
 ];
-pub const INFO_TEXT: &str =
-    "(q) quit | (Esc) previous | (↑) up | (↓) down | (c) color | (i) ingress";
 
 pub const ITEM_HEIGHT: usize = 3;
 
@@ -21,7 +19,6 @@ pub struct TableColors {
     pub(crate) selected_style_fg: Color,
     pub(crate) normal_row_color: Color,
     pub(crate) alt_row_color: Color,
-    pub(crate) footer_border_color: Color,
 }
 
 impl TableColors {
@@ -34,7 +31,6 @@ impl TableColors {
             selected_style_fg: color.c400,
             normal_row_color: tailwind::SLATE.c950,
             alt_row_color: tailwind::SLATE.c900,
-            footer_border_color: color.c400,
         }
     }
 }

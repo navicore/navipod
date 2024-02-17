@@ -56,12 +56,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
     )
     .header(header)
     .highlight_style(selected_style)
-    .highlight_symbol(Text::from(vec![
-        "".into(),
-        bar.into(),
-        bar.into(),
-        "".into(),
-    ]))
+    .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]))
     .bg(app.colors.buffer_bg)
     .highlight_spacing(HighlightSpacing::Always);
     f.render_stateful_widget(t, area, &mut app.state);

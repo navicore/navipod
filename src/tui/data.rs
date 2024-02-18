@@ -1,3 +1,4 @@
+use k8s_openapi::api::core::v1::Event;
 use std::collections::BTreeMap;
 use unicode_width::UnicodeWidthStr;
 
@@ -59,6 +60,8 @@ pub struct RsPod {
     pub age: String,
     pub containers: String,
     pub container_names: Vec<Container>,
+    pub selectors: Option<BTreeMap<String, String>>,
+    pub events: Vec<Event>,
 }
 
 impl RsPod {
@@ -101,6 +104,7 @@ pub struct Rs {
     pub age: String,
     pub pods: String,
     pub selectors: Option<BTreeMap<String, String>>,
+    pub events: Vec<Event>,
 }
 
 impl Rs {
@@ -392,6 +396,8 @@ mod tests {
                 age: "150d".to_string(),
                 containers: "2/2".to_string(),
                 container_names: vec![],
+                selectors: None,
+                events: vec![],
             },
             RsPod {
                 name: "replica-923450-987654".to_string(),
@@ -400,6 +406,8 @@ mod tests {
                 age: "10d".to_string(),
                 containers: "2/2".to_string(),
                 container_names: vec![],
+                selectors: None,
+                events: vec![],
             },
         ];
         let (
@@ -426,6 +434,7 @@ mod tests {
                 age: "300d".to_string(),
                 pods: "10/10".to_string(),
                 selectors: None,
+                events: vec![],
             },
             Rs {
                 name: "my-replica-923450".to_string(),
@@ -434,6 +443,7 @@ mod tests {
                 age: "10d".to_string(),
                 pods: "1/1".to_string(),
                 selectors: None,
+                events: vec![],
             },
         ];
         let (

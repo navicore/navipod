@@ -1,10 +1,10 @@
 use crate::tui::rs_app::app::App;
-use crate::tui::table_ui::TuiTableState;
+use crate::tui::table_ui::{draw_name_value_paragraphs, TuiTableState};
+use k8s_openapi::api::core::v1::Event;
 use ratatui::{
     prelude::*,
     widgets::{
-        Block, Borders, Cell, HighlightSpacing, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-        Table,
+        Block, Borders, Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table,
     },
 };
 
@@ -20,29 +20,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     render_details(f, app, rects[1]);
 }
 
-fn draw_name_value_paragraphs(
-    f: &mut Frame,
-    background_color: Color,
-    foreground_color: Color,
-    area: Rect,
-    name: &str,
-    value: &str,
-) {
-    let name_pair_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(10), Constraint::Min(30)].as_ref())
-        .split(area); // Use the first chunk for the first name-value pair
-
-    let name_title_paragraph = Paragraph::new(name)
-        .style(Style::default().fg(foreground_color).bg(background_color))
-        .alignment(Alignment::Right);
-    f.render_widget(name_title_paragraph, name_pair_layout[0]);
-
-    let name_value_paragraph =
-        Paragraph::new(value).style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(name_value_paragraph, name_pair_layout[1]);
-}
-
 fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
     let foreground_color = app.colors.header_fg;
     let background_color = app.colors.buffer_bg;
@@ -50,7 +27,7 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
     let create_block = |title| {
         Block::default()
             .borders(Borders::ALL)
-            .style(Style::default().fg(Color::Gray))
+            .style(Style::default().fg(foreground_color))
             .title(Span::styled(
                 title,
                 Style::default().add_modifier(Modifier::BOLD),
@@ -82,6 +59,7 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
                         *chunk,
                         &formatted_name,
                         value,
+                        30,
                     );
                 }
             }
@@ -105,14 +83,53 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
             ))
     };
 
+    let details_block =
+        create_block("Events").style(Style::default().fg(foreground_color).bg(background_color));
+
     if let Some(rs) = app.get_selected_item() {
-        let paragraph = Paragraph::new(rs.name())
-            .style(Style::default().fg(Color::Gray))
-            .block(create_block("Events"))
-            .fg(foreground_color)
-            .bg(background_color);
-        f.render_widget(paragraph, area);
-    };
+        let events: &Vec<Event> = rs.events.as_ref();
+
+        // Sort the events by lastTimestamp, most recent first
+        let mut sorted_events = events.clone();
+
+        sorted_events.sort_by(|a, b| {
+            // Compare events based on their `event_time`, using current time as fallback
+            b.last_timestamp
+                .clone()
+                .map_or(chrono::Utc::now(), |t| t.0)
+                .cmp(&a.last_timestamp.clone().map_or(chrono::Utc::now(), |t| t.0))
+        });
+
+        // Calculate how many events can fit in the available area
+        let event_display_height = 1; // Adjust based on your actual layout
+        let max_events = area.height as usize / event_display_height;
+
+        // Select the most recent `max_events` events
+        let recent_events = sorted_events.iter().take(max_events).collect::<Vec<_>>();
+
+        for (i, event) in recent_events.iter().enumerate() {
+            let formatted_name = format!("{}: ", event.type_.as_ref().unwrap_or(&"".to_string()));
+            let temp = String::new();
+            let value = event.message.as_ref().unwrap_or(&temp);
+            let chunk = Rect {
+                x: area.x,
+                y: area.y + i as u16 * event_display_height as u16,
+                width: area.width,
+                height: 1,
+            };
+            draw_name_value_paragraphs(
+                f,
+                background_color,
+                foreground_color,
+                chunk,
+                &formatted_name,
+                &value,
+                10,
+            );
+        }
+    }
+
+    f.render_widget(details_block, area);
 }
 
 fn render_details(f: &mut Frame, app: &mut App, area: Rect) {

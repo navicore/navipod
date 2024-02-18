@@ -130,6 +130,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
 
                 let age = calculate_age(&pod);
                 let status = get_pod_state(&pod);
+                let selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
                 let data = RsPod {
                     name: instance_name.to_string(),
                     status: status.to_string(),
@@ -137,6 +138,8 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     age,
                     containers: format!("{actual_container_count}/{desired_container_count}"),
                     container_names: convert_to_containers(container_names.clone()),
+                    selectors,
+                    events: vec![],
                 };
 
                 pod_vec.push(data);

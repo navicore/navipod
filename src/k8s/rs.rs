@@ -1,4 +1,5 @@
 use k8s_openapi::api::apps::v1::ReplicaSet;
+use k8s_openapi::api::core::v1::Event;
 use kube::api::ListParams;
 use kube::api::ObjectList;
 use kube::{Api, Client};
@@ -7,6 +8,19 @@ use std::collections::BTreeMap;
 use crate::tui::data::Rs;
 
 use chrono::{DateTime, Duration, Utc};
+
+async fn list_events_for_replicaset(
+    client: Client,
+    rs_name: &str,
+) -> Result<Vec<Event>, kube::Error> {
+    let api: Api<Event> = Api::default_namespaced(client);
+
+    //"involvedObject.name={},involvedObject.kind=ReplicaSet",
+    let selector = format!("involvedObject.name={}", rs_name);
+    let lp = ListParams::default().fields(&selector);
+    let event_list = api.list(&lp).await?;
+    Ok(event_list.items)
+}
 
 fn format_duration(duration: Duration) -> String {
     if duration.num_days() > 0 {
@@ -66,6 +80,8 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                 let kind = &owner.kind;
                 let owner_name = &owner.name;
 
+                let events = list_events_for_replicaset(client.clone(), instance_name).await?;
+
                 let data = Rs {
                     name: instance_name.to_string(),
                     pods: format!("{ready_replicas}/{desired_replicas}"),
@@ -73,6 +89,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     description: kind.to_string(),
                     owner: owner_name.to_owned(),
                     selectors,
+                    events,
                 };
 
                 if desired_replicas <= &0 {

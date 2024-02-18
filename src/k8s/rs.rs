@@ -13,13 +13,11 @@ async fn list_events_for_replicaset(
     client: Client,
     rs_name: &str,
 ) -> Result<Vec<Event>, kube::Error> {
-    let api: Api<Event> = Api::default_namespaced(client);
-
     //"involvedObject.name={},involvedObject.kind=ReplicaSet",
-    let selector = format!("involvedObject.name={}", rs_name);
+    let selector = format!("involvedObject.name={rs_name}");
     let lp = ListParams::default().fields(&selector);
-    let event_list = api.list(&lp).await?;
-    Ok(event_list.items)
+    let api: Api<Event> = Api::default_namespaced(client);
+    Ok(api.list(&lp).await?.items)
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -80,8 +78,6 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                 let kind = &owner.kind;
                 let owner_name = &owner.name;
 
-                let events = list_events_for_replicaset(client.clone(), instance_name).await?;
-
                 let data = Rs {
                     name: instance_name.to_string(),
                     pods: format!("{ready_replicas}/{desired_replicas}"),
@@ -89,7 +85,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     description: kind.to_string(),
                     owner: owner_name.to_owned(),
                     selectors,
-                    events,
+                    events: list_events_for_replicaset(client.clone(), instance_name).await?,
                 };
 
                 if desired_replicas <= &0 {

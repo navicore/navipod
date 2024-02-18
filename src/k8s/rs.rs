@@ -1,23 +1,78 @@
+use crate::tui::data::{ResourceEvent, Rs};
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::Event;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use kube::api::ListParams;
 use kube::api::ObjectList;
 use kube::{Api, Client};
 use std::collections::BTreeMap;
 
-use crate::tui::data::Rs;
-
 use chrono::{DateTime, Duration, Utc};
 
-async fn list_events_for_replicaset(
+fn calculate_event_age(event_time: Option<&Time>) -> String {
+    event_time.map_or_else(String::new, |time| {
+        let now = Utc::now();
+        let event_datetime: DateTime<Utc> = time.0;
+        let duration = now.signed_duration_since(event_datetime);
+        format_duration(duration)
+    })
+}
+
+// Conversion function
+fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEvent {
+    let pattern = format!("{rs_name} ");
+    let message = event
+        .message
+        .as_deref()
+        .unwrap_or_default()
+        .replace(&pattern, "");
+    let reason = event.reason.clone().unwrap_or_default();
+    let type_ = event.type_.clone().unwrap_or_default();
+    //let age = calculate_event_age(event.event_time.as_ref());
+    let age = calculate_event_age(event.last_timestamp.as_ref());
+
+    ResourceEvent {
+        resource_name: rs_name.to_string(),
+        message,
+        reason,
+        type_,
+        age,
+    }
+}
+
+async fn list_events_for_resource(
     client: Client,
     rs_name: &str,
-) -> Result<Vec<Event>, kube::Error> {
-    //"involvedObject.name={},involvedObject.kind=ReplicaSet",
-    let selector = format!("involvedObject.name={rs_name}");
-    let lp = ListParams::default().fields(&selector);
-    let api: Api<Event> = Api::default_namespaced(client);
-    Ok(api.list(&lp).await?.items)
+) -> Result<Vec<ResourceEvent>, kube::Error> {
+    let lp = ListParams::default();
+
+    let mut filtered_events: Vec<Event> = Api::default_namespaced(client)
+        .list(&lp)
+        .await?
+        .items
+        .into_iter()
+        .filter(|e: &Event| e.message.as_deref().unwrap_or_default().contains(rs_name))
+        .collect();
+
+    filtered_events.sort_by(|a, b| {
+        b.last_timestamp
+            .clone()
+            .map_or_else(chrono::Utc::now, |t| t.0)
+            .cmp(
+                &a.last_timestamp
+                    .clone()
+                    .map_or_else(chrono::Utc::now, |t| t.0),
+            )
+    });
+
+    let mut resource_events: Vec<ResourceEvent> = filtered_events
+        .iter()
+        .map(|e| convert_event_to_resource_event(e, rs_name))
+        .collect();
+
+    resource_events.retain(|e| !e.age.is_empty());
+
+    Ok(resource_events)
 }
 
 fn format_duration(duration: Duration) -> String {
@@ -32,7 +87,7 @@ fn format_duration(duration: Duration) -> String {
     }
 }
 
-fn calculate_age(rs: &ReplicaSet) -> String {
+fn calculate_rs_age(rs: &ReplicaSet) -> String {
     rs.metadata.creation_timestamp.as_ref().map_or_else(
         || "Unk".to_string(),
         |creation_timestamp| {
@@ -61,7 +116,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
             for owner in owners {
                 let selectors = rs.metadata.labels.as_ref().map(std::clone::Clone::clone);
 
-                let age = calculate_age(&rs);
+                let age = calculate_rs_age(&rs);
                 let instance_name = &rs
                     .metadata
                     .name
@@ -85,7 +140,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     description: kind.to_string(),
                     owner: owner_name.to_owned(),
                     selectors,
-                    events: list_events_for_replicaset(client.clone(), instance_name).await?,
+                    events: list_events_for_resource(client.clone(), instance_name).await?,
                 };
 
                 if desired_replicas <= &0 {
@@ -115,10 +170,8 @@ pub async fn get_replicaset(
 ) -> Result<Option<ReplicaSet>, kube::Error> {
     let client = Client::try_default().await?;
 
-    // Format the label selector from the BTreeMap
     let label_selector = format_label_selector(&selector);
 
-    // Apply the label selector in ListParams
     let lp = ListParams::default().labels(&label_selector);
 
     let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone()).list(&lp).await?;

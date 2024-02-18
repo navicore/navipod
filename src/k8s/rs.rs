@@ -28,7 +28,6 @@ fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEven
         .replace(&pattern, "");
     let reason = event.reason.clone().unwrap_or_default();
     let type_ = event.type_.clone().unwrap_or_default();
-    //let age = calculate_event_age(event.event_time.as_ref());
     let age = calculate_event_age(event.last_timestamp.as_ref());
 
     ResourceEvent {

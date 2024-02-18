@@ -1,13 +1,18 @@
 A CLI for Inspecting Containers in Kubernetes
 ============
 
-![alt text](docs/demo077.gif)
+![an image showing navipod inspecting replicas and pod and ingress](docs/demo077.gif)
 
-UNDER CONSTRUCTION
------------
+A WIP - Under constant development as I learn both Rust.
 
-Currently, the command will use a local kubecontext to access a cluster
-and get all the Prometheus data available from pods annotated for Prometheus
+The command uses the local kubecontext credentials to access Kubernetes cluster.
+
+The primary use case of the tool is to get quick answers to replica and pod
+and ingress state.
+
+The tool also captures data to an embedded DB for exporting as RDS.
+
+It will get Prometheus data from pods which are annotated for Prometheus
 using the convention:
 
 ```
@@ -18,9 +23,6 @@ using the convention:
 ```
 
 The cli supports exporting the db to both N-Triple and Turtle RDF files.
-
-Planned - formatted output and liveliness and readiness probe info
-in aggregated report form.
 
 Install
 ----------

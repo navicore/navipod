@@ -3,7 +3,8 @@ A CLI for Inspecting Containers in Kubernetes
 
 ![an image showing navipod inspecting replicas and pod and ingress](docs/demo077.gif)
 
-A WIP - Under constant development as I learn both Rust.
+Alpha - Under constant development as I practice Rust programming and discover
+needs not met by other tools.
 
 The command uses the local kubecontext credentials to access Kubernetes cluster.
 

@@ -1,5 +1,30 @@
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{ScrollbarState, TableState};
+use ratatui::{prelude::*, widgets::Paragraph};
+
+pub fn draw_name_value_paragraphs(
+    f: &mut Frame,
+    background_color: Color,
+    foreground_color: Color,
+    area: Rect,
+    name: &str,
+    value: &str,
+    min_name_sz: u16,
+) {
+    let name_pair_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(min_name_sz), Constraint::Percentage(90)].as_ref())
+        .split(area); // Use the first chunk for the first name-value pair
+
+    let name_title_paragraph = Paragraph::new(name)
+        .style(Style::default().fg(foreground_color).bg(background_color))
+        .alignment(Alignment::Right);
+    f.render_widget(name_title_paragraph, name_pair_layout[0]);
+
+    let name_value_paragraph =
+        Paragraph::new(value).style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(name_value_paragraph, name_pair_layout[1]);
+}
 
 pub trait TuiTableState {
     type Item; // if items are of a specific type

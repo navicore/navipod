@@ -6,7 +6,7 @@ A CLI for Inspecting Containers in Kubernetes
 Alpha - Under constant development as I practice Rust programming and discover
 needs not met by other tools.
 
-The command uses the local kubecontext credentials to access Kubernetes cluster.
+The command uses the local kubecontext credentials to access Kubernetes clusters.
 
 The primary use case of the tool is to get quick answers to replica and pod
 and ingress state.

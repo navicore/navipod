@@ -11,7 +11,7 @@ The command uses the local kubecontext credentials to access Kubernetes clusters
 The primary use case of the tool is to get quick answers to replica and pod
 and ingress state.
 
-The tool also captures data to an embedded DB for exporting as RDS.
+The tool also captures data to an embedded DB for exporting as RDF.
 
 It will get Prometheus data from pods which are annotated for Prometheus
 using the convention:

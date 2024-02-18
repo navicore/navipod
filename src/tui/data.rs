@@ -1,6 +1,14 @@
-use k8s_openapi::api::core::v1::Event;
 use std::collections::BTreeMap;
 use unicode_width::UnicodeWidthStr;
+
+#[derive(Clone, Debug)]
+pub struct ResourceEvent {
+    pub resource_name: String,
+    pub message: String,
+    pub reason: String,
+    pub type_: String,
+    pub age: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct Cert {
@@ -61,7 +69,7 @@ pub struct RsPod {
     pub containers: String,
     pub container_names: Vec<Container>,
     pub selectors: Option<BTreeMap<String, String>>,
-    pub events: Vec<Event>,
+    pub events: Vec<ResourceEvent>,
 }
 
 impl RsPod {
@@ -104,7 +112,7 @@ pub struct Rs {
     pub age: String,
     pub pods: String,
     pub selectors: Option<BTreeMap<String, String>>,
-    pub events: Vec<Event>,
+    pub events: Vec<ResourceEvent>,
 }
 
 impl Rs {

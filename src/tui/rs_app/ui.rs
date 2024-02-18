@@ -34,11 +34,12 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
             ))
     };
 
-    let details_block =
-        create_block("Labels").style(Style::default().fg(foreground_color).bg(background_color));
+    let mut block_title = "Labels".to_string();
 
     if let Some(rs) = app.get_selected_item() {
         if let Some(labels) = rs.selectors.as_ref() {
+            let num_labels = labels.len();
+            block_title = format!("Labels ({num_labels})");
             let constraints = std::iter::repeat(Constraint::Length(1))
                 .take(labels.len())
                 .collect::<Vec<Constraint>>();
@@ -65,6 +66,8 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
             }
         };
 
+        let details_block = create_block(block_title)
+            .style(Style::default().fg(foreground_color).bg(background_color));
         f.render_widget(details_block, area);
     }
 }
@@ -83,17 +86,15 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
             ))
     };
 
-    let details_block =
-        create_block("Events").style(Style::default().fg(foreground_color).bg(background_color));
-
+    let mut block_title = "Events".to_string();
     if let Some(rs) = app.get_selected_item() {
         let events: &Vec<Event> = rs.events.as_ref();
+        let num_events = events.len();
+        block_title = format!("Events ({num_events})");
 
-        // Sort the events by lastTimestamp, most recent first
         let mut sorted_events = events.clone();
 
         sorted_events.sort_by(|a, b| {
-            // Compare events based on their `event_time`, using current time as fallback
             b.last_timestamp
                 .clone()
                 .map_or_else(chrono::Utc::now, |t| t.0)
@@ -104,21 +105,20 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
                 )
         });
 
-        // Calculate how many events can fit in the available area
         let event_display_height = 1; // Adjust based on your actual layout
-        let max_events = area.height as usize / event_display_height;
+        let max_events = area.height as usize / event_display_height - 1;
 
-        // Select the most recent `max_events` events
         let recent_events = sorted_events.iter().take(max_events).collect::<Vec<_>>();
 
         for (i, event) in recent_events.iter().enumerate() {
+            let pos = i + 1;
             let formatted_name = format!("{}: ", event.type_.as_ref().unwrap_or(&String::new()));
-            let temp = String::new();
+            let temp = "empty".to_string();
             let value = event.message.as_ref().unwrap_or(&temp);
             #[allow(clippy::cast_possible_truncation)]
             let chunk = Rect {
                 x: area.x,
-                y: area.y + i as u16 * event_display_height as u16,
+                y: area.y + pos as u16 * event_display_height as u16,
                 width: area.width,
                 height: 1,
             };
@@ -134,6 +134,8 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
         }
     }
 
+    let details_block =
+        create_block(block_title).style(Style::default().fg(foreground_color).bg(background_color));
     f.render_widget(details_block, area);
 }
 

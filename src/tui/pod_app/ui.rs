@@ -89,31 +89,13 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
     if let Some(rs) = app.get_selected_item() {
         let events: &Vec<ResourceEvent> = rs.events.as_ref();
 
-        // Sort the events by lastTimestamp, most recent first
-        let sorted_events = events.clone();
-
-        // sorted_events.sort_by(|a, b| {
-        //     b.last_timestamp
-        //         .clone()
-        //         .map_or_else(chrono::Utc::now, |t| t.0)
-        //         .cmp(
-        //             &a.last_timestamp
-        //                 .clone()
-        //                 .map_or_else(chrono::Utc::now, |t| t.0),
-        //         )
-        // });
-
-        // Calculate how many events can fit in the available area
         let event_display_height = 1; // Adjust based on your actual layout
         let max_events = area.height as usize / event_display_height;
 
-        // Select the most recent `max_events` events
-        let recent_events = sorted_events.iter().take(max_events).collect::<Vec<_>>();
+        let recent_events = events.iter().take(max_events).collect::<Vec<_>>();
 
         for (i, event) in recent_events.iter().enumerate() {
-            //let formatted_name = format!("{}: ", event.type_.as_ref().unwrap_or(&String::new()));
             let formatted_name = format!("{}: ", event.type_);
-            //let value = event.message.as_ref().unwrap_or(&temp);
             let value = &event.message;
             #[allow(clippy::cast_possible_truncation)]
             let chunk = Rect {
@@ -128,7 +110,7 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
                 foreground_color,
                 chunk,
                 &formatted_name,
-                &value,
+                value,
                 10,
             );
         }

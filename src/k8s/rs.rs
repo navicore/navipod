@@ -10,15 +10,12 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Duration, Utc};
 
 fn calculate_event_age(event_time: Option<&Time>) -> String {
-    event_time.map_or_else(
-        || String::new(),
-        |time| {
-            let now = Utc::now();
-            let event_datetime: DateTime<Utc> = time.0;
-            let duration = now.signed_duration_since(event_datetime);
-            format_duration(duration)
-        },
-    )
+    event_time.map_or_else(String::new, |time| {
+        let now = Utc::now();
+        let event_datetime: DateTime<Utc> = time.0;
+        let duration = now.signed_duration_since(event_datetime);
+        format_duration(duration)
+    })
 }
 
 // Conversion function
@@ -47,19 +44,17 @@ async fn list_events_for_resource(
     client: Client,
     rs_name: &str,
 ) -> Result<Vec<ResourceEvent>, kube::Error> {
-    let events_api: Api<Event> = Api::default_namespaced(client);
     let lp = ListParams::default();
 
-    let all_events = events_api.list(&lp).await?.items;
-
-    let filtered_events: Vec<Event> = all_events
+    let mut filtered_events: Vec<Event> = Api::default_namespaced(client)
+        .list(&lp)
+        .await?
+        .items
         .into_iter()
-        .filter(|e| e.message.as_deref().unwrap_or_default().contains(rs_name))
+        .filter(|e: &Event| e.message.as_deref().unwrap_or_default().contains(rs_name))
         .collect();
 
-    let mut sorted_events = filtered_events.clone();
-
-    sorted_events.sort_by(|a, b| {
+    filtered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
             .map_or_else(chrono::Utc::now, |t| t.0)
@@ -70,15 +65,12 @@ async fn list_events_for_resource(
             )
     });
 
-    let mut resource_events: Vec<ResourceEvent> = sorted_events
+    let mut resource_events: Vec<ResourceEvent> = filtered_events
         .iter()
-        .map(|e| convert_event_to_resource_event(&e, rs_name))
+        .map(|e| convert_event_to_resource_event(e, rs_name))
         .collect();
 
-    resource_events = resource_events
-        .into_iter()
-        .filter(|e| !e.age.is_empty())
-        .collect();
+    resource_events.retain(|e| !e.age.is_empty());
 
     Ok(resource_events)
 }

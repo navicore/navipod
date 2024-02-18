@@ -1,3 +1,4 @@
+use crate::tui::data::ResourceEvent;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
@@ -7,9 +8,7 @@ pub fn draw_timeseries_name_value_paragraphs(
     background_color: Color,
     foreground_color: Color,
     area: Rect,
-    name: &str,
-    value: &str,
-    age: &str,
+    event: &ResourceEvent,
     min_name_sz: u16,
 ) {
     let layout = Layout::default()
@@ -24,19 +23,21 @@ pub fn draw_timeseries_name_value_paragraphs(
         )
         .split(area); // Use the first chunk for the first name-value pair
 
-    let age_str = format!("{age}");
-    let age_value_paragraph = Paragraph::new(age_str)
+    let age_value_paragraph = Paragraph::new(event.age.to_string())
         .style(Style::default().fg(foreground_color).bg(background_color))
         .alignment(Alignment::Right);
     f.render_widget(age_value_paragraph, layout[0]);
 
-    let name_title_paragraph = Paragraph::new(name)
+    let name_str = format!("{} ", event.type_);
+    let name_title_paragraph = Paragraph::new(name_str)
         .style(Style::default().fg(foreground_color).bg(background_color))
         .alignment(Alignment::Right);
     f.render_widget(name_title_paragraph, layout[1]);
 
-    let name_value_paragraph =
-        Paragraph::new(value).style(Style::default().fg(foreground_color).bg(background_color));
+    let name_value_paragraph = Paragraph::new(event.message.clone())
+        .style(Style::default().fg(foreground_color).bg(background_color))
+        .alignment(Alignment::Left);
+
     f.render_widget(name_value_paragraph, layout[2]);
 }
 

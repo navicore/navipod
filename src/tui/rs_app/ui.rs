@@ -99,11 +99,8 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
 
         let recent_events = events.iter().take(max_events).collect::<Vec<_>>();
 
-        for (i, event) in recent_events.iter().enumerate() {
+        for (i, event) in recent_events.clone().iter().enumerate() {
             let pos = i + 1;
-            let formatted_name = format!("{} ", event.type_);
-            let value = &event.message;
-            let age = &event.age;
             #[allow(clippy::cast_possible_truncation)]
             let chunk = Rect {
                 x: area.x,
@@ -116,9 +113,7 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
                 background_color,
                 foreground_color,
                 chunk,
-                &formatted_name,
-                &value,
-                &age,
+                event,
                 8,
             );
         }

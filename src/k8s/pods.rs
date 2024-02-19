@@ -1,27 +1,15 @@
-use std::collections::BTreeMap;
-
+use crate::k8s::events::{format_duration, list_events_for_resource};
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
 use kube::api::ObjectList;
 use kube::{Api, Client};
+use std::collections::BTreeMap;
 
 use crate::tui::data::{Container, RsPod};
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 
-fn format_duration(duration: Duration) -> String {
-    if duration.num_days() > 0 {
-        format!("{}d", duration.num_days())
-    } else if duration.num_hours() > 0 {
-        format!("{}h", duration.num_hours())
-    } else if duration.num_minutes() > 0 {
-        format!("{}m", duration.num_minutes())
-    } else {
-        format!("{}s", duration.num_seconds())
-    }
-}
-
-fn calculate_age(pod: &Pod) -> String {
+fn calculate_pod_age(pod: &Pod) -> String {
     pod.metadata.creation_timestamp.as_ref().map_or_else(
         || "Unk".to_string(),
         |creation_timestamp| {
@@ -128,7 +116,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     pod.spec.as_ref().map_or(0, |spec| spec.containers.len());
                 let kind = &owner.kind;
 
-                let age = calculate_age(&pod);
+                let age = calculate_pod_age(&pod);
                 let status = get_pod_state(&pod);
                 let selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
                 let data = RsPod {
@@ -139,7 +127,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     containers: format!("{actual_container_count}/{desired_container_count}"),
                     container_names: convert_to_containers(container_names.clone()),
                     selectors,
-                    events: vec![],
+                    events: list_events_for_resource(client.clone(), instance_name).await?,
                 };
 
                 pod_vec.push(data);

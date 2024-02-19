@@ -1,3 +1,5 @@
+use kube::{Api, Client};
+use navipod::k8s::events::list_events_for_resource;
 use navipod::k8s::rs::list_replicas;
 
 #[tokio::test]
@@ -38,4 +40,11 @@ async fn test_list_replica_events() {
     // println!("message {:?}", events[1].message);
     // println!("series {:?}", events[1].series);
     // println!("metadata {:?}", events[1].metadata);
+}
+
+#[tokio::test]
+async fn test_list_events_for_resource() {
+    let client = Client::try_default().await.unwrap();
+
+    let result = list_events_for_resource(client, "my_stuff").await.unwrap();
 }

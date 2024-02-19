@@ -6,7 +6,8 @@ async fn test_list_pods() {
     let data_result = list_replicas().await;
     assert!(matches!(data_result, Ok(..),));
     let data = &data_result.unwrap();
-    assert_eq!(data.len(), 1);
+    assert_eq!(data.len(), 2);
+
     let data = &data[0];
     let selectors_opt = &data.selectors;
     assert!(selectors_opt.is_some());
@@ -17,6 +18,6 @@ async fn test_list_pods() {
     let data = &data_result.unwrap();
     let data = &data[0];
 
-    assert_eq!(data.containers, "1/1", "wrong pod count");
+    assert_eq!(data.containers, "2/2", "wrong pod count"); // assumes will always be echo-secret sorted first
     assert_eq!(data.description, "ReplicaSet", "wrong rs kind");
 }

@@ -7,7 +7,7 @@ case "$COMMAND" in
     up)
         kind create cluster -n navipod-tests
         helm install my-navitain https://www.navicore.tech/charts/navitain-0.1.10.tgz
-        helm install echo-secret https://www.navicore.tech/charts/echo-secret-0.1.1.tgz
+        helm install echo-secret https://www.navicore.tech/charts/echo-secret-0.1.2.tgz
 
         # Polling kubectl to check pod status
         end=$((SECONDS+60))  # 60 seconds from now

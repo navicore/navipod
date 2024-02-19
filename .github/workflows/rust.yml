@@ -26,7 +26,7 @@ jobs:
     - name: Install Navicore Charts
       run :
         helm install my-navitain https://www.navicore.tech/charts/navitain-0.1.10.tgz
-        helm install echo-secret https://www.navicore.tech/charts/echo-secret-0.1.1.tgz
+        helm install echo-secret https://www.navicore.tech/charts/echo-secret-0.1.2.tgz
     - uses: actions/checkout@v4
     - name: Wait for Deployment Readiness
       run :

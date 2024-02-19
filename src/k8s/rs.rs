@@ -1,4 +1,4 @@
-use crate::k8s::events::{format_duration, list_events_for_resource};
+use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use crate::tui::data::Rs;
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use kube::api::ListParams;
@@ -23,6 +23,7 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
+#[allow(clippy::significant_drop_tightening)]
 pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
     let client = Client::try_default().await?;
 
@@ -32,17 +33,16 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
 
     let mut rs_vec = Vec::new();
 
+    // get all events from the cluster to avoid calls for each rs
+    let events = list_k8sevents(client).await?;
+
     for rs in rs_list.items {
         if let Some(owners) = &rs.metadata.owner_references {
             for owner in owners {
                 let selectors = rs.metadata.labels.as_ref().map(std::clone::Clone::clone);
 
                 let age = calculate_rs_age(&rs);
-                let instance_name = &rs
-                    .metadata
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| "unkown".to_string());
+                let instance_name = &rs.metadata.name.as_deref().unwrap_or("unknown").to_string();
                 let f_instance_name = format!("{instance_name} "); //padding for just high level
                 let desired_replicas = &rs
                     .spec
@@ -55,6 +55,8 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                 let kind = &owner.kind;
                 let owner_name = &owner.name;
 
+                let resource_events =
+                    list_events_for_resource(events.clone(), &f_instance_name).await?;
                 let data = Rs {
                     name: instance_name.to_string(),
                     pods: format!("{ready_replicas}/{desired_replicas}"),
@@ -62,7 +64,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     description: kind.to_string(),
                     owner: owner_name.to_owned(),
                     selectors,
-                    events: list_events_for_resource(client.clone(), &f_instance_name).await?,
+                    events: resource_events,
                 };
 
                 if desired_replicas <= &0 {

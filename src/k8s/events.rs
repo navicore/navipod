@@ -40,26 +40,43 @@ fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEven
 
 /// # Errors
 ///
-/// Will return `Err` if data can not be retrieved from k8s cluster api
-pub async fn list_events_for_resource(
-    client: Client,
-    resource_name: &str,
-) -> Result<Vec<ResourceEvent>, kube::Error> {
+/// Will return `Err` if events cannot be retrieved from k8s cluster api
+pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
     let lp = ListParams::default();
 
-    let mut filtered_events: Vec<Event> = Api::default_namespaced(client)
-        .list(&lp)
-        .await?
-        .items
+    let mut unfiltered_events: Vec<Event> = Api::default_namespaced(client).list(&lp).await?.items;
+
+    unfiltered_events.sort_by(|a, b| {
+        b.last_timestamp
+            .clone()
+            .map_or_else(chrono::Utc::now, |t| t.0)
+            .cmp(
+                &a.last_timestamp
+                    .clone()
+                    .map_or_else(chrono::Utc::now, |t| t.0),
+            )
+    });
+
+    Ok(unfiltered_events)
+}
+
+/// # Errors
+///
+/// Will return `Err` if data can not be extracted from events
+pub async fn list_events_for_resource(
+    events: Vec<Event>,
+    resource_name: &str,
+) -> Result<Vec<ResourceEvent>, kube::Error> {
+    let mut filtered_events: Vec<Event> = events
         .into_iter()
         .filter(|e: &Event| {
             e.message
                 .as_deref()
                 .unwrap_or_default()
                 .contains(resource_name)
-                || e.clone()
-                    .metadata
+                || e.metadata
                     .name
+                    .clone()
                     .unwrap_or_default()
                     .contains(resource_name)
         })

@@ -1,4 +1,4 @@
-use crate::k8s::events::{format_duration, list_events_for_resource};
+use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
 use kube::api::ObjectList;
@@ -84,6 +84,7 @@ fn get_pod_state(pod: &Pod) -> String {
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
+#[allow(clippy::significant_drop_tightening)]
 pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod>, kube::Error> {
     let client = Client::try_default().await?;
 
@@ -96,6 +97,9 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
     let pod_list: ObjectList<Pod> = Api::default_namespaced(client.clone()).list(&lp).await?;
 
     let mut pod_vec = Vec::new();
+
+    // get all events from the cluster to avoid calls for each pod
+    let events = list_k8sevents(client).await?;
 
     for pod in pod_list.items {
         let container_names = get_container_names(&pod);
@@ -119,6 +123,10 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                 let age = calculate_pod_age(&pod);
                 let status = get_pod_state(&pod);
                 let selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
+
+                let resource_events =
+                    list_events_for_resource(events.clone(), instance_name).await?;
+
                 let data = RsPod {
                     name: instance_name.to_string(),
                     status: status.to_string(),
@@ -127,7 +135,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     containers: format!("{actual_container_count}/{desired_container_count}"),
                     container_names: convert_to_containers(container_names.clone()),
                     selectors,
-                    events: list_events_for_resource(client.clone(), instance_name).await?,
+                    events: resource_events,
                 };
 
                 pod_vec.push(data);

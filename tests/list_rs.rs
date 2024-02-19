@@ -1,5 +1,6 @@
 use kube::Client;
 use navipod::k8s::events::list_events_for_resource;
+use navipod::k8s::events::list_k8sevents;
 use navipod::k8s::rs::list_replicas;
 
 #[tokio::test]
@@ -27,5 +28,6 @@ async fn test_list_replica_events() {
 async fn test_list_events_for_resource() {
     let client = Client::try_default().await.unwrap();
 
-    let _ = list_events_for_resource(client, "my_stuff").await.unwrap();
+    let events = list_k8sevents(client.clone()).await.unwrap();
+    let _ = list_events_for_resource(events, "my_stuff").await.unwrap();
 }

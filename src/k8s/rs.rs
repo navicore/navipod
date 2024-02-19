@@ -1,90 +1,12 @@
-use crate::tui::data::{ResourceEvent, Rs};
+use crate::k8s::events::{format_duration, list_events_for_resource};
+use crate::tui::data::Rs;
 use k8s_openapi::api::apps::v1::ReplicaSet;
-use k8s_openapi::api::core::v1::Event;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use kube::api::ListParams;
 use kube::api::ObjectList;
 use kube::{Api, Client};
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, Utc};
-
-fn calculate_event_age(event_time: Option<&Time>) -> String {
-    event_time.map_or_else(String::new, |time| {
-        let now = Utc::now();
-        let event_datetime: DateTime<Utc> = time.0;
-        let duration = now.signed_duration_since(event_datetime);
-        format_duration(duration)
-    })
-}
-
-// Conversion function
-fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEvent {
-    let pattern = format!("{rs_name} ");
-    let message = event
-        .message
-        .as_deref()
-        .unwrap_or_default()
-        .replace(&pattern, "");
-    let reason = event.reason.clone().unwrap_or_default();
-    let type_ = event.type_.clone().unwrap_or_default();
-    let age = calculate_event_age(event.last_timestamp.as_ref());
-
-    ResourceEvent {
-        resource_name: rs_name.to_string(),
-        message,
-        reason,
-        type_,
-        age,
-    }
-}
-
-async fn list_events_for_resource(
-    client: Client,
-    rs_name: &str,
-) -> Result<Vec<ResourceEvent>, kube::Error> {
-    let lp = ListParams::default();
-
-    let mut filtered_events: Vec<Event> = Api::default_namespaced(client)
-        .list(&lp)
-        .await?
-        .items
-        .into_iter()
-        .filter(|e: &Event| e.message.as_deref().unwrap_or_default().contains(rs_name))
-        .collect();
-
-    filtered_events.sort_by(|a, b| {
-        b.last_timestamp
-            .clone()
-            .map_or_else(chrono::Utc::now, |t| t.0)
-            .cmp(
-                &a.last_timestamp
-                    .clone()
-                    .map_or_else(chrono::Utc::now, |t| t.0),
-            )
-    });
-
-    let mut resource_events: Vec<ResourceEvent> = filtered_events
-        .iter()
-        .map(|e| convert_event_to_resource_event(e, rs_name))
-        .collect();
-
-    resource_events.retain(|e| !e.age.is_empty());
-
-    Ok(resource_events)
-}
-
-fn format_duration(duration: Duration) -> String {
-    if duration.num_days() > 0 {
-        format!("{}d", duration.num_days())
-    } else if duration.num_hours() > 0 {
-        format!("{}h", duration.num_hours())
-    } else if duration.num_minutes() > 0 {
-        format!("{}m", duration.num_minutes())
-    } else {
-        format!("{}s", duration.num_seconds())
-    }
-}
+use chrono::{DateTime, Utc};
 
 fn calculate_rs_age(rs: &ReplicaSet) -> String {
     rs.metadata.creation_timestamp.as_ref().map_or_else(
@@ -121,6 +43,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     .name
                     .clone()
                     .unwrap_or_else(|| "unkown".to_string());
+                let f_instance_name = format!("{instance_name} "); //padding for just high level
                 let desired_replicas = &rs
                     .spec
                     .as_ref()
@@ -139,7 +62,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
                     description: kind.to_string(),
                     owner: owner_name.to_owned(),
                     selectors,
-                    events: list_events_for_resource(client.clone(), instance_name).await?,
+                    events: list_events_for_resource(client.clone(), &f_instance_name).await?,
                 };
 
                 if desired_replicas <= &0 {

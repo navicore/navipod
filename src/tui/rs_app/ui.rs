@@ -36,7 +36,11 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
             ))
     };
 
-    let mut block_title = "Labels".to_string();
+    let details_block = create_block("Labels (0)")
+        .style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block.clone(), area);
+
+    let mut block_title = "Labels (0)".to_string();
 
     if let Some(rs) = app.get_selected_item() {
         if let Some(labels) = rs.selectors.as_ref() {
@@ -67,11 +71,12 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
                 }
             }
         };
-
-        let details_block = create_block(block_title)
-            .style(Style::default().fg(foreground_color).bg(background_color));
-        f.render_widget(details_block, area);
     }
+
+    let details_block = create_block(&block_title)
+        .style(Style::default().fg(foreground_color).bg(background_color));
+
+    f.render_widget(details_block, area);
 }
 
 fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {

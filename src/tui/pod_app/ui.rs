@@ -36,14 +36,20 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
             ))
     };
 
-    let details_block =
-        create_block("Labels").style(Style::default().fg(foreground_color).bg(background_color));
+    let details_block = create_block("Labels (0)")
+        .style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block.clone(), area);
+
+    let mut block_title = "Labels (0)".to_string();
 
     if let Some(pod) = app.get_selected_item() {
         if let Some(labels) = pod.selectors.as_ref() {
             let constraints = std::iter::repeat(Constraint::Length(1))
                 .take(labels.len())
                 .collect::<Vec<Constraint>>();
+
+            let num_labels = labels.len();
+            block_title = format!("Labels ({num_labels})");
 
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
@@ -66,9 +72,11 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
                 }
             }
         };
-
-        f.render_widget(details_block, area);
     }
+
+    let details_block = create_block(&block_title)
+        .style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block, area);
 }
 
 fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
@@ -85,7 +93,11 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
             ))
     };
 
-    let mut block_title = "Events".to_string();
+    let mut block_title = "Events (0)".to_string();
+    let details_block = create_block(block_title.clone())
+        .style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block, area);
+
     if let Some(pod) = app.get_selected_item() {
         let events: &Vec<ResourceEvent> = pod.events.as_ref();
         let num_events = events.len();

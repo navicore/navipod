@@ -44,13 +44,20 @@ impl Cert {
 pub struct Container {
     pub name: String,
     pub description: String,
+    pub restarts: String,
     pub image: String,
     pub ports: String,
 }
 
 impl Container {
-    pub(crate) const fn ref_array(&self) -> [&String; 4] {
-        [&self.name, &self.description, &self.image, &self.ports]
+    pub(crate) const fn ref_array(&self) -> [&String; 5] {
+        [
+            &self.name,
+            &self.description,
+            &self.restarts,
+            &self.image,
+            &self.ports,
+        ]
     }
 
     pub(crate) fn container(&self) -> &str {
@@ -59,6 +66,10 @@ impl Container {
 
     pub(crate) fn description(&self) -> &str {
         &self.description
+    }
+
+    pub(crate) fn restarts(&self) -> &str {
+        &self.restarts
     }
 
     pub(crate) fn image(&self) -> &str {
@@ -360,7 +371,7 @@ pub fn cert_constraint_len_calculator(items: &[Cert]) -> (u16, u16, u16, u16) {
 }
 
 #[allow(clippy::cast_possible_truncation)]
-pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u16, u16) {
+pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u16, u16, u16) {
     let name_len = items
         .iter()
         .map(Container::container)
@@ -370,6 +381,13 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u1
     let description_len = items
         .iter()
         .map(Container::description)
+        .flat_map(str::lines)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let restarts_len = items
+        .iter()
+        .map(Container::restarts)
         .flat_map(str::lines)
         .map(UnicodeWidthStr::width)
         .max()
@@ -392,6 +410,7 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u1
     (
         name_len as u16,
         description_len as u16,
+        restarts_len as u16,
         image_len as u16,
         ports_len as u16,
     )
@@ -410,21 +429,29 @@ mod tests {
             Container {
                 name: "replica-123456-123456".to_string(),
                 description: "Deployment".to_string(),
+                restarts: "0".to_string(),
                 image: "navicore/echo-secret-py:v0.1.1".to_string(),
                 ports: "http:1234".to_string(),
             },
             Container {
                 name: "replica-923450-987654".to_string(),
                 description: "Deployment".to_string(),
+                restarts: "0".to_string(),
                 image: "navicore/echo-secret-py:v0.1.1".to_string(),
                 ports: "http:1234".to_string(),
             },
         ];
-        let (longest_container_len, longest_description_len, longest_image_len, longest_ports_len) =
-            container_constraint_len_calculator(&test_data);
+        let (
+            longest_container_len,
+            longest_description_len,
+            longest_restarts_len,
+            longest_image_len,
+            longest_ports_len,
+        ) = container_constraint_len_calculator(&test_data);
 
         assert_eq!(21, longest_container_len);
         assert_eq!(10, longest_description_len);
+        assert_eq!(10, longest_restarts_len);
         assert_eq!(30, longest_image_len);
         assert_eq!(9, longest_ports_len);
     }

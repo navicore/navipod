@@ -8,7 +8,7 @@ use crate::tui::table_ui::TuiTableState;
 pub struct App {
     pub(crate) state: TableState,
     pub(crate) items: Vec<Container>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16),
+    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     color_index: usize,

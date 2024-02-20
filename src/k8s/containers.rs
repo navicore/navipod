@@ -8,24 +8,26 @@ use kube::{Api, Client};
 use std::collections::BTreeMap;
 
 fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
-    match ports {
-        Some(ports) => ports
-            .iter()
-            .map(|p| {
-                let port_name = p.name.as_deref().unwrap_or("unnamed"); // Use "unnamed" or any default string if name is None
-                format!("{}:{}", port_name, p.container_port)
-            })
-            .collect::<Vec<_>>()
-            .join(", "),
-        None => "no ports declaired".to_string(), // Or return "".to_string() if you prefer an empty string
-    }
+    ports.map_or_else(
+        || "no ports declaired".to_string(),
+        |ports| {
+            ports
+                .iter()
+                .map(|p| {
+                    let port_name = p.name.as_deref().unwrap_or("unnamed"); // Use "unnamed" or any default string if name is None
+                    format!("{}:{}", port_name, p.container_port)
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+    )
 }
 
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
-pub async fn list_containers(
+pub async fn list(
     selector: BTreeMap<String, String>,
     pod_name: String,
 ) -> Result<Vec<Container>, kube::Error> {
@@ -63,7 +65,7 @@ pub async fn list_containers(
                                 name: container.name,
                                 description: "an init container".to_string(), // Distinguish init containers
                                 image,
-                                ports: "".to_string(),
+                                ports: String::new(),
                             };
                             container_vec.push(c);
                         }

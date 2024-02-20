@@ -20,7 +20,7 @@ use tokio::time::sleep;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error};
 
-use crate::k8s::containers::list_containers;
+use crate::k8s::containers::list as list_containers;
 use crate::k8s::pods::list_rspods;
 use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;

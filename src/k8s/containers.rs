@@ -43,15 +43,27 @@ pub async fn list(
     let mut container_vec = Vec::new();
 
     for pod in pod_list.items {
+        let container_statuses = pod
+            .status
+            .as_ref()
+            .and_then(|status| status.container_statuses.clone())
+            .unwrap_or_default();
+
         if let Some(name) = pod.metadata.name {
             if name == pod_name {
                 if let Some(spec) = pod.spec {
                     for container in spec.containers {
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
+                        let restarts = container_statuses
+                            .iter()
+                            .find(|cs| cs.name == container.name)
+                            .map_or(0, |cs| cs.restart_count)
+                            .to_string();
                         let c = Container {
                             name: container.name,
                             description: "a pod container".to_string(),
+                            restarts,
                             image,
                             ports,
                         };
@@ -61,9 +73,16 @@ pub async fn list(
                     if let Some(init_containers) = spec.init_containers {
                         for container in init_containers {
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
+                            let restarts = container_statuses
+                                .iter()
+                                .find(|cs| cs.name == container.name)
+                                .map_or(0, |cs| cs.restart_count)
+                                .to_string();
+
                             let c = Container {
                                 name: container.name,
                                 description: "an init container".to_string(), // Distinguish init containers
+                                restarts,
                                 image,
                                 ports: String::new(),
                             };

@@ -23,7 +23,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Container", "Description"]
+    let header = ["Container", "Description", "Image", "Ports"]
         .iter()
         .copied()
         .map(Cell::from)
@@ -48,8 +48,10 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         rows,
         [
             // + 1 is for padding.
-            Constraint::Length(app.longest_item_lens.0 + 2),
+            Constraint::Min(app.longest_item_lens.0 + 2),
             Constraint::Min(app.longest_item_lens.1 + 2),
+            Constraint::Min(app.longest_item_lens.2 + 2),
+            Constraint::Min(app.longest_item_lens.3 + 2),
         ],
     )
     .header(header)

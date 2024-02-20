@@ -44,11 +44,13 @@ impl Cert {
 pub struct Container {
     pub name: String,
     pub description: String,
+    pub image: String,
+    pub ports: String,
 }
 
 impl Container {
-    pub(crate) const fn ref_array(&self) -> [&String; 2] {
-        [&self.name, &self.description]
+    pub(crate) const fn ref_array(&self) -> [&String; 4] {
+        [&self.name, &self.description, &self.image, &self.ports]
     }
 
     pub(crate) fn container(&self) -> &str {
@@ -57,6 +59,14 @@ impl Container {
 
     pub(crate) fn description(&self) -> &str {
         &self.description
+    }
+
+    pub(crate) fn image(&self) -> &str {
+        &self.image
+    }
+
+    pub(crate) fn ports(&self) -> &str {
+        &self.ports
     }
 }
 
@@ -67,7 +77,6 @@ pub struct RsPod {
     pub description: String,
     pub age: String,
     pub containers: String,
-    pub container_names: Vec<Container>,
     pub selectors: Option<BTreeMap<String, String>>,
     pub events: Vec<ResourceEvent>,
 }
@@ -351,7 +360,7 @@ pub fn cert_constraint_len_calculator(items: &[Cert]) -> (u16, u16, u16, u16) {
 }
 
 #[allow(clippy::cast_possible_truncation)]
-pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16) {
+pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u16, u16) {
     let name_len = items
         .iter()
         .map(Container::container)
@@ -365,8 +374,27 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16) {
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
+    let image_len = items
+        .iter()
+        .map(Container::image)
+        .flat_map(str::lines)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let ports_len = items
+        .iter()
+        .map(Container::ports)
+        .flat_map(str::lines)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
 
-    (name_len as u16, description_len as u16)
+    (
+        name_len as u16,
+        description_len as u16,
+        image_len as u16,
+        ports_len as u16,
+    )
 }
 
 #[cfg(test)]
@@ -382,17 +410,23 @@ mod tests {
             Container {
                 name: "replica-123456-123456".to_string(),
                 description: "Deployment".to_string(),
+                image: "navicore/echo-secret-py:v0.1.1".to_string(),
+                ports: "http:1234".to_string(),
             },
             Container {
                 name: "replica-923450-987654".to_string(),
                 description: "Deployment".to_string(),
+                image: "navicore/echo-secret-py:v0.1.1".to_string(),
+                ports: "http:1234".to_string(),
             },
         ];
-        let (longest_container_len, longest_description_len) =
+        let (longest_container_len, longest_description_len, longest_image_len, longest_ports_len) =
             container_constraint_len_calculator(&test_data);
 
         assert_eq!(21, longest_container_len);
         assert_eq!(10, longest_description_len);
+        assert_eq!(30, longest_image_len);
+        assert_eq!(9, longest_ports_len);
     }
     #[test]
     fn test_pod_constraint_len_calculator() {
@@ -403,7 +437,6 @@ mod tests {
                 description: "Deployment".to_string(),
                 age: "150d".to_string(),
                 containers: "2/2".to_string(),
-                container_names: vec![],
                 selectors: None,
                 events: vec![],
             },
@@ -413,7 +446,6 @@ mod tests {
                 description: "Deployment".to_string(),
                 age: "10d".to_string(),
                 containers: "2/2".to_string(),
-                container_names: vec![],
                 selectors: None,
                 events: vec![],
             },

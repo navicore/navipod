@@ -121,56 +121,6 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(details_block, area);
 }
 
-// fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
-//     let foreground_color = app.colors.header_fg;
-//     let background_color = app.colors.buffer_bg;
-//
-//     let create_block = |title| {
-//         Block::default()
-//             .borders(Borders::ALL)
-//             .style(Style::default().fg(foreground_color))
-//             .title(Span::styled(
-//                 title,
-//                 Style::default().add_modifier(Modifier::BOLD),
-//             ))
-//     };
-//
-//     let details_block =
-//         create_block("Events").style(Style::default().fg(foreground_color).bg(background_color));
-//
-//     if let Some(rs) = app.get_selected_item() {
-//         let events: &Vec<ResourceEvent> = rs.events.as_ref();
-//
-//         let event_display_height = 1; // Adjust based on your actual layout
-//         let max_events = area.height as usize / event_display_height;
-//
-//         let recent_events = events.iter().take(max_events).collect::<Vec<_>>();
-//
-//         for (i, event) in recent_events.iter().enumerate() {
-//             let formatted_name = format!("{}: ", event.type_);
-//             let value = &event.message;
-//             #[allow(clippy::cast_possible_truncation)]
-//             let chunk = Rect {
-//                 x: area.x,
-//                 y: area.y + i as u16 * event_display_height as u16,
-//                 width: area.width,
-//                 height: 1,
-//             };
-//             draw_name_value_paragraphs(
-//                 f,
-//                 background_color,
-//                 foreground_color,
-//                 chunk,
-//                 &formatted_name,
-//                 value,
-//                 10,
-//             );
-//         }
-//     }
-//
-//     f.render_widget(details_block, area);
-// }
-
 fn render_details(f: &mut Frame, app: &mut App, area: Rect) {
     let detail_rects =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);

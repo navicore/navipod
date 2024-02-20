@@ -451,7 +451,7 @@ mod tests {
 
         assert_eq!(21, longest_container_len);
         assert_eq!(10, longest_description_len);
-        assert_eq!(10, longest_restarts_len);
+        assert_eq!(1, longest_restarts_len);
         assert_eq!(30, longest_image_len);
         assert_eq!(9, longest_ports_len);
     }

@@ -50,6 +50,11 @@ impl TuiTableState for App {
     fn set_color_index(&mut self, color_index: usize) {
         self.color_index = color_index;
     }
+
+    fn reset_selection_state(&mut self) {
+        self.state = TableState::default().with_selected(0);
+        self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
+    }
 }
 
 impl App {
@@ -57,7 +62,7 @@ impl App {
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: pod_constraint_len_calculator(&data_vec),
-            scroll_state: ScrollbarState::new((data_vec.len() - 1) * ITEM_HEIGHT),
+            scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 1,
             items: data_vec,

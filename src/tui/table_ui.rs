@@ -102,9 +102,30 @@ pub trait TuiTableState {
         self.set_table_colors(new_colors);
     }
 
+    // fn get_selected_item(&mut self) -> Option<&Self::Item> {
+    //     let s = self.get_state().clone();
+    //     let items = self.get_items();
+    //
+    //     match s.selected() {
+    //         Some(selected) if selected < items.len() => Some(&items[selected]),
+    //         _ => {
+    //             //self.reset_selection_state();
+    //             None
+    //         }
+    //     }
+    // }
+
     fn get_selected_item(&mut self) -> Option<&Self::Item> {
-        let s = self.get_state();
-        s.selected().map(|seleted| &self.get_items()[seleted])
+        let selected_index = self.get_state().selected();
+        let items_len = self.get_items().len();
+
+        match selected_index {
+            Some(selected) if selected < items_len => Some(&self.get_items()[selected]),
+            _ => {
+                self.reset_selection_state(); // Modify state as needed.
+                None
+            }
+        }
     }
 
     fn get_items(&self) -> &[Self::Item];
@@ -115,4 +136,5 @@ pub trait TuiTableState {
     fn set_table_colors(&mut self, colors: TableColors);
     fn get_color_index(&self) -> usize;
     fn set_color_index(&mut self, color_index: usize);
+    fn reset_selection_state(&mut self);
 }

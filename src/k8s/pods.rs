@@ -79,13 +79,19 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     .metadata
                     .name
                     .clone()
-                    .unwrap_or_else(|| "unkown".to_string());
+                    .unwrap_or_else(|| "unknown".to_string()); // Fixed typo in "unknown"
 
+                // Adjusted actual container count to reflect only ready containers
                 let actual_container_count = pod.status.as_ref().map_or(0, |status| {
-                    status.container_statuses.as_ref().map_or(0, Vec::len)
+                    status
+                        .container_statuses
+                        .as_ref()
+                        .map_or(0, |container_statuses| {
+                            container_statuses.iter().filter(|cs| cs.ready).count()
+                        })
                 });
 
-                // Desired container count
+                // Desired container count remains the same
                 let desired_container_count =
                     pod.spec.as_ref().map_or(0, |spec| spec.containers.len());
                 let kind = &owner.kind;

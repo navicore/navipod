@@ -48,19 +48,19 @@ impl TuiTableState for App {
     fn set_color_index(&mut self, color_index: usize) {
         self.color_index = color_index;
     }
+
+    fn reset_selection_state(&mut self) {
+        self.state = TableState::default().with_selected(0);
+        self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
+    }
 }
 
 impl App {
     pub fn new(data_vec: Vec<Ingress>) -> Self {
-        let scroll_state_pos = if data_vec.is_empty() {
-            0
-        } else {
-            (data_vec.len() - 1) * ITEM_HEIGHT
-        };
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: ingress_constraint_len_calculator(&data_vec),
-            scroll_state: ScrollbarState::new(scroll_state_pos),
+            scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 3,
             items: data_vec,

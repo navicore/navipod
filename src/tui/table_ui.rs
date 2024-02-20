@@ -102,19 +102,6 @@ pub trait TuiTableState {
         self.set_table_colors(new_colors);
     }
 
-    // fn get_selected_item(&mut self) -> Option<&Self::Item> {
-    //     let s = self.get_state().clone();
-    //     let items = self.get_items();
-    //
-    //     match s.selected() {
-    //         Some(selected) if selected < items.len() => Some(&items[selected]),
-    //         _ => {
-    //             //self.reset_selection_state();
-    //             None
-    //         }
-    //     }
-    // }
-
     fn get_selected_item(&mut self) -> Option<&Self::Item> {
         let selected_index = self.get_state().selected();
         let items_len = self.get_items().len();

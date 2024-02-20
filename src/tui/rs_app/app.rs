@@ -13,6 +13,7 @@ pub struct App {
     pub(crate) colors: TableColors,
     pub(crate) color_index: usize,
 }
+
 impl TuiTableState for App {
     type Item = Rs;
 
@@ -46,18 +47,19 @@ impl TuiTableState for App {
     fn set_color_index(&mut self, color_index: usize) {
         self.color_index = color_index;
     }
+
+    fn reset_selection_state(&mut self) {
+        self.state = TableState::default().with_selected(0);
+        self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
+    }
 }
+
 impl App {
     pub fn new(data_vec: Vec<Rs>) -> Self {
-        let scroll_state = if data_vec.is_empty() {
-            ScrollbarState::new((data_vec.len() - 1) * ITEM_HEIGHT)
-        } else {
-            ScrollbarState::new(0)
-        };
         Self {
             state: TableState::default().with_selected(0),
             longest_item_lens: rs_constraint_len_calculator(&data_vec),
-            scroll_state,
+            scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
             items: data_vec,

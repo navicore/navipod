@@ -119,7 +119,7 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
                 foreground_color,
                 chunk,
                 event,
-                8,
+                9,
             );
         }
     }

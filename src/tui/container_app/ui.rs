@@ -14,135 +14,135 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     app.set_colors();
 
     let table_area = rects[0];
-    let rect_height = table_area.bottom() - table_area.top();
+    let details_area = rects[1];
 
-    app.set_table_height(rect_height.into());
+    render_ui_sections(f, app, table_area, details_area);
+}
 
+fn render_ui_sections(f: &mut Frame, app: &mut App, table_area: Rect, details_area: Rect) {
+    set_table_height(app, table_area.height);
     render_table(f, app, table_area);
-
-    render_scrollbar(f, app, rects[0]);
-
-    render_details(f, app, rects[1]);
+    render_scrollbar(f, app, table_area);
+    render_details(f, app, details_area);
 }
 
-fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
-    let foreground_color = app.colors.header_fg;
-    let background_color = app.colors.buffer_bg;
-
-    let create_block = |title| {
-        Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().fg(foreground_color))
-            .title(Span::styled(
-                title,
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-    };
-
-    let details_block = create_block("Mounts (0)")
-        .style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(details_block.clone(), area);
-
-    let mut block_title = "Mounts (0)".to_string();
-
-    if let Some(container) = app.get_selected_item() {
-        let mounts: &Vec<ContainerMount> = container.mounts.as_ref();
-        let constraints = std::iter::repeat(Constraint::Length(1))
-            .take(mounts.len())
-            .collect::<Vec<Constraint>>();
-
-        let num_mounts = mounts.len();
-        block_title = format!("Mounts ({num_mounts})");
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(1)
-            .constraints(constraints) // Pass the Vec<Constraint> as a reference
-            .split(area);
-
-        for (i, ContainerMount { name, value }) in mounts.iter().enumerate() {
-            let formatted_name = format!("{}: ", &name);
-            if let Some(chunk) = chunks.get(i) {
-                draw_name_value_paragraphs(
-                    f,
-                    background_color,
-                    foreground_color,
-                    *chunk,
-                    &formatted_name,
-                    value,
-                    30,
-                );
-            }
-        }
-    }
-
-    let details_block = create_block(&block_title)
-        .style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(details_block, area);
-}
-
-fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
-    let foreground_color = app.colors.header_fg;
-    let background_color = app.colors.buffer_bg;
-
-    let create_block = |title| {
-        Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().fg(foreground_color))
-            .title(Span::styled(
-                title,
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-    };
-
-    let details_block = create_block("Environment Variables (0)")
-        .style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(details_block.clone(), area);
-
-    let mut block_title = "Environment Variables (0)".to_string();
-
-    if let Some(container) = app.get_selected_item() {
-        let envvars: &Vec<ContainerEnvVar> = container.envvars.as_ref();
-        let constraints = std::iter::repeat(Constraint::Length(1))
-            .take(envvars.len())
-            .collect::<Vec<Constraint>>();
-
-        let num_vars = envvars.len();
-        block_title = format!("Environment Variables ({num_vars})");
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(1)
-            .constraints(constraints) // Pass the Vec<Constraint> as a reference
-            .split(area);
-
-        for (i, ContainerEnvVar { name, value }) in envvars.iter().enumerate() {
-            let formatted_name = format!("{}: ", &name);
-            if let Some(chunk) = chunks.get(i) {
-                draw_name_value_paragraphs(
-                    f,
-                    background_color,
-                    foreground_color,
-                    *chunk,
-                    &formatted_name,
-                    value,
-                    30,
-                );
-            }
-        }
-    }
-
-    let details_block = create_block(&block_title)
-        .style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(details_block, area);
+fn set_table_height(app: &mut App, height: u16) {
+    app.set_table_height(height.into());
 }
 
 fn render_details(f: &mut Frame, app: &mut App, area: Rect) {
     let detail_rects =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
-    draw_left_details(f, app, detail_rects[0]);
-    draw_right_details(f, app, detail_rects[1]);
+    let mount_details = app.get_mount_details();
+    let env_var_details = app.get_env_var_details();
+
+    render_detail_section(f, app, detail_rects[0], "Mounts", &mount_details);
+    render_detail_section(
+        f,
+        app,
+        detail_rects[1],
+        "Environment Variables",
+        &env_var_details,
+    );
+}
+
+fn render_detail_section<T: Detail>(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    title: &str,
+    details: &Vec<T>,
+) {
+    let block_title = format!("{} ({})", title, details.len());
+    let chunks = details
+        .iter()
+        .map(|d| (d.name(), d.value()))
+        .collect::<Vec<_>>();
+
+    render_block_with_title_and_details(f, app, area, &block_title, &chunks);
+}
+
+trait Detail {
+    fn name(&self) -> String;
+    fn value(&self) -> String;
+}
+
+impl Detail for ContainerMount {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn value(&self) -> String {
+        self.value.clone()
+    }
+}
+
+impl Detail for ContainerEnvVar {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn value(&self) -> String {
+        self.value.clone()
+    }
+}
+
+fn render_block_with_title_and_details(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    title: &str,
+    details: &[(String, String)],
+) {
+    let (foreground_color, background_color) = get_colors(app);
+
+    let create_block = |title| {
+        Block::default()
+            .borders(Borders::ALL)
+            .style(Style::default().fg(foreground_color))
+            .title(Span::styled(
+                title,
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+    };
+
+    let details_block =
+        create_block(title).style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block, area);
+
+    let constraints = std::iter::repeat(Constraint::Length(1))
+        .take(details.len())
+        .collect::<Vec<Constraint>>();
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints(constraints) // Pass the Vec<Constraint> as a reference
+        .split(area);
+
+    for (i, (name, value)) in details.iter().enumerate() {
+        let formatted_name = format!("{}: ", &name);
+        if let Some(chunk) = chunks.get(i) {
+            draw_name_value_paragraphs(
+                f,
+                background_color,
+                foreground_color,
+                *chunk,
+                &formatted_name,
+                value,
+                30,
+            );
+        }
+    }
+
+    let details_block =
+        create_block(title).style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block, area);
+}
+
+const fn get_colors(app: &App) -> (Color, Color) {
+    (app.colors.header_fg, app.colors.buffer_bg)
 }
 
 fn render_table(f: &mut Frame, app: &mut App, area: Rect) {

@@ -1,6 +1,8 @@
 use ratatui::widgets::{ScrollbarState, TableState};
 
-use crate::tui::data::{container_constraint_len_calculator, Container};
+use crate::tui::data::{
+    container_constraint_len_calculator, Container, ContainerEnvVar, ContainerMount,
+};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 
@@ -77,5 +79,17 @@ impl App {
             table_height: 0,
             items: data_vec,
         }
+    }
+
+    // Method to get mounts details of the selected item
+    pub fn get_mount_details(&mut self) -> Vec<ContainerMount> {
+        self.get_selected_item()
+            .map_or_else(Vec::new, |container| container.mounts.clone())
+    }
+
+    // Method to get environment variables of the selected item
+    pub fn get_env_var_details(&mut self) -> Vec<ContainerEnvVar> {
+        self.get_selected_item()
+            .map_or_else(Vec::new, |container| container.envvars.clone())
     }
 }

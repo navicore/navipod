@@ -1,5 +1,5 @@
 use crate::k8s::utils::format_label_selector;
-use crate::tui::data::Container;
+use crate::tui::data::{Container, ContainerEnvVar, ContainerMount};
 use k8s_openapi::api::core::v1::ContainerPort;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
@@ -60,12 +60,35 @@ pub async fn list(
                             .find(|cs| cs.name == container.name)
                             .map_or(0, |cs| cs.restart_count)
                             .to_string();
+
+                        let volume_mounts = container.volume_mounts;
+                        let mounts: Vec<ContainerMount> = volume_mounts
+                            .unwrap_or_else(Vec::new)
+                            .into_iter()
+                            .map(|vm| ContainerMount {
+                                name: vm.name,
+                                value: vm.mount_path,
+                            })
+                            .collect();
+
+                        let env = container.env;
+                        let envvars: Vec<ContainerEnvVar> = env
+                            .unwrap_or_else(Vec::new)
+                            .into_iter()
+                            .map(|e| ContainerEnvVar {
+                                name: e.name,
+                                value: e.value.unwrap_or_default(),
+                            })
+                            .collect();
+
                         let c = Container {
                             name: container.name,
                             description: "a pod container".to_string(),
                             restarts,
                             image,
                             ports,
+                            mounts,
+                            envvars,
                         };
                         container_vec.push(c);
                     }
@@ -79,12 +102,34 @@ pub async fn list(
                                 .map_or(0, |cs| cs.restart_count)
                                 .to_string();
 
+                            let volume_mounts = container.volume_mounts;
+                            let mounts: Vec<ContainerMount> = volume_mounts
+                                .unwrap_or_else(Vec::new)
+                                .into_iter()
+                                .map(|vm| ContainerMount {
+                                    name: vm.name,
+                                    value: vm.mount_path,
+                                })
+                                .collect();
+
+                            let env = container.env;
+                            let envvars: Vec<ContainerEnvVar> = env
+                                .unwrap_or_else(Vec::new)
+                                .into_iter()
+                                .map(|e| ContainerEnvVar {
+                                    name: e.name,
+                                    value: e.value.unwrap_or_default(),
+                                })
+                                .collect();
+
                             let c = Container {
                                 name: container.name,
                                 description: "an init container".to_string(), // Distinguish init containers
                                 restarts,
                                 image,
                                 ports: String::new(),
+                                mounts,
+                                envvars,
                             };
                             container_vec.push(c);
                         }

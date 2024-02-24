@@ -12,6 +12,7 @@ pub struct App {
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     color_index: usize,
+    table_height: usize,
 }
 
 impl TuiTableState for App {
@@ -53,6 +54,16 @@ impl TuiTableState for App {
         self.state = TableState::default().with_selected(0);
         self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
     }
+    fn get_table_height(&self) -> usize {
+        self.table_height
+    }
+
+    fn set_table_height(&mut self, table_height: usize) {
+        self.table_height = table_height;
+    }
+
+    fn page_forward(&mut self) {}
+    fn page_backward(&mut self) {}
 }
 
 impl App {
@@ -63,6 +74,7 @@ impl App {
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 3,
+            table_height: 0,
             items: data_vec,
         }
     }

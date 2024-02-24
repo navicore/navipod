@@ -15,7 +15,12 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
     app.set_colors();
 
-    render_table(f, app, rects[0]);
+    let table_area = rects[0];
+    let rect_height = table_area.bottom() - table_area.top();
+
+    app.set_table_height(rect_height.into());
+
+    render_table(f, app, table_area);
 
     render_scrollbar(f, app, rects[0]);
 

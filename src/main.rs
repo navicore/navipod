@@ -42,7 +42,7 @@ struct Args {
     db_location: String,
 
     #[clap(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[tokio::main]
@@ -58,7 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.default_namespace
     };
 
-    match args.command {
+    let command = args.command.unwrap_or(Command::Tui);
+
+    match command {
         Command::Tui => {
             tui::run().await?;
         }

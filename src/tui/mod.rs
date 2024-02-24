@@ -26,6 +26,8 @@ use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;
 use crate::k8s::rs_ingress::list_ingresses;
 use crate::net::analyze_tls_certificate;
+use crate::tui::data::pod_constraint_len_calculator;
+use crate::tui::data::rs_constraint_len_calculator;
 use crate::tui::table_ui::TuiTableState;
 
 // Assuming you're using crossterm for events
@@ -135,22 +137,13 @@ async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Error> 
     }
 }
 
-async fn create_rspod_data_vec(
-    selector: BTreeMap<String, String>,
-) -> Result<Vec<data::RsPod>, io::Error> {
-    match list_rspods(selector).await {
-        Ok(d) => Ok(d),
-        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
-    }
-}
-
 async fn run_rs_app<B: Backend + Send>(
     terminal: &mut Terminal<B>,
     app: &mut rs_app::app::App,
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
-    let data_events = async_rs_events(should_stop.clone());
+    let data_events = async_rs_events(should_stop.clone(), app.get_items().to_vec());
     let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
@@ -201,7 +194,7 @@ async fn run_rs_app<B: Backend + Send>(
                         Enter => {
                             if let Some(selection) = app.get_selected_item() {
                                 if let Some(selectors) = selection.selectors.clone() {
-                                    let data_vec = create_rspod_data_vec(selectors.clone()).await?;
+                                    let data_vec = vec![];
                                     let new_app_holder = Apps::Pod {
                                         app: pod_app::app::App::new(selectors, data_vec),
                                     };
@@ -218,11 +211,13 @@ async fn run_rs_app<B: Backend + Send>(
             Some(StreamEvent::Rs(data_vec)) => {
                 debug!("updating rs app data...");
                 let new_app = rs_app::app::App {
+                    longest_item_lens: rs_constraint_len_calculator(&data_vec),
                     items: data_vec,
                     ..app.clone()
                 };
                 let new_app_holder = Apps::Rs { app: new_app };
                 app_holder = Some(new_app_holder);
+
                 break;
             }
             _ => {}
@@ -238,7 +233,11 @@ async fn run_pod_app<B: Backend + Send>(
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
-    let data_events = async_pod_events(app.selector.clone(), should_stop.clone());
+    let data_events = async_pod_events(
+        app.selector.clone(),
+        should_stop.clone(),
+        app.get_items().to_vec(),
+    );
     let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
@@ -301,6 +300,7 @@ async fn run_pod_app<B: Backend + Send>(
             Some(StreamEvent::Pod(data_vec)) => {
                 debug!("updating pod app data...");
                 let new_app = pod_app::app::App {
+                    longest_item_lens: pod_constraint_len_calculator(&data_vec),
                     items: data_vec,
                     ..app.clone()
                 };
@@ -441,10 +441,7 @@ async fn run_ingress_app<B: Backend + Send>(
 
 /// runs a stack of apps where navigation is "<Enter>" into and "<Esc>" out of
 async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::Result<()> {
-    let data_vec = match list_replicas().await {
-        Ok(d) => d,
-        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
-    };
+    let data_vec = vec![];
     let mut app_holder = Apps::Rs {
         app: rs_app::app::App::new(data_vec),
     };
@@ -554,19 +551,22 @@ fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEv
 fn async_pod_events(
     selector: BTreeMap<String, String>,
     should_stop: Arc<AtomicBool>,
+    current_data: Vec<data::RsPod>,
 ) -> impl Stream<Item = StreamEvent> {
     let (tx, rx) = mpsc::channel(100);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
-            sleep(Duration::from_millis(POLL_MS)).await;
             //get Vec and send
             match list_rspods(selector.clone()).await {
                 Ok(d) => {
-                    let sevent = StreamEvent::Pod(d);
-                    if tx.send(sevent).await.is_err() {
-                        break;
+                    if !d.is_empty() && d != current_data {
+                        let sevent = StreamEvent::Pod(d);
+                        if tx.send(sevent).await.is_err() {
+                            break;
+                        }
                     }
+                    sleep(Duration::from_millis(POLL_MS)).await;
                 }
                 Err(e) => {
                     error!("Error listing pods: {e}");
@@ -579,18 +579,27 @@ fn async_pod_events(
     ReceiverStream::new(rx)
 }
 
-fn async_rs_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = StreamEvent> {
-    let (tx, rx) = mpsc::channel(100);
+fn async_rs_events(
+    should_stop: Arc<AtomicBool>,
+    current_data: Vec<data::Rs>,
+) -> impl Stream<Item = StreamEvent> {
+    let (tx, rx) = mpsc::channel(1);
 
     tokio::spawn(async move {
         while !should_stop.load(Ordering::Relaxed) {
-            sleep(Duration::from_millis(POLL_MS)).await;
             match list_replicas().await {
                 Ok(d) => {
-                    let sevent = StreamEvent::Rs(d);
-                    if tx.send(sevent).await.is_err() {}
+                    // only update if different from current events
+                    if !d.is_empty() && d != current_data {
+                        let sevent = StreamEvent::Rs(d);
+                        if tx.send(sevent).await.is_err() {
+                            break;
+                        }
+                    }
+                    sleep(Duration::from_millis(POLL_MS)).await;
                 }
-                Err(_e) => {
+                Err(e) => {
+                    error!("Error listing rs: {e}");
                     break;
                 }
             };

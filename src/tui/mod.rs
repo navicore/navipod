@@ -8,7 +8,7 @@ use x509_parser::time::ASN1Time; // Import time::Duration as TimeDuration to avo
 
 use crossterm::event::{poll, read};
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -191,6 +191,13 @@ async fn run_rs_app<B: Backend + Send>(
                                 };
                             };
                         }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.page_forward();
+                        }
+
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.page_backward();
+                        }
                         Enter => {
                             if let Some(selection) = app.get_selected_item() {
                                 if let Some(selectors) = selection.selectors.clone() {
@@ -238,7 +245,11 @@ async fn run_pod_app<B: Backend + Send>(
     let mut app_holder = Some(Apps::Pod { app: app.clone() });
 
     loop {
-        terminal.draw(|f| pod_app::ui::ui(f, &mut app.clone()))?;
+        let mut r_app = app.clone();
+        terminal.draw(|f| pod_app::ui::ui(f, &mut r_app))?;
+        let table_height = r_app.get_table_height();
+        app.set_table_height(table_height);
+
         match events.next().await {
             Some(StreamEvent::Key(Event::Key(key))) => {
                 if key.kind == KeyEventKind::Press {
@@ -256,6 +267,16 @@ async fn run_pod_app<B: Backend + Send>(
                         }
                         Char('c' | 'C') => {
                             app.next_color();
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.page_forward();
+                            let new_app_holder = Apps::Pod { app: app.clone() };
+                            app_holder = Some(new_app_holder);
+                            break;
+                        }
+
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.page_backward();
                         }
                         Enter => {
                             if let Some(selection) = app.get_selected_item() {

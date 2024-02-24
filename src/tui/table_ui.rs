@@ -124,4 +124,8 @@ pub trait TuiTableState {
     fn get_color_index(&self) -> usize;
     fn set_color_index(&mut self, color_index: usize);
     fn reset_selection_state(&mut self);
+    fn page_forward(&mut self);
+    fn page_backward(&mut self);
+    fn get_table_height(&self) -> usize;
+    fn set_table_height(&mut self, table_height: usize);
 }

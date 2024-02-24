@@ -568,8 +568,7 @@ fn async_pod_events(
                     }
                     sleep(Duration::from_millis(POLL_MS)).await;
                 }
-                Err(e) => {
-                    error!("Error listing pods: {e}");
+                Err(_e) => {
                     break;
                 }
             }
@@ -598,8 +597,7 @@ fn async_rs_events(
                     }
                     sleep(Duration::from_millis(POLL_MS)).await;
                 }
-                Err(e) => {
-                    error!("Error listing rs: {e}");
+                Err(_e) => {
                     break;
                 }
             };

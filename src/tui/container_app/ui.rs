@@ -137,33 +137,6 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(details_block, area);
 }
 
-// fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
-//     let foreground_color = app.colors.header_fg;
-//     let background_color = app.colors.buffer_bg;
-//
-//     let create_block = |title| {
-//         Block::default()
-//             .borders(Borders::ALL)
-//             .style(Style::default().fg(foreground_color))
-//             .title(Span::styled(
-//                 title,
-//                 Style::default().add_modifier(Modifier::BOLD),
-//             ))
-//     };
-//
-//     let mut block_title = "Environment Variables (0)".to_string();
-//     let details_block = create_block(block_title.clone())
-//         .style(Style::default().fg(foreground_color).bg(background_color));
-//     f.render_widget(details_block, area);
-//
-//     if let Some(container) = app.get_selected_item() {
-//     }
-//
-//     let details_block =
-//         create_block(block_title).style(Style::default().fg(foreground_color).bg(background_color));
-//     f.render_widget(details_block, area);
-// }
-
 fn render_details(f: &mut Frame, app: &mut App, area: Rect) {
     let detail_rects =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);

@@ -11,6 +11,18 @@ pub struct ResourceEvent {
 }
 
 #[derive(Clone, Debug)]
+pub struct ContainerMount {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ContainerEnvVar {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct Cert {
     pub host: String,
     pub is_valid: String,
@@ -47,6 +59,8 @@ pub struct Container {
     pub restarts: String,
     pub image: String,
     pub ports: String,
+    pub envvars: Vec<ContainerEnvVar>,
+    pub mounts: Vec<ContainerMount>,
 }
 
 impl Container {
@@ -432,6 +446,8 @@ mod tests {
                 restarts: "0".to_string(),
                 image: "navicore/echo-secret-py:v0.1.1".to_string(),
                 ports: "http:1234".to_string(),
+                envvars: vec![],
+                mounts: vec![],
             },
             Container {
                 name: "replica-923450-987654".to_string(),
@@ -439,6 +455,8 @@ mod tests {
                 restarts: "0".to_string(),
                 image: "navicore/echo-secret-py:v0.1.1".to_string(),
                 ports: "http:1234".to_string(),
+                envvars: vec![],
+                mounts: vec![],
             },
         ];
         let (

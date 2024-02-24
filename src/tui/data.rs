@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use unicode_width::UnicodeWidthStr;
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ResourceEvent {
     pub resource_name: String,
     pub message: String,
@@ -10,19 +10,19 @@ pub struct ResourceEvent {
     pub age: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ContainerMount {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ContainerEnvVar {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Cert {
     pub host: String,
     pub is_valid: String,
@@ -95,7 +95,7 @@ impl Container {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct RsPod {
     pub name: String,
     pub status: String,
@@ -138,7 +138,7 @@ impl RsPod {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Rs {
     pub name: String,
     pub owner: String,

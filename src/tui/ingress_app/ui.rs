@@ -48,7 +48,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         rows,
         [
             // + 1 is for padding.
-            Constraint::Length(app.longest_item_lens.0 + 1),
+            Constraint::Min(app.longest_item_lens.0 + 1),
             Constraint::Min(app.longest_item_lens.1 + 1),
             Constraint::Min(app.longest_item_lens.2 + 1),
             Constraint::Min(app.longest_item_lens.3 + 1),

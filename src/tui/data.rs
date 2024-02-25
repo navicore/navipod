@@ -11,7 +11,7 @@ pub struct ResourceEvent {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
-pub struct PodLabel {
+pub struct ResourcceLabel {
     pub name: String,
     pub value: String,
 }
@@ -76,7 +76,7 @@ impl Detail for ContainerEnvVar {
     }
 }
 
-impl Detail for PodLabel {
+impl Detail for ResourcceLabel {
     fn name(&self) -> String {
         self.name.clone()
     }

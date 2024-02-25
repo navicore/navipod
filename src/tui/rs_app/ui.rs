@@ -1,13 +1,8 @@
-use crate::tui::data::ResourceEvent;
 use crate::tui::rs_app::app::App;
-use crate::tui::table_ui::{
-    draw_name_value_paragraphs, draw_timeseries_name_value_paragraphs, TuiTableState,
-};
+use crate::tui::table_ui::{render_detail_section, TuiTableState};
 use ratatui::{
     prelude::*,
-    widgets::{
-        Block, Borders, Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table,
-    },
+    widgets::{Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table},
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
@@ -16,129 +11,45 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     app.set_colors();
 
     let table_area = rects[0];
-    let rect_height = table_area.bottom() - table_area.top();
-    app.set_table_height(rect_height.into());
+    let details_area = rects[1];
 
+    render_ui_sections(f, app, table_area, details_area);
+}
+
+fn render_ui_sections(f: &mut Frame, app: &mut App, table_area: Rect, details_area: Rect) {
     render_table(f, app, table_area);
-
-    render_scrollbar(f, app, rects[0]);
-
-    render_details(f, app, rects[1]);
-}
-
-fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
-    let foreground_color = app.colors.header_fg;
-    let background_color = app.colors.buffer_bg;
-
-    let create_block = |title| {
-        Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().fg(foreground_color))
-            .title(Span::styled(
-                title,
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-    };
-
-    let details_block = create_block("Labels (0)")
-        .style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(details_block.clone(), area);
-
-    let mut block_title = "Labels (0)".to_string();
-
-    if let Some(rs) = app.get_selected_item() {
-        if let Some(labels) = rs.selectors.as_ref() {
-            let num_labels = labels.len();
-            block_title = format!("Labels ({num_labels})");
-            let constraints = std::iter::repeat(Constraint::Length(1))
-                .take(labels.len())
-                .collect::<Vec<Constraint>>();
-
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(1)
-                .constraints(constraints) // Pass the Vec<Constraint> as a reference
-                .split(area);
-
-            for (i, (name, value)) in labels.iter().enumerate() {
-                let formatted_name = format!("{}: ", &name);
-                if let Some(chunk) = chunks.get(i) {
-                    draw_name_value_paragraphs(
-                        f,
-                        background_color,
-                        foreground_color,
-                        *chunk,
-                        &formatted_name,
-                        value,
-                        30,
-                    );
-                }
-            }
-        };
-    }
-
-    let details_block = create_block(&block_title)
-        .style(Style::default().fg(foreground_color).bg(background_color));
-
-    f.render_widget(details_block, area);
-}
-
-fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
-    let foreground_color = app.colors.header_fg;
-    let background_color = app.colors.buffer_bg;
-
-    let create_block = |title| {
-        Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().fg(foreground_color))
-            .title(Span::styled(
-                title,
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-    };
-
-    let mut block_title = "Events".to_string();
-    if let Some(rs) = app.get_selected_item() {
-        let events: &Vec<ResourceEvent> = rs.events.as_ref();
-        let num_events = events.len();
-        block_title = format!("Events ({num_events})");
-
-        let event_display_height = 1; // Adjust based on your actual layout
-        let max_events = area.height as usize / event_display_height - 1;
-
-        let recent_events = events.iter().take(max_events).collect::<Vec<_>>();
-
-        for (i, event) in recent_events.clone().iter().enumerate() {
-            let pos = i + 1;
-            #[allow(clippy::cast_possible_truncation)]
-            let chunk = Rect {
-                x: area.x,
-                y: area.y + pos as u16 * event_display_height as u16,
-                width: area.width,
-                height: 1,
-            };
-            draw_timeseries_name_value_paragraphs(
-                f,
-                background_color,
-                foreground_color,
-                chunk,
-                event,
-                9,
-            );
-        }
-    }
-
-    let details_block =
-        create_block(block_title).style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(details_block, area);
+    render_scrollbar(f, app, table_area);
+    render_details(f, app, details_area);
 }
 
 fn render_details(f: &mut Frame, app: &mut App, area: Rect) {
     let detail_rects =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
-    draw_left_details(f, app, detail_rects[0]);
-    draw_right_details(f, app, detail_rects[1]);
+    let label_details = app.get_label_details();
+    let event_details = app.get_event_details();
+
+    let (foreground_color, background_color) = get_colors(app);
+    render_detail_section(
+        f,
+        foreground_color,
+        background_color,
+        detail_rects[0],
+        "Label",
+        &label_details,
+    );
+    render_detail_section(
+        f,
+        foreground_color,
+        background_color,
+        detail_rects[1],
+        "Event",
+        &event_details,
+    );
+}
+
+const fn get_colors(app: &App) -> (Color, Color) {
+    (app.colors.header_fg, app.colors.buffer_bg)
 }
 
 fn render_table(f: &mut Frame, app: &mut App, area: Rect) {

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use ratatui::widgets::{ScrollbarState, TableState};
 
-use crate::tui::data::{pod_constraint_len_calculator, RsPod};
+use crate::tui::data::{pod_constraint_len_calculator, ResourcceLabel, ResourceEvent, RsPod};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 
@@ -80,5 +80,25 @@ impl App {
             items: data_vec,
             selector,
         }
+    }
+
+    pub fn get_event_details(&mut self) -> Vec<ResourceEvent> {
+        self.get_selected_item()
+            .map_or_else(Vec::new, |pod| pod.events.clone())
+    }
+
+    pub fn get_label_details(&mut self) -> Vec<ResourcceLabel> {
+        self.get_selected_item().map_or_else(Vec::new, |pod| {
+            pod.selectors.clone().map_or_else(Vec::new, |labels| {
+                let mut r = Vec::new();
+                for (name, value) in &labels {
+                    r.push(ResourcceLabel {
+                        name: name.to_string(),
+                        value: value.to_string(),
+                    });
+                }
+                r
+            })
+        })
     }
 }

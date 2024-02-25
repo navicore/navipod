@@ -232,11 +232,10 @@ impl AppBehavior for pod_app::app::App {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Up};
+                    use KeyCode::{Char, Down, Enter, Esc, Up};
                     match key.code {
-                        Char('q') => {
+                        Char('q') | Esc => {
                             app_holder = None;
-                            debug!("quiting...");
                         }
                         Char('j') | Down => {
                             self.next();
@@ -329,6 +328,8 @@ async fn run_pod_app<B: Backend + Send>(
         _ = app.draw_ui(terminal).await;
         if let Some(event) = events.next().await {
             app_holder = app.handle_event(&event).await?;
+            //todo: when switching to AppCommand from Apps you can decide to only
+            //break when command is "switch apps"
             break;
         };
     }

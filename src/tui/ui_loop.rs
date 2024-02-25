@@ -26,7 +26,101 @@ use crate::tui::pod_app;
 use crate::tui::rs_app;
 use crate::tui::stream::{async_key_events, async_pod_events, async_rs_events, Message};
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::utils::ui_time::asn1time_to_future_days_string;
+use crate::tui::utils::time::asn1time_to_future_days_string;
+
+// #[derive(Clone, Debug)]
+// enum AppCommand {
+//     Update,
+//     Switch,
+//     Quit,
+// }
+
+trait AppBehavior {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error>;
+
+    async fn draw_ui<B: Backend>(&self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error>;
+}
+
+impl AppBehavior for rs_app::app::App {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Rs { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Up};
+                    match key.code {
+                        Char('q') => {
+                            app_holder = None;
+                            debug!("quiting...");
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            //todo: stop all this cloning
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('i' | 'I') => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
+                                    let data_vec =
+                                        create_ingress_data_vec(selector.clone()).await?;
+                                    let new_app_holder = Apps::Ingress {
+                                        app: ingress_app::app::App::new(data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to ingress...");
+                                };
+                            };
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        Enter => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selectors) = selection.selectors.clone() {
+                                    let data_vec = vec![];
+                                    let new_app_holder = Apps::Pod {
+                                        app: pod_app::app::App::new(selectors, data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to pod...");
+                                };
+                            };
+                        }
+                        _k => {}
+                    }
+                }
+            }
+            Message::Rs(data_vec) => {
+                debug!("updating rs app data...");
+                let new_app = rs_app::app::App {
+                    longest_item_lens: rs_constraint_len_calculator(&data_vec),
+                    items: data_vec.to_vec(),
+                    ..self.clone()
+                };
+                let new_app_holder = Apps::Rs { app: new_app };
+                app_holder = Some(new_app_holder);
+            }
+            _ => {}
+        }
+        Ok(app_holder)
+    }
+    async fn draw_ui<B: Backend>(&self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
+        terminal.draw(|f| rs_app::ui::ui(f, &mut self.clone()))?;
+        Ok(())
+    }
+}
 
 /// # Errors
 ///
@@ -122,78 +216,12 @@ async fn run_rs_app<B: Backend + Send>(
     let mut app_holder = Some(Apps::Rs { app: app.clone() });
 
     loop {
-        terminal.draw(|f| rs_app::ui::ui(f, &mut app.clone()))?;
-        match events.next().await {
-            Some(Message::Key(Event::Key(key))) => {
-                if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Up};
-                    match key.code {
-                        Char('q') => {
-                            app_holder = None;
-                            debug!("quiting...");
-                            break;
-                        }
-                        Char('j') | Down => {
-                            app.next();
-                        }
-                        Char('k') | Up => {
-                            app.previous();
-                        }
-                        Char('c' | 'C') => {
-                            app.next_color();
-                        }
-                        Char('i' | 'I') => {
-                            if let Some(selection) = app.get_selected_item() {
-                                if let Some(selector) = selection.selectors.clone() {
-                                    let data_vec =
-                                        create_ingress_data_vec(selector.clone()).await?;
-                                    let new_app_holder = Apps::Ingress {
-                                        app: ingress_app::app::App::new(data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to ingress...");
-                                    break;
-                                };
-                            };
-                        }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.page_forward();
-                        }
-
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.page_backward();
-                        }
-                        Enter => {
-                            if let Some(selection) = app.get_selected_item() {
-                                if let Some(selectors) = selection.selectors.clone() {
-                                    let data_vec = vec![];
-                                    let new_app_holder = Apps::Pod {
-                                        app: pod_app::app::App::new(selectors, data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to pod...");
-                                    break;
-                                };
-                            };
-                        }
-                        _k => {}
-                    }
-                }
-            }
-            Some(Message::Rs(data_vec)) => {
-                debug!("updating rs app data...");
-                let new_app = rs_app::app::App {
-                    longest_item_lens: rs_constraint_len_calculator(&data_vec),
-                    items: data_vec,
-                    ..app.clone()
-                };
-                let new_app_holder = Apps::Rs { app: new_app };
-                app_holder = Some(new_app_holder);
-
-                break;
-            }
-            _ => {}
-        }
+        _ = app.draw_ui(terminal).await;
+        //terminal.draw(|f| rs_app::ui::ui(f, &mut app.clone()))?;
+        if let Some(event) = events.next().await {
+            app_holder = app.handle_event(&event).await?;
+            break;
+        };
     }
     should_stop.store(true, Ordering::Relaxed);
     Ok(app_holder)

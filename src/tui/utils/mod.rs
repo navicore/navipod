@@ -1,1 +1,1 @@
-pub mod ui_time;
+pub mod time;

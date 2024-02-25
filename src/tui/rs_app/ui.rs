@@ -68,9 +68,9 @@ fn draw_left_details(f: &mut Frame, app: &mut App, area: Rect) {
                         background_color,
                         foreground_color,
                         *chunk,
-                        &formatted_name,
-                        value,
-                        30,
+                        formatted_name,
+                        value.to_string(),
+                        None,
                     );
                 }
             }
@@ -122,8 +122,9 @@ fn draw_right_details(f: &mut Frame, app: &mut App, area: Rect) {
                 background_color,
                 foreground_color,
                 chunk,
-                event,
-                9,
+                &event.type_,
+                &event.message,
+                &event.age,
             );
         }
     }

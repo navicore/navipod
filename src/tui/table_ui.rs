@@ -1,40 +1,42 @@
-use crate::tui::data::ResourceEvent;
+use crate::tui::data::Detail;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
-use ratatui::widgets::{ScrollbarState, TableState};
+use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
+use std::rc::Rc;
 
 pub fn draw_timeseries_name_value_paragraphs(
     f: &mut Frame,
     background_color: Color,
     foreground_color: Color,
     area: Rect,
-    event: &ResourceEvent,
-    min_name_sz: u16,
+    name: &str,
+    value: &str,
+    age: &str,
 ) {
     let layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Min(min_name_sz / 2 + 1),
-                Constraint::Min(min_name_sz),
+                Constraint::Min(4),
+                Constraint::Min(11),
                 Constraint::Percentage(90),
             ]
             .as_ref(),
         )
         .split(area); // Use the first chunk for the first name-value pair
 
-    let age_value_paragraph = Paragraph::new(event.age.to_string())
+    let age_value_paragraph = Paragraph::new(age.to_string())
         .style(Style::default().fg(foreground_color).bg(background_color))
         .alignment(Alignment::Right);
     f.render_widget(age_value_paragraph, layout[0]);
 
-    let name_str = format!("{} ", event.type_);
+    let name_str = format!("{name} ");
     let name_title_paragraph = Paragraph::new(name_str)
         .style(Style::default().fg(foreground_color).bg(background_color))
         .alignment(Alignment::Right);
     f.render_widget(name_title_paragraph, layout[1]);
 
-    let name_value_paragraph = Paragraph::new(event.message.clone())
+    let name_value_paragraph = Paragraph::new(value)
         .style(Style::default().fg(foreground_color).bg(background_color))
         .alignment(Alignment::Left);
 
@@ -46,23 +48,35 @@ pub fn draw_name_value_paragraphs(
     background_color: Color,
     foreground_color: Color,
     area: Rect,
-    name: &str,
-    value: &str,
-    min_name_sz: u16,
+    name: String,
+    value: String,
+    age: Option<String>,
 ) {
-    let name_pair_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(min_name_sz), Constraint::Percentage(90)].as_ref())
-        .split(area); // Use the first chunk for the first name-value pair
+    if let Some(age) = age {
+        draw_timeseries_name_value_paragraphs(
+            f,
+            background_color,
+            foreground_color,
+            area,
+            &name,
+            &value,
+            &age,
+        );
+    } else {
+        let name_pair_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(30), Constraint::Percentage(90)].as_ref())
+            .split(area); // Use the first chunk for the first name-value pair
 
-    let name_title_paragraph = Paragraph::new(name)
-        .style(Style::default().fg(foreground_color).bg(background_color))
-        .alignment(Alignment::Right);
-    f.render_widget(name_title_paragraph, name_pair_layout[0]);
+        let name_title_paragraph = Paragraph::new(name)
+            .style(Style::default().fg(foreground_color).bg(background_color))
+            .alignment(Alignment::Right);
+        f.render_widget(name_title_paragraph, name_pair_layout[0]);
 
-    let name_value_paragraph =
-        Paragraph::new(value).style(Style::default().fg(foreground_color).bg(background_color));
-    f.render_widget(name_value_paragraph, name_pair_layout[1]);
+        let name_value_paragraph =
+            Paragraph::new(value).style(Style::default().fg(foreground_color).bg(background_color));
+        f.render_widget(name_value_paragraph, name_pair_layout[1]);
+    }
 }
 
 pub trait TuiTableState {
@@ -128,4 +142,84 @@ pub trait TuiTableState {
     fn page_backward(&mut self);
     fn get_table_height(&self) -> usize;
     fn set_table_height(&mut self, table_height: usize);
+}
+
+pub fn render_detail_section<T: Detail>(
+    f: &mut Frame,
+    foreground_color: Color,
+    background_color: Color,
+    area: Rect,
+    title: &str,
+    details: &Vec<T>,
+) {
+    let block_title = format!("{} ({})", title, details.len());
+    let chunks = details
+        .iter()
+        .map(|d| (d.name(), d.value(), d.age()))
+        .collect::<Vec<_>>();
+
+    render_block_with_title_and_details(
+        f,
+        foreground_color,
+        background_color,
+        area,
+        &block_title,
+        &chunks,
+    );
+}
+
+fn get_chunks_from_area(area: Rect, sz: usize) -> Rc<[Rect]> {
+    let constraints = std::iter::repeat(Constraint::Length(1))
+        .take(sz)
+        .collect::<Vec<Constraint>>();
+
+    Layout::default()
+        .direction(Direction::Vertical)
+        .margin(1)
+        .constraints(constraints) // Pass the Vec<Constraint> as a reference
+        .split(area)
+}
+
+fn create_block(title: String, foreground_color: &Color) -> Block<'_> {
+    Block::default()
+        .borders(Borders::ALL)
+        .style(Style::default().fg(*foreground_color))
+        .title(Span::styled(
+            title,
+            Style::default().add_modifier(Modifier::BOLD),
+        ))
+}
+
+fn render_block_with_title_and_details(
+    f: &mut Frame,
+    foreground_color: Color,
+    background_color: Color,
+    area: Rect,
+    title: &str,
+    details: &[(String, String, Option<String>)],
+) {
+    let details_block = create_block(title.to_string(), &foreground_color)
+        .style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block, area);
+
+    let chunks = get_chunks_from_area(area, details.len());
+
+    for (i, (name, value, age)) in details.iter().enumerate() {
+        let formatted_name = format!("{}: ", &name);
+        if let Some(chunk) = chunks.get(i) {
+            draw_name_value_paragraphs(
+                f,
+                background_color,
+                foreground_color,
+                *chunk,
+                formatted_name.to_string(),
+                value.to_string(),
+                age.clone(),
+            );
+        }
+    }
+
+    let details_block = create_block(title.to_string(), &foreground_color)
+        .style(Style::default().fg(foreground_color).bg(background_color));
+    f.render_widget(details_block, area);
 }

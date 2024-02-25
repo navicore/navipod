@@ -11,6 +11,18 @@ pub struct ResourceEvent {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
+pub struct PodLabel {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct RsLabel {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ContainerMount {
     pub name: String,
     pub value: String,
@@ -28,6 +40,65 @@ pub struct Cert {
     pub is_valid: String,
     pub expires: String,
     pub issued_by: String,
+}
+
+pub trait Detail {
+    fn name(&self) -> String;
+    fn value(&self) -> String;
+    fn age(&self) -> Option<String>;
+}
+
+impl Detail for ContainerMount {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn value(&self) -> String {
+        self.value.clone()
+    }
+
+    fn age(&self) -> Option<String> {
+        None
+    }
+}
+
+impl Detail for ContainerEnvVar {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn value(&self) -> String {
+        self.value.clone()
+    }
+
+    fn age(&self) -> Option<String> {
+        None
+    }
+}
+
+impl Detail for PodLabel {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn value(&self) -> String {
+        self.value.clone()
+    }
+    fn age(&self) -> Option<String> {
+        None
+    }
+}
+
+impl Detail for ResourceEvent {
+    fn name(&self) -> String {
+        self.type_.clone()
+    }
+    fn value(&self) -> String {
+        self.message.clone()
+    }
+    fn age(&self) -> Option<String> {
+        Some(self.age.clone())
+    }
 }
 
 impl Cert {

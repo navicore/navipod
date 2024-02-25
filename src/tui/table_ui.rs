@@ -149,7 +149,7 @@ pub fn render_detail_section(
     background_color: Color,
     area: Rect,
     title: &str,
-    details: &Vec<(String, String, Option<String>)>,
+    details: &[(String, String, Option<String>)],
 ) {
     let block_title = format!("{} ({})", title, details.len());
 
@@ -159,7 +159,7 @@ pub fn render_detail_section(
         background_color,
         area,
         &block_title,
-        details,
+        &details,
     );
 }
 

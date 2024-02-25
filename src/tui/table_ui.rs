@@ -150,7 +150,7 @@ pub fn render_detail_section<T: Detail>(
     background_color: Color,
     area: Rect,
     title: &str,
-    details: &Vec<T>,
+    details: &[T],
 ) {
     let block_title = format!("{} ({})", title, details.len());
     let chunks = details

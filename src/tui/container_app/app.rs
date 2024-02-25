@@ -1,8 +1,6 @@
 use ratatui::widgets::{ScrollbarState, TableState};
 
-use crate::tui::data::{
-    container_constraint_len_calculator, Container, ContainerEnvVar, ContainerMount,
-};
+use crate::tui::data::{container_constraint_len_calculator, Container};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 
@@ -81,15 +79,27 @@ impl App {
         }
     }
 
-    // Method to get mounts details of the selected item
-    pub fn get_mount_details(&mut self) -> Vec<ContainerMount> {
-        self.get_selected_item()
-            .map_or_else(Vec::new, |container| container.mounts.clone())
+    // pub fn get_event_details(&mut self) -> Vec<(String, String, Option<String>)> {
+    //     vec![]
+    // }
+
+    pub fn get_left_details(&mut self) -> Vec<(String, String, Option<String>)> {
+        self.get_selected_item().map_or_else(Vec::new, |container| {
+            container
+                .mounts
+                .iter()
+                .map(|label| (label.name.clone(), label.value.clone(), None))
+                .collect()
+        })
     }
 
-    // Method to get environment variables of the selected item
-    pub fn get_env_var_details(&mut self) -> Vec<ContainerEnvVar> {
-        self.get_selected_item()
-            .map_or_else(Vec::new, |container| container.envvars.clone())
+    pub fn get_right_details(&mut self) -> Vec<(String, String, Option<String>)> {
+        self.get_selected_item().map_or_else(Vec::new, |container| {
+            container
+                .envvars
+                .iter()
+                .map(|label| (label.name.clone(), label.value.clone(), None))
+                .collect()
+        })
     }
 }

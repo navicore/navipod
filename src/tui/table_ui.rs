@@ -1,4 +1,3 @@
-use crate::tui::data::Detail;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
@@ -144,19 +143,15 @@ pub trait TuiTableState {
     fn set_table_height(&mut self, table_height: usize);
 }
 
-pub fn render_detail_section<T: Detail>(
+pub fn render_detail_section(
     f: &mut Frame,
     foreground_color: Color,
     background_color: Color,
     area: Rect,
     title: &str,
-    details: &[T],
+    details: &Vec<(String, String, Option<String>)>,
 ) {
     let block_title = format!("{} ({})", title, details.len());
-    let chunks = details
-        .iter()
-        .map(|d| (d.name(), d.value(), d.age()))
-        .collect::<Vec<_>>();
 
     render_block_with_title_and_details(
         f,
@@ -164,7 +159,7 @@ pub fn render_detail_section<T: Detail>(
         background_color,
         area,
         &block_title,
-        &chunks,
+        details,
     );
 }
 

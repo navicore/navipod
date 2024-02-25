@@ -28,7 +28,7 @@ use crate::tui::stream::{async_key_events, async_pod_events, async_rs_events, Me
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::utils::time::asn1time_to_future_days_string;
 
-// #[derive(Clone, Debug)]
+// todo: change Apps enum to Switch command in AppCommand unum
 // enum AppCommand {
 //     Update,
 //     Switch,
@@ -338,41 +338,113 @@ async fn run_pod_app<B: Backend + Send>(
     Ok(app_holder)
 }
 
+impl AppBehavior for cert_app::app::App {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Cert { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Esc, Up};
+                    match key.code {
+                        Char('q') | Esc => {
+                            app_holder = None;
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            //todo: stop all this cloning
+                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        _k => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(app_holder)
+    }
+    async fn draw_ui<B: Backend>(&self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
+        terminal.draw(|f| cert_app::ui::ui(f, &mut self.clone()))?;
+        Ok(())
+    }
+}
+
 async fn run_cert_app<B: Backend + Send>(
     terminal: &mut Terminal<B>,
     app: &mut cert_app::app::App,
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
-    let mut key_events = async_key_events(should_stop.clone());
+    let mut events = async_key_events(should_stop.clone());
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Cert { app: app.clone() });
 
     loop {
-        terminal.draw(|f| cert_app::ui::ui(f, &mut app.clone()))?;
-        if let Some(Message::Key(Event::Key(key))) = key_events.next().await {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Esc, Up};
-                match key.code {
-                    Char('q') | Esc => {
-                        app_holder = None;
-                        break;
-                    }
-                    Char('j') | Down => {
-                        app.next();
-                    }
-                    Char('k') | Up => {
-                        app.previous();
-                    }
-                    Char('c' | 'C') => {
-                        app.next_color();
-                    }
-                    _ => {}
-                }
-            }
-        }
+        _ = app.draw_ui(terminal).await;
+        if let Some(event) = events.next().await {
+            app_holder = app.handle_event(&event).await?;
+            break;
+        };
     }
+
     should_stop.store(true, Ordering::Relaxed);
     Ok(app_holder)
+}
+
+impl AppBehavior for container_app::app::App {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Container { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Esc, Up};
+                    match key.code {
+                        Char('q') | Esc => {
+                            app_holder = None;
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            //todo: stop all this cloning
+                            app_holder = Some(Apps::Container { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Container { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Container { app: self.clone() });
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        _k => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(app_holder)
+    }
+    async fn draw_ui<B: Backend>(&self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
+        terminal.draw(|f| container_app::ui::ui(f, &mut self.clone()))?;
+        Ok(())
+    }
 }
 
 async fn run_container_app<B: Backend + Send>(
@@ -380,36 +452,76 @@ async fn run_container_app<B: Backend + Send>(
     app: &mut container_app::app::App,
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
-    let mut key_events = async_key_events(should_stop.clone());
+    let mut events = async_key_events(should_stop.clone());
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Container { app: app.clone() });
 
     loop {
-        terminal.draw(|f| container_app::ui::ui(f, &mut app.clone()))?;
-        if let Some(Message::Key(Event::Key(key))) = key_events.next().await {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Esc, Up};
-                match key.code {
-                    Char('q') | Esc => {
-                        app_holder = None;
-                        break;
-                    }
-                    Char('j') | Down => {
-                        app.next();
-                    }
-                    Char('k') | Up => {
-                        app.previous();
-                    }
-                    Char('c' | 'C') => {
-                        app.next_color();
-                    }
-                    _ => {}
-                }
-            }
-        }
+        _ = app.draw_ui(terminal).await;
+        if let Some(event) = events.next().await {
+            app_holder = app.handle_event(&event).await?;
+            break;
+        };
     }
+
     should_stop.store(true, Ordering::Relaxed);
     Ok(app_holder)
+}
+
+impl AppBehavior for ingress_app::app::App {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Ingress { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Esc, Up};
+                    match key.code {
+                        Char('q') | Esc => {
+                            app_holder = None;
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            //todo: stop all this cloning
+                            app_holder = Some(Apps::Ingress { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Ingress { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Ingress { app: self.clone() });
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        Enter => {
+                            if let Some(selection) = self.get_selected_item() {
+                                let host = &selection.host;
+                                let data_vec = create_cert_data_vec(&host.clone()).await?;
+                                let new_app_holder = Apps::Cert {
+                                    app: cert_app::app::App::new(data_vec),
+                                };
+                                app_holder = Some(new_app_holder);
+                                debug!("changing app from pod to cert...");
+                            };
+                        }
+
+                        _k => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(app_holder)
+    }
+    async fn draw_ui<B: Backend>(&self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
+        terminal.draw(|f| ingress_app::ui::ui(f, &mut self.clone()))?;
+        Ok(())
+    }
 }
 
 async fn run_ingress_app<B: Backend + Send>(
@@ -417,47 +529,18 @@ async fn run_ingress_app<B: Backend + Send>(
     app: &mut ingress_app::app::App,
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
-    let mut key_events = async_key_events(should_stop.clone());
+    let mut events = async_key_events(should_stop.clone());
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Ingress { app: app.clone() });
 
     loop {
-        terminal.draw(|f| ingress_app::ui::ui(f, &mut app.clone()))?;
-        if let Some(Message::Key(Event::Key(key))) = key_events.next().await {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Enter, Esc, Up};
-                match key.code {
-                    Char('q') | Esc => {
-                        app_holder = None;
-                        break;
-                    }
-                    Char('j') | Down => {
-                        app.next();
-                    }
-                    Char('k') | Up => {
-                        app.previous();
-                    }
-                    Char('c' | 'C') => {
-                        app.next_color();
-                    }
-                    Enter => {
-                        if let Some(selection) = app.get_selected_item() {
-                            let host = &selection.host;
-                            let data_vec = create_cert_data_vec(&host.clone()).await?;
-                            let new_app_holder = Apps::Cert {
-                                app: cert_app::app::App::new(data_vec),
-                            };
-                            app_holder = Some(new_app_holder);
-                            debug!("changing app from pod to cert...");
-                            break;
-                        };
-                    }
-
-                    _ => {}
-                }
-            }
-        }
+        _ = app.draw_ui(terminal).await;
+        if let Some(event) = events.next().await {
+            app_holder = app.handle_event(&event).await?;
+            break;
+        };
     }
+
     should_stop.store(true, Ordering::Relaxed);
     Ok(app_holder)
 }

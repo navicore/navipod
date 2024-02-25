@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{error::Error, io};
-use time::OffsetDateTime;
-use x509_parser::time::ASN1Time; // Import time::Duration as TimeDuration to avoid name clash
 
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -28,6 +26,7 @@ use crate::tui::pod_app;
 use crate::tui::rs_app;
 use crate::tui::stream::{async_key_events, async_pod_events, async_rs_events, Message};
 use crate::tui::table_ui::TuiTableState;
+use crate::tui::utils::ui_time::asn1time_to_future_days_string;
 
 /// # Errors
 ///
@@ -90,20 +89,6 @@ async fn create_ingress_data_vec(
         },
         Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
     }
-}
-
-fn asn1time_to_future_days_string(asn1_time: &ASN1Time) -> String {
-    let now = OffsetDateTime::now_utc();
-
-    // Directly get OffsetDateTime from ASN1Time
-    let target_time = asn1_time.to_datetime();
-
-    // Calculate the difference in days
-    let duration = target_time - now;
-    let days_difference = duration.whole_days();
-
-    // Return the difference in days as a String with a "d" suffix
-    format!("{days_difference}d")
 }
 
 async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Error> {

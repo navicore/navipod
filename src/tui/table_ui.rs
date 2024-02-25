@@ -159,7 +159,7 @@ pub fn render_detail_section(
         background_color,
         area,
         &block_title,
-        &details,
+        details,
     );
 }
 

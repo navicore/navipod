@@ -88,8 +88,8 @@ fn render_details(f: &mut Frame, app: &mut App, area: Rect) {
     let detail_rects =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
-    let mount_details = app.get_mount_details();
-    let env_var_details = app.get_env_var_details();
+    let mount_details = app.get_left_details();
+    let env_var_details = app.get_right_details();
 
     let (foreground_color, background_color) = get_colors(app);
     render_detail_section(

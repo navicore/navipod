@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use ratatui::widgets::{ScrollbarState, TableState};
 
-use crate::tui::data::{pod_constraint_len_calculator, ResourcceLabel, ResourceEvent, RsPod};
+use crate::tui::data::{pod_constraint_len_calculator, RsPod};
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 
@@ -82,23 +82,34 @@ impl App {
         }
     }
 
-    pub fn get_event_details(&mut self) -> Vec<ResourceEvent> {
-        self.get_selected_item()
-            .map_or_else(Vec::new, |pod| pod.events.clone())
+    pub fn get_event_details(&mut self) -> Vec<(String, String, Option<String>)> {
+        self.get_selected_item().map_or_else(Vec::new, |pod| {
+            pod.events
+                .iter()
+                .map(|event| {
+                    (
+                        event.type_.clone(),
+                        event.message.clone(),
+                        Some(event.age.clone()),
+                    )
+                })
+                .collect()
+        })
     }
 
-    pub fn get_label_details(&mut self) -> Vec<ResourcceLabel> {
+    pub fn get_left_details(&mut self) -> Vec<(String, String, Option<String>)> {
         self.get_selected_item().map_or_else(Vec::new, |pod| {
             pod.selectors.clone().map_or_else(Vec::new, |labels| {
                 let mut r = Vec::new();
                 for (name, value) in &labels {
-                    r.push(ResourcceLabel {
-                        name: name.to_string(),
-                        value: value.to_string(),
-                    });
+                    r.push((name.to_string(), value.to_string(), None));
                 }
                 r
             })
         })
     }
+
+    // pub fn get_right_details(&mut self) -> Vec<ResourcceLabel> {
+    //     vec![]
+    // }
 }

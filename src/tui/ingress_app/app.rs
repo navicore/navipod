@@ -6,9 +6,12 @@ use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_cert_data_vec, AppBehavior, Apps};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use futures::{stream, Stream};
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::io;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tracing::debug;
 
 #[derive(Clone, Debug)]
@@ -136,6 +139,10 @@ impl AppBehavior for ingress_app::app::App {
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
         terminal.draw(|f| ingress_app::ui::ui(f, &mut self.clone()))?;
         Ok(())
+    }
+
+    fn stream(&self, _should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
+        stream::empty()
     }
 }
 

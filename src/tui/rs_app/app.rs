@@ -1,8 +1,4 @@
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
-use ratatui::widgets::{ScrollbarState, TableState};
-use std::io;
-use tracing::debug;
-
+use crate::k8s::rs::list_replicas;
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::ingress_app;
 use crate::tui::pod_app;
@@ -11,7 +7,20 @@ use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use futures::Stream;
 use ratatui::prelude::*;
+use ratatui::widgets::{ScrollbarState, TableState};
+use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::time::sleep;
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::debug;
+
+const POLL_MS: u64 = 5000;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -156,6 +165,33 @@ impl AppBehavior for App {
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
         terminal.draw(|f| ui::ui(f, self))?; // Pass self directly if mutable access is not required
         Ok(())
+    }
+
+    fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
+        let (tx, rx) = mpsc::channel(1);
+        let initial_items = self.get_items().to_vec(); // Clone or get owned data from self
+
+        tokio::spawn(async move {
+            while !should_stop.load(Ordering::Relaxed) {
+                match list_replicas().await {
+                    Ok(d) => {
+                        // Assuming list_replicas and get_items are comparable
+                        if !d.is_empty() && d != initial_items {
+                            let sevent = Message::Rs(d);
+                            if tx.send(sevent).await.is_err() {
+                                break;
+                            }
+                        }
+                        sleep(Duration::from_millis(POLL_MS)).await;
+                    }
+                    Err(_e) => {
+                        break;
+                    }
+                };
+            }
+        });
+
+        ReceiverStream::new(rx)
     }
 }
 

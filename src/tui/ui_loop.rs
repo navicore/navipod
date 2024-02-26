@@ -8,14 +8,14 @@ use crate::tui::data;
 use crate::tui::ingress_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app;
-use crate::tui::stream::{async_key_events, async_pod_events, async_rs_events, Message};
-use crate::tui::table_ui::TuiTableState;
+use crate::tui::stream::{async_key_events, Message};
 use crate::tui::utils::time::asn1time_to_future_days_string;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use futures::stream::Stream;
 use futures::stream::StreamExt;
 use ratatui::prelude::*;
 use std::collections::BTreeMap;
@@ -35,6 +35,8 @@ pub(crate) trait AppBehavior {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error>;
 
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error>;
+
+    fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message>;
 }
 
 /// # Errors
@@ -133,7 +135,8 @@ async fn run_rs_app<B: Backend + Send>(
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
-    let data_events = async_rs_events(should_stop.clone(), app.get_items().to_vec());
+    let data_init_clone = app.clone();
+    let data_events = data_init_clone.stream(should_stop.clone());
     let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
@@ -161,11 +164,8 @@ async fn run_pod_app<B: Backend + Send>(
 ) -> Result<Option<Apps>, io::Error> {
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
-    let data_events = async_pod_events(
-        app.selector.clone(),
-        should_stop.clone(),
-        app.get_items().to_vec(),
-    );
+    let data_init_clone = app.clone();
+    let data_events = data_init_clone.stream(should_stop.clone());
     let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC

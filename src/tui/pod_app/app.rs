@@ -1,3 +1,4 @@
+use crate::k8s::pods::list_rspods;
 use crate::tui::container_app;
 use crate::tui::data::{pod_constraint_len_calculator, RsPod};
 use crate::tui::ingress_app;
@@ -7,11 +8,20 @@ use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_container_data_vec, create_ingress_data_vec, AppBehavior, Apps};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::collections::BTreeMap;
 use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::time::sleep;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
+
+const POLL_MS: u64 = 5000;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -155,6 +165,35 @@ impl AppBehavior for pod_app::app::App {
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
         terminal.draw(|f| pod_app::ui::ui(f, &mut self.clone()))?;
         Ok(())
+    }
+
+    fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
+        let (tx, rx) = mpsc::channel(100);
+
+        let initial_items = self.get_items().to_vec();
+        let selector = self.selector.clone();
+
+        tokio::spawn(async move {
+            while !should_stop.load(Ordering::Relaxed) {
+                //get Vec and send
+                match list_rspods(selector.clone()).await {
+                    Ok(d) => {
+                        if !d.is_empty() && d != initial_items {
+                            let sevent = Message::Pod(d);
+                            if tx.send(sevent).await.is_err() {
+                                break;
+                            }
+                        }
+                        sleep(Duration::from_millis(POLL_MS)).await;
+                    }
+                    Err(_e) => {
+                        break;
+                    }
+                }
+            }
+        });
+
+        ReceiverStream::new(rx)
     }
 }
 

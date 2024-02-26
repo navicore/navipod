@@ -1,10 +1,17 @@
-use std::collections::BTreeMap;
-
-use ratatui::widgets::{ScrollbarState, TableState};
-
+use crate::tui::container_app;
 use crate::tui::data::{pod_constraint_len_calculator, RsPod};
+use crate::tui::ingress_app;
+use crate::tui::pod_app;
+use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
+use crate::tui::ui_loop::{create_container_data_vec, create_ingress_data_vec, AppBehavior, Apps};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::prelude::*;
+use ratatui::widgets::{ScrollbarState, TableState};
+use std::collections::BTreeMap;
+use std::io;
+use tracing::debug;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -27,6 +34,10 @@ impl TuiTableState for App {
 
     fn get_state(&mut self) -> &mut TableState {
         &mut self.state
+    }
+
+    fn set_state(&mut self, state: TableState) {
+        self.state = state;
     }
 
     fn get_scroll_state(&self) -> &ScrollbarState {
@@ -63,9 +74,88 @@ impl TuiTableState for App {
     fn set_table_height(&mut self, table_height: usize) {
         self.table_height = table_height;
     }
+}
 
-    fn page_forward(&mut self) {}
-    fn page_backward(&mut self) {}
+impl AppBehavior for pod_app::app::App {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Pod { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Esc, Up};
+                    match key.code {
+                        Char('q') | Esc => {
+                            app_holder = None;
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            //todo: stop all this cloning
+                            app_holder = Some(Apps::Pod { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Pod { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Pod { app: self.clone() });
+                        }
+                        Char('i' | 'I') => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
+                                    let data_vec =
+                                        create_ingress_data_vec(selector.clone()).await?;
+                                    let new_app_holder = Apps::Ingress {
+                                        app: ingress_app::app::App::new(data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to ingress...");
+                                };
+                            };
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        Enter => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selectors) = selection.selectors.clone() {
+                                    let data_vec = create_container_data_vec(
+                                        selectors,
+                                        selection.name.clone(),
+                                    )
+                                    .await?;
+                                    let new_app_holder = Apps::Container {
+                                        app: container_app::app::App::new(data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                };
+                            }
+                        }
+                        _k => {}
+                    }
+                }
+            }
+            Message::Pod(data_vec) => {
+                debug!("updating pod app data...");
+                let new_app = Self {
+                    longest_item_lens: pod_constraint_len_calculator(data_vec),
+                    items: data_vec.clone(),
+                    ..self.clone()
+                };
+                let new_app_holder = Apps::Pod { app: new_app };
+                app_holder = Some(new_app_holder);
+            }
+            _ => {}
+        }
+        Ok(app_holder)
+    }
+    fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
+        terminal.draw(|f| pod_app::ui::ui(f, &mut self.clone()))?;
+        Ok(())
+    }
 }
 
 impl App {

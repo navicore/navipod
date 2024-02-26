@@ -21,6 +21,12 @@ pub enum Message {
     Key(Event),
     Pod(Vec<data::RsPod>),
     Rs(Vec<data::Rs>),
+    #[allow(dead_code)]
+    Ingress(Vec<data::Ingress>),
+    #[allow(dead_code)]
+    Container(Vec<data::Container>),
+    #[allow(dead_code)]
+    Cert(Vec<data::Cert>),
 }
 
 pub fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {

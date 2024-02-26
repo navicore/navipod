@@ -1,5 +1,5 @@
 use crate::tui::rs_app::app::App;
-use crate::tui::table_ui::{render_detail_section, TuiTableState};
+use crate::tui::table_ui::render_detail_section;
 use ratatui::{
     prelude::*,
     widgets::{Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table},
@@ -7,8 +7,7 @@ use ratatui::{
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let rects = Layout::vertical([Constraint::Min(8), Constraint::Percentage(40)]).split(f.size());
-
-    app.set_colors();
+    //app.set_colors();
 
     let table_area = rects[0];
     let details_area = rects[1];
@@ -52,7 +51,7 @@ const fn get_colors(app: &App) -> (Color, Color) {
     (app.colors.header_fg, app.colors.buffer_bg)
 }
 
-fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
+fn render_table(f: &mut Frame, app: &App, area: Rect) {
     let header_style = Style::default()
         .fg(app.colors.header_fg)
         .bg(app.colors.header_bg);
@@ -97,10 +96,10 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
     .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]))
     .bg(app.colors.buffer_bg)
     .highlight_spacing(HighlightSpacing::Always);
-    f.render_stateful_widget(t, area, &mut app.state);
+    f.render_stateful_widget(t, area, &mut app.state.clone());
 }
 
-fn render_scrollbar(f: &mut Frame, app: &mut App, area: Rect) {
+fn render_scrollbar(f: &mut Frame, app: &App, area: Rect) {
     f.render_stateful_widget(
         Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
@@ -110,6 +109,6 @@ fn render_scrollbar(f: &mut Frame, app: &mut App, area: Rect) {
             vertical: 1,
             horizontal: 1,
         }),
-        &mut app.scroll_state,
+        &mut app.scroll_state.clone(),
     );
 }

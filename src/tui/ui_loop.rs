@@ -138,12 +138,17 @@ async fn run_rs_app<B: Backend + Send>(
 
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Rs { app: app.clone() });
+    let current_app = app;
 
     loop {
-        _ = app.draw_ui(terminal);
+        _ = current_app.draw_ui(terminal);
         if let Some(event) = events.next().await {
-            app_holder = app.handle_event(&event).await?;
-            break;
+            app_holder = current_app.handle_event(&event).await?;
+            if let Some(Apps::Rs { app }) = &app_holder {
+                *current_app = app.clone();
+            } else {
+                break;
+            };
         };
     }
     should_stop.store(true, Ordering::Relaxed);
@@ -166,13 +171,17 @@ async fn run_pod_app<B: Backend + Send>(
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Pod { app: app.clone() });
 
+    let current_app = app;
+
     loop {
-        _ = app.draw_ui(terminal);
+        _ = current_app.draw_ui(terminal);
         if let Some(event) = events.next().await {
-            app_holder = app.handle_event(&event).await?;
-            //todo: when switching to AppCommand from Apps you can decide to only
-            //break when command is "switch apps"
-            break;
+            app_holder = current_app.handle_event(&event).await?;
+            if let Some(Apps::Pod { app }) = &app_holder {
+                *current_app = app.clone();
+            } else {
+                break;
+            };
         };
     }
 
@@ -189,13 +198,17 @@ async fn run_cert_app<B: Backend + Send>(
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Cert { app: app.clone() });
 
+    let current_app = app;
+
     loop {
-        _ = app.draw_ui(terminal);
+        _ = current_app.draw_ui(terminal);
         if let Some(event) = events.next().await {
-            app_holder = app.handle_event(&event).await?;
-            //todo: when switching to AppCommand from Apps you can decide to only
-            //break when command is "switch apps"
-            break;
+            app_holder = current_app.handle_event(&event).await?;
+            if let Some(Apps::Cert { app }) = &app_holder {
+                *current_app = app.clone();
+            } else {
+                break;
+            };
         };
     }
 
@@ -212,11 +225,17 @@ async fn run_container_app<B: Backend + Send>(
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Container { app: app.clone() });
 
+    let current_app = app;
+
     loop {
-        _ = app.draw_ui(terminal);
+        _ = current_app.draw_ui(terminal);
         if let Some(event) = events.next().await {
-            app_holder = app.handle_event(&event).await?;
-            break;
+            app_holder = current_app.handle_event(&event).await?;
+            if let Some(Apps::Container { app }) = &app_holder {
+                *current_app = app.clone();
+            } else {
+                break;
+            };
         };
     }
 
@@ -233,11 +252,17 @@ async fn run_ingress_app<B: Backend + Send>(
     #[allow(unused_assignments)] // we might quit or ESC
     let mut app_holder = Some(Apps::Ingress { app: app.clone() });
 
+    let current_app = app;
+
     loop {
-        _ = app.draw_ui(terminal);
+        _ = current_app.draw_ui(terminal);
         if let Some(event) = events.next().await {
-            app_holder = app.handle_event(&event).await?;
-            break;
+            app_holder = current_app.handle_event(&event).await?;
+            if let Some(Apps::Ingress { app }) = &app_holder {
+                *current_app = app.clone();
+            } else {
+                break;
+            };
         };
     }
 
@@ -257,9 +282,7 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
         match &mut app_holder {
             Apps::Rs { app } => {
                 if let Some(new_app_holder) = run_rs_app(terminal, app).await? {
-                    if !matches!(new_app_holder, Apps::Rs { .. }) {
-                        history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    }
+                    history.push(Arc::new(app_holder.clone())); // this is an app switch
                     app_holder = new_app_holder;
                 } else {
                     break; //quit
@@ -268,9 +291,7 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Pod { app } => {
                 if let Some(new_app_holder) = run_pod_app(terminal, app).await? {
-                    if !matches!(new_app_holder, Apps::Pod { .. }) {
-                        history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    }
+                    history.push(Arc::new(app_holder.clone())); // this is an app switch
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();
@@ -281,9 +302,7 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Container { app } => {
                 if let Some(new_app_holder) = run_container_app(terminal, app).await? {
-                    if !matches!(new_app_holder, Apps::Container { .. }) {
-                        history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    }
+                    history.push(Arc::new(app_holder.clone())); // this is an app switch
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();
@@ -294,9 +313,7 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Cert { app } => {
                 if let Some(new_app_holder) = run_cert_app(terminal, app).await? {
-                    if !matches!(new_app_holder, Apps::Cert { .. }) {
-                        history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    }
+                    history.push(Arc::new(app_holder.clone())); // this is an app switch
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();
@@ -307,9 +324,7 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
             Apps::Ingress { app } => {
                 if let Some(new_app_holder) = run_ingress_app(terminal, app).await? {
-                    if !matches!(new_app_holder, Apps::Ingress { .. }) {
-                        history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    }
+                    history.push(Arc::new(app_holder.clone())); // this is an app switch
                     app_holder = new_app_holder;
                 } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();

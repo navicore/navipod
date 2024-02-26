@@ -1,8 +1,17 @@
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::widgets::{ScrollbarState, TableState};
+use std::io;
+use tracing::debug;
 
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
+use crate::tui::ingress_app;
+use crate::tui::pod_app;
+use crate::tui::rs_app::ui;
+use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
+use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
+use ratatui::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -26,6 +35,10 @@ impl TuiTableState for App {
         &mut self.state
     }
 
+    fn set_state(&mut self, state: TableState) {
+        self.state = state;
+    }
+
     fn get_scroll_state(&self) -> &ScrollbarState {
         &self.scroll_state
     }
@@ -33,6 +46,7 @@ impl TuiTableState for App {
     fn set_scroll_state(&mut self, scroll_state: ScrollbarState) {
         self.scroll_state = scroll_state;
     }
+
     fn get_table_colors(&self) -> &TableColors {
         &self.colors
     }
@@ -61,14 +75,88 @@ impl TuiTableState for App {
         self.state = TableState::default().with_selected(0);
         self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
     }
-    fn page_forward(&mut self) {
-        let current_offset = self.state.offset();
-        let candidate_offset: usize = current_offset + self.table_height;
-        if self.items.len() * ITEM_HEIGHT < candidate_offset {
-            self.state = self.state.clone().with_offset(candidate_offset);
+}
+
+impl AppBehavior for App {
+    async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Rs { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Up};
+                    match key.code {
+                        Char('q') => {
+                            app_holder = None;
+                            debug!("quiting...");
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            //todo: stop all this cloning
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('i' | 'I') => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
+                                    let data_vec =
+                                        create_ingress_data_vec(selector.clone()).await?;
+                                    let new_app_holder = Apps::Ingress {
+                                        app: ingress_app::app::App::new(data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to ingress...");
+                                };
+                            };
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        Enter => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selectors) = selection.selectors.clone() {
+                                    let data_vec = vec![];
+                                    let new_app_holder = Apps::Pod {
+                                        app: pod_app::app::App::new(selectors, data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to pod...");
+                                };
+                            };
+                        }
+                        _k => {}
+                    }
+                }
+            }
+            Message::Rs(data_vec) => {
+                debug!("updating rs app data...");
+                let new_app = Self {
+                    longest_item_lens: rs_constraint_len_calculator(data_vec),
+                    items: data_vec.clone(),
+                    ..self.clone()
+                };
+                let new_app_holder = Apps::Rs { app: new_app };
+                app_holder = Some(new_app_holder);
+            }
+            _ => {}
         }
+        Ok(app_holder)
     }
-    fn page_backward(&mut self) {}
+
+    fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
+        terminal.draw(|f| ui::ui(f, self))?; // Pass self directly if mutable access is not required
+        Ok(())
+    }
 }
 
 impl App {

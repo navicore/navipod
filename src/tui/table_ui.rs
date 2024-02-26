@@ -83,7 +83,8 @@ pub trait TuiTableState {
 
     fn next(&mut self) {
         let pos = self.get_state().selected().unwrap_or(0);
-        if pos < self.get_items().len() - 1 {
+        let len = self.get_items().len();
+        if len > 0 && pos < len - 1 {
             // don't wrap
             let new_pos = pos + 1;
             self.get_state().select(Some(new_pos));
@@ -104,6 +105,18 @@ pub trait TuiTableState {
             self.set_scroll_state(new_scroll_state);
         }
     }
+
+    fn page_forward(&mut self) {
+        let current_offset = self.get_state().offset();
+        let candidate_offset: usize = current_offset + self.get_table_height();
+        if self.get_items().len() * ITEM_HEIGHT < candidate_offset {
+            let new_state = self.get_state().clone().with_offset(candidate_offset);
+            self.set_state(new_state);
+        }
+    }
+
+    fn page_backward(&mut self) {}
+
     fn next_color(&mut self) {
         //self.color_index = (self.color_index + 1) % PALETTES.len();
         let new_color_index = (self.get_color_index() + 1) % PALETTES.len();
@@ -130,6 +143,7 @@ pub trait TuiTableState {
 
     fn get_items(&self) -> &[Self::Item];
     fn get_state(&mut self) -> &mut TableState;
+    fn set_state(&mut self, state: TableState);
     fn get_scroll_state(&self) -> &ScrollbarState;
     fn set_scroll_state(&mut self, scroll_state: ScrollbarState);
     fn get_table_colors(&self) -> &TableColors;
@@ -137,8 +151,6 @@ pub trait TuiTableState {
     fn get_color_index(&self) -> usize;
     fn set_color_index(&mut self, color_index: usize);
     fn reset_selection_state(&mut self);
-    fn page_forward(&mut self);
-    fn page_backward(&mut self);
     fn get_table_height(&self) -> usize;
     fn set_table_height(&mut self, table_height: usize);
 }

@@ -21,6 +21,7 @@ fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEven
         .as_deref()
         .unwrap_or_default()
         .replace(rs_name, "")
+        .replace("combined from similar events", "combined ")
         .trim()
         .trim_end_matches(':')
         .to_string();

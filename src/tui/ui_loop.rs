@@ -24,13 +24,6 @@ use std::sync::Arc;
 use std::{error::Error, io};
 use tracing::error;
 
-// todo: change Apps enum to Switch command in AppCommand unum
-// enum AppCommand {
-//     Update,
-//     Switch,
-//     Quit,
-// }
-
 pub(crate) trait AppBehavior {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error>;
 
@@ -129,141 +122,104 @@ pub async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Err
     }
 }
 
-async fn run_rs_app<B: Backend + Send>(
+async fn run_app<B>(
     terminal: &mut Terminal<B>,
-    app: &mut rs_app::app::App,
-) -> Result<Option<Apps>, io::Error> {
+    apps_app: &mut Apps,
+) -> Result<Option<Apps>, io::Error>
+where
+    B: Backend + Send,
+{
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
-    let data_init_clone = app.clone();
-    let data_events = data_init_clone.stream(should_stop.clone());
-    let mut events = futures::stream::select(data_events, key_events);
 
     #[allow(unused_assignments)] // we might quit or ESC
-    let mut app_holder = Some(Apps::Rs { app: app.clone() });
-    let current_app = app;
-
-    loop {
-        _ = current_app.draw_ui(terminal);
-        if let Some(event) = events.next().await {
-            app_holder = current_app.handle_event(&event).await?;
-            if let Some(Apps::Rs { app }) = &app_holder {
-                *current_app = app.clone();
-            } else {
-                break;
-            };
-        };
-    }
-    should_stop.store(true, Ordering::Relaxed);
-    Ok(app_holder)
-}
-
-async fn run_pod_app<B: Backend + Send>(
-    terminal: &mut Terminal<B>,
-    app: &mut pod_app::app::App,
-) -> Result<Option<Apps>, io::Error> {
-    let should_stop = Arc::new(AtomicBool::new(false));
-    let key_events = async_key_events(should_stop.clone());
-    let data_init_clone = app.clone();
-    let data_events = data_init_clone.stream(should_stop.clone());
-    let mut events = futures::stream::select(data_events, key_events);
-
-    #[allow(unused_assignments)] // we might quit or ESC
-    let mut app_holder = Some(Apps::Pod { app: app.clone() });
-
-    let current_app = app;
-
-    loop {
-        _ = current_app.draw_ui(terminal);
-        if let Some(event) = events.next().await {
-            app_holder = current_app.handle_event(&event).await?;
-            if let Some(Apps::Pod { app }) = &app_holder {
-                *current_app = app.clone();
-            } else {
-                break;
-            };
-        };
-    }
-
-    should_stop.store(true, Ordering::Relaxed);
-    Ok(app_holder)
-}
-
-async fn run_cert_app<B: Backend + Send>(
-    terminal: &mut Terminal<B>,
-    app: &mut cert_app::app::App,
-) -> Result<Option<Apps>, io::Error> {
-    let should_stop = Arc::new(AtomicBool::new(false));
-    let mut events = async_key_events(should_stop.clone());
-    #[allow(unused_assignments)] // we might quit or ESC
-    let mut app_holder = Some(Apps::Cert { app: app.clone() });
-
-    let current_app = app;
-
-    loop {
-        _ = current_app.draw_ui(terminal);
-        if let Some(event) = events.next().await {
-            app_holder = current_app.handle_event(&event).await?;
-            if let Some(Apps::Cert { app }) = &app_holder {
-                *current_app = app.clone();
-            } else {
-                break;
-            };
-        };
-    }
-
-    should_stop.store(true, Ordering::Relaxed);
-    Ok(app_holder)
-}
-
-async fn run_container_app<B: Backend + Send>(
-    terminal: &mut Terminal<B>,
-    app: &mut container_app::app::App,
-) -> Result<Option<Apps>, io::Error> {
-    let should_stop = Arc::new(AtomicBool::new(false));
-    let mut events = async_key_events(should_stop.clone());
-    #[allow(unused_assignments)] // we might quit or ESC
-    let mut app_holder = Some(Apps::Container { app: app.clone() });
-
-    let current_app = app;
-
-    loop {
-        _ = current_app.draw_ui(terminal);
-        if let Some(event) = events.next().await {
-            app_holder = current_app.handle_event(&event).await?;
-            if let Some(Apps::Container { app }) = &app_holder {
-                *current_app = app.clone();
-            } else {
-                break;
-            };
-        };
-    }
-
-    should_stop.store(true, Ordering::Relaxed);
-    Ok(app_holder)
-}
-
-async fn run_ingress_app<B: Backend + Send>(
-    terminal: &mut Terminal<B>,
-    app: &mut ingress_app::app::App,
-) -> Result<Option<Apps>, io::Error> {
-    let should_stop = Arc::new(AtomicBool::new(false));
-    let mut events = async_key_events(should_stop.clone());
-    #[allow(unused_assignments)] // we might quit or ESC
-    let mut app_holder = Some(Apps::Ingress { app: app.clone() });
-
-    let current_app = app;
-
-    loop {
-        _ = current_app.draw_ui(terminal);
-        if let Some(event) = events.next().await {
-            app_holder = current_app.handle_event(&event).await?;
-            if let Some(Apps::Ingress { app }) = &app_holder {
-                *current_app = app.clone();
-            } else {
-                break;
-            };
-        };
+    let mut app_holder = Some(apps_app.clone());
+    match apps_app {
+        Apps::Rs { ref mut app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Rs { app }) = &app_holder {
+                        current_app = app.clone();
+                    } else {
+                        break;
+                    };
+                };
+            }
+        }
+        Apps::Pod { app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Pod { app }) = &app_holder {
+                        current_app = app.clone();
+                    } else {
+                        break;
+                    };
+                };
+            }
+        }
+        Apps::Container { app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Container { app }) = &app_holder {
+                        current_app = app.clone();
+                    } else {
+                        break;
+                    };
+                };
+            }
+        }
+        Apps::Cert { app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Cert { app }) = &app_holder {
+                        current_app = app.clone();
+                    } else {
+                        break;
+                    };
+                };
+            }
+        }
+        Apps::Ingress { app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Ingress { app }) = &app_holder {
+                        current_app = app.clone();
+                    } else {
+                        break;
+                    };
+                };
+            }
+        }
     }
 
     should_stop.store(true, Ordering::Relaxed);
@@ -279,59 +235,13 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
     let mut history: Vec<Arc<Apps>> = Vec::new();
     loop {
-        match &mut app_holder {
-            Apps::Rs { app } => {
-                if let Some(new_app_holder) = run_rs_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    app_holder = new_app_holder;
-                } else {
-                    break; //quit
-                }
-            }
-
-            Apps::Pod { app } => {
-                if let Some(new_app_holder) = run_pod_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    app_holder = new_app_holder;
-                } else if let Some(previous_app) = history.pop() {
-                    app_holder = (*previous_app).clone();
-                } else {
-                    break;
-                }
-            }
-
-            Apps::Container { app } => {
-                if let Some(new_app_holder) = run_container_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    app_holder = new_app_holder;
-                } else if let Some(previous_app) = history.pop() {
-                    app_holder = (*previous_app).clone();
-                } else {
-                    break;
-                }
-            }
-
-            Apps::Cert { app } => {
-                if let Some(new_app_holder) = run_cert_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    app_holder = new_app_holder;
-                } else if let Some(previous_app) = history.pop() {
-                    app_holder = (*previous_app).clone();
-                } else {
-                    break;
-                }
-            }
-
-            Apps::Ingress { app } => {
-                if let Some(new_app_holder) = run_ingress_app(terminal, app).await? {
-                    history.push(Arc::new(app_holder.clone())); // this is an app switch
-                    app_holder = new_app_holder;
-                } else if let Some(previous_app) = history.pop() {
-                    app_holder = (*previous_app).clone();
-                } else {
-                    break;
-                }
-            }
+        if let Some(new_app_holder) = run_app(terminal, &mut app_holder).await? {
+            history.push(Arc::new(app_holder.clone())); // this is an app switch
+            app_holder = new_app_holder;
+        } else if let Some(previous_app) = history.pop() {
+            app_holder = (*previous_app).clone();
+        } else {
+            break; //quit
         }
     }
     Ok(())

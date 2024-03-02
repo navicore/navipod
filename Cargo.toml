@@ -1,6 +1,6 @@
 [package]
 name = "navipod"
-version = "0.7.20"
+version = "0.7.21"
 edition = "2021"
 license = "MIT"
 authors = ["Ed Sweeney <ed@onextent.com>"]

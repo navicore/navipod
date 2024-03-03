@@ -32,7 +32,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .height(1);
     let rows = app
         .get_filtered_items()
-        .iter()
+        .into_iter()
         .enumerate()
         .map(|(i, data)| {
             let color = match i % 2 {

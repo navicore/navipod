@@ -4,7 +4,7 @@ use crate::tui::table_ui::TuiTableState;
 use ratatui::widgets::{Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table};
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 pub fn ui(f: &mut Frame, app: &mut App) {
     let rects = Layout::vertical([Constraint::Min(8), Constraint::Percentage(40)]).split(f.size());
@@ -25,7 +25,7 @@ fn render_ui_sections(f: &mut Frame, app: &mut App, table_area: Rect, details_ar
     }
 }
 
-fn render_filter_edit(f: &mut Frame, app: &mut App) {
+fn render_filter_edit(f: &mut Frame, app: &App) {
     let edit_style = Style::default()
         .fg(app.colors.header_fg)
         .bg(app.colors.header_bg);
@@ -106,7 +106,7 @@ fn render_table(f: &mut Frame, app: &App, area: Rect) {
         .fg(app.colors.selected_style_fg);
 
     let filter_header = match app.get_filter() {
-        filter if filter != "".to_string() => format!("ReplicaSet ({filter})"),
+        filter if filter != String::new() => format!("ReplicaSet ({filter})"),
         _ => "ReplicaSet".to_string(),
     };
 
@@ -119,7 +119,7 @@ fn render_table(f: &mut Frame, app: &App, area: Rect) {
         .height(1);
     let rows = app
         .get_filtered_items()
-        .iter()
+        .into_iter()
         .enumerate()
         .map(|(i, data)| {
             let color = match i % 2 {

@@ -98,111 +98,11 @@ impl TuiTableState for App {
 
 impl AppBehavior for App {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        let mut app_holder = Some(Apps::Rs { app: self.clone() });
-        match event {
-            Message::Key(Event::Key(key)) => {
-                if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Backspace, Char, Down, Enter, Esc, Left, Right, Up};
-
-                    if self.get_show_filter_edit() {
-                        match key.code {
-                            Enter => {
-                                self.set_show_filter_edit(false);
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Char(to_insert) => {
-                                self.enter_char(to_insert);
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Backspace => {
-                                self.delete_char();
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Left => {
-                                self.move_cursor_left();
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Right => {
-                                self.move_cursor_right();
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Esc => {
-                                self.set_show_filter_edit(false);
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            _ => {}
-                        }
-                    } else {
-                        match key.code {
-                            Char('q') => {
-                                app_holder = None;
-                                debug!("quiting...");
-                            }
-                            Char('j') | Down => {
-                                self.next();
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Char('k') | Up => {
-                                self.previous();
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Char('c' | 'C') => {
-                                self.next_color();
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            Char('i' | 'I') => {
-                                if let Some(selection) = self.get_selected_item() {
-                                    if let Some(selector) = selection.selectors.clone() {
-                                        let data_vec =
-                                            create_ingress_data_vec(selector.clone()).await?;
-                                        let new_app_holder = Apps::Ingress {
-                                            app: ingress_app::app::App::new(data_vec),
-                                        };
-                                        app_holder = Some(new_app_holder);
-                                        debug!("changing app from rs to ingress...");
-                                    };
-                                };
-                            }
-                            Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                self.page_forward();
-                            }
-                            Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                self.page_backward();
-                            }
-                            Enter => {
-                                if let Some(selection) = self.get_selected_item() {
-                                    if let Some(selectors) = selection.selectors.clone() {
-                                        let data_vec = vec![];
-                                        let new_app_holder = Apps::Pod {
-                                            app: pod_app::app::App::new(selectors, data_vec),
-                                        };
-                                        app_holder = Some(new_app_holder);
-                                        debug!("changing app from rs to pod...");
-                                    };
-                                };
-                            }
-                            Char('/') => {
-                                self.set_show_filter_edit(true);
-                                app_holder = Some(Apps::Rs { app: self.clone() });
-                            }
-                            _k => {}
-                        }
-                    }
-                }
-            }
-            Message::Rs(data_vec) => {
-                debug!("updating rs app data...");
-                let new_app = Self {
-                    longest_item_lens: rs_constraint_len_calculator(data_vec),
-                    items: data_vec.clone(),
-                    ..self.clone()
-                };
-                let new_app_holder = Apps::Rs { app: new_app };
-                app_holder = Some(new_app_holder);
-            }
-            _ => {}
+        if self.get_show_filter_edit() {
+            Ok(self.handle_filter_edit_event(event))
+        } else {
+            self.handle_table_event(event).await
         }
-        Ok(app_holder)
     }
 
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
@@ -247,10 +147,135 @@ impl App {
             color_index: 0,
             table_height: 0,
             items: data_vec,
-            filter: "".to_string(),
+            filter: String::new(),
             show_filter_edit: false,
             edit_filter_cursor_position: 0,
         }
+    }
+
+    fn handle_filter_edit_event(&mut self, event: &Message) -> Option<Apps> {
+        let mut app_holder = Some(Apps::Rs { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Backspace, Char, Enter, Esc, Left, Right};
+
+                    match key.code {
+                        Char(to_insert) => {
+                            self.enter_char(to_insert);
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Backspace => {
+                            self.delete_char();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Left => {
+                            self.move_cursor_left();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Right => {
+                            self.move_cursor_right();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Esc | Enter => {
+                            self.set_show_filter_edit(false);
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Message::Rs(data_vec) => {
+                debug!("updating rs app data...");
+                let new_app = Self {
+                    longest_item_lens: rs_constraint_len_calculator(data_vec),
+                    items: data_vec.clone(),
+                    ..self.clone()
+                };
+                let new_app_holder = Apps::Rs { app: new_app };
+                app_holder = Some(new_app_holder);
+            }
+            _ => {}
+        }
+        app_holder
+    }
+
+    async fn handle_table_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        let mut app_holder = Some(Apps::Rs { app: self.clone() });
+        match event {
+            Message::Key(Event::Key(key)) => {
+                if key.kind == KeyEventKind::Press {
+                    use KeyCode::{Char, Down, Enter, Up};
+
+                    match key.code {
+                        Char('q') => {
+                            app_holder = None;
+                            debug!("quiting...");
+                        }
+                        Char('j') | Down => {
+                            self.next();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('k') | Up => {
+                            self.previous();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('c' | 'C') => {
+                            self.next_color();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('i' | 'I') => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
+                                    let data_vec =
+                                        create_ingress_data_vec(selector.clone()).await?;
+                                    let new_app_holder = Apps::Ingress {
+                                        app: ingress_app::app::App::new(data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to ingress...");
+                                };
+                            };
+                        }
+                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_forward();
+                        }
+                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.page_backward();
+                        }
+                        Enter => {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selectors) = selection.selectors.clone() {
+                                    let data_vec = vec![];
+                                    let new_app_holder = Apps::Pod {
+                                        app: pod_app::app::App::new(selectors, data_vec),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                    debug!("changing app from rs to pod...");
+                                };
+                            };
+                        }
+                        Char('/') => {
+                            self.set_show_filter_edit(true);
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        _k => {}
+                    }
+                }
+            }
+            Message::Rs(data_vec) => {
+                debug!("updating rs app data...");
+                let new_app = Self {
+                    longest_item_lens: rs_constraint_len_calculator(data_vec),
+                    items: data_vec.clone(),
+                    ..self.clone()
+                };
+                let new_app_holder = Apps::Rs { app: new_app };
+                app_holder = Some(new_app_holder);
+            }
+            _ => {}
+        }
+        Ok(app_holder)
     }
 
     fn move_cursor_left(&mut self) {
@@ -296,13 +321,14 @@ impl App {
         new_cursor_pos.clamp(0, self.filter.len())
     }
 
-    fn reset_cursor(&mut self) {
+    fn _reset_cursor(&mut self) {
         self.edit_filter_cursor_position = 0;
     }
 
     pub fn set_cursor_pos(&mut self, cursor_pos: usize) {
         self.edit_filter_cursor_position = cursor_pos;
     }
+    #[allow(clippy::missing_const_for_fn)]
     pub fn get_cursor_pos(&self) -> usize {
         self.edit_filter_cursor_position
     }
@@ -310,6 +336,7 @@ impl App {
     pub fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
         self.show_filter_edit = show_filter_edit;
     }
+    #[allow(clippy::missing_const_for_fn)]
     pub fn get_show_filter_edit(&self) -> bool {
         self.show_filter_edit
     }

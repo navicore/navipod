@@ -150,7 +150,7 @@ impl App {
             color_index: 1,
             table_height: 0,
             items: data_vec,
-            filter: "".to_string(),
+            filter: String::new(),
         }
     }
 }

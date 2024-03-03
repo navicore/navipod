@@ -165,7 +165,7 @@ impl App {
             color_index: 3,
             table_height: 0,
             items: data_vec,
-            filter: "".to_string(),
+            filter: String::new(),
         }
     }
 }

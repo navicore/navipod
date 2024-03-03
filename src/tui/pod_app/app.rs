@@ -217,7 +217,7 @@ impl App {
             table_height: 0,
             items: data_vec,
             selector,
-            filter: "".to_string(),
+            filter: String::new(),
         }
     }
 

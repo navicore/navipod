@@ -106,19 +106,11 @@ pub trait TuiTableState {
         }
     }
 
-    fn page_forward(&mut self) {
-        let current_offset = self.get_state().offset();
-        let candidate_offset: usize = current_offset + self.get_table_height();
-        if self.get_items().len() * ITEM_HEIGHT < candidate_offset {
-            let new_state = self.get_state().clone().with_offset(candidate_offset);
-            self.set_state(new_state);
-        }
-    }
+    fn page_forward(&mut self) {}
 
     fn page_backward(&mut self) {}
 
     fn next_color(&mut self) {
-        //self.color_index = (self.color_index + 1) % PALETTES.len();
         let new_color_index = (self.get_color_index() + 1) % PALETTES.len();
         self.set_color_index(new_color_index);
     }
@@ -153,6 +145,12 @@ pub trait TuiTableState {
     fn reset_selection_state(&mut self);
     fn get_table_height(&self) -> usize;
     fn set_table_height(&mut self, table_height: usize);
+    fn get_filter(&self) -> String;
+    fn set_filter(&mut self, filter: String);
+
+    fn get_filtered_items(&self) -> &[Self::Item] {
+        &self.get_items()
+    }
 }
 
 pub fn render_detail_section(

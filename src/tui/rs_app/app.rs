@@ -31,6 +31,9 @@ pub struct App {
     pub(crate) colors: TableColors,
     pub(crate) color_index: usize,
     pub(crate) table_height: usize,
+    pub(crate) filter: String,
+    pub(crate) show_filter_edit: bool,
+    pub(crate) edit_filter_cursor_position: usize,
 }
 
 impl TuiTableState for App {
@@ -84,6 +87,13 @@ impl TuiTableState for App {
         self.state = TableState::default().with_selected(0);
         self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
     }
+    fn get_filter(&self) -> String {
+        self.filter.clone()
+    }
+
+    fn set_filter(&mut self, filter: String) {
+        self.filter = filter;
+    }
 }
 
 impl AppBehavior for App {
@@ -92,58 +102,91 @@ impl AppBehavior for App {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Up};
-                    match key.code {
-                        Char('q') => {
-                            app_holder = None;
-                            debug!("quiting...");
-                        }
-                        Char('j') | Down => {
-                            self.next();
-                            //todo: stop all this cloning
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('k') | Up => {
-                            self.previous();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('c' | 'C') => {
-                            self.next_color();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('i' | 'I') => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selector) = selection.selectors.clone() {
-                                    let data_vec =
-                                        create_ingress_data_vec(selector.clone()).await?;
-                                    let new_app_holder = Apps::Ingress {
-                                        app: ingress_app::app::App::new(data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to ingress...");
-                                };
-                            };
-                        }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_forward();
-                        }
+                    use KeyCode::{Backspace, Char, Down, Enter, Esc, Left, Right, Up};
 
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_backward();
+                    if self.get_show_filter_edit() {
+                        match key.code {
+                            Enter => {
+                                self.set_show_filter_edit(false);
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Char(to_insert) => {
+                                self.enter_char(to_insert);
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Backspace => {
+                                self.delete_char();
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Left => {
+                                self.move_cursor_left();
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Right => {
+                                self.move_cursor_right();
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Esc => {
+                                self.set_show_filter_edit(false);
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            _ => {}
                         }
-                        Enter => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selectors) = selection.selectors.clone() {
-                                    let data_vec = vec![];
-                                    let new_app_holder = Apps::Pod {
-                                        app: pod_app::app::App::new(selectors, data_vec),
+                    } else {
+                        match key.code {
+                            Char('q') => {
+                                app_holder = None;
+                                debug!("quiting...");
+                            }
+                            Char('j') | Down => {
+                                self.next();
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Char('k') | Up => {
+                                self.previous();
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Char('c' | 'C') => {
+                                self.next_color();
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            Char('i' | 'I') => {
+                                if let Some(selection) = self.get_selected_item() {
+                                    if let Some(selector) = selection.selectors.clone() {
+                                        let data_vec =
+                                            create_ingress_data_vec(selector.clone()).await?;
+                                        let new_app_holder = Apps::Ingress {
+                                            app: ingress_app::app::App::new(data_vec),
+                                        };
+                                        app_holder = Some(new_app_holder);
+                                        debug!("changing app from rs to ingress...");
                                     };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to pod...");
                                 };
-                            };
+                            }
+                            Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                self.page_forward();
+                            }
+                            Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                self.page_backward();
+                            }
+                            Enter => {
+                                if let Some(selection) = self.get_selected_item() {
+                                    if let Some(selectors) = selection.selectors.clone() {
+                                        let data_vec = vec![];
+                                        let new_app_holder = Apps::Pod {
+                                            app: pod_app::app::App::new(selectors, data_vec),
+                                        };
+                                        app_holder = Some(new_app_holder);
+                                        debug!("changing app from rs to pod...");
+                                    };
+                                };
+                            }
+                            Char('/') => {
+                                self.set_show_filter_edit(true);
+                                app_holder = Some(Apps::Rs { app: self.clone() });
+                            }
+                            _k => {}
                         }
-                        _k => {}
                     }
                 }
             }
@@ -174,10 +217,9 @@ impl AppBehavior for App {
         tokio::spawn(async move {
             while !should_stop.load(Ordering::Relaxed) {
                 match list_replicas().await {
-                    Ok(d) => {
-                        // Assuming list_replicas and get_items are comparable
-                        if !d.is_empty() && d != initial_items {
-                            let sevent = Message::Rs(d);
+                    Ok(new_items) => {
+                        if !new_items.is_empty() && new_items != initial_items {
+                            let sevent = Message::Rs(new_items);
                             if tx.send(sevent).await.is_err() {
                                 break;
                             }
@@ -205,7 +247,71 @@ impl App {
             color_index: 0,
             table_height: 0,
             items: data_vec,
+            filter: "".to_string(),
+            show_filter_edit: false,
+            edit_filter_cursor_position: 0,
         }
+    }
+
+    fn move_cursor_left(&mut self) {
+        let cursor_moved_left = self.edit_filter_cursor_position.saturating_sub(1);
+        self.edit_filter_cursor_position = self.clamp_cursor(cursor_moved_left);
+    }
+
+    fn move_cursor_right(&mut self) {
+        let cursor_moved_right = self.edit_filter_cursor_position.saturating_add(1);
+        self.edit_filter_cursor_position = self.clamp_cursor(cursor_moved_right);
+    }
+
+    fn enter_char(&mut self, new_char: char) {
+        self.filter
+            .insert(self.edit_filter_cursor_position, new_char);
+
+        self.move_cursor_right();
+    }
+
+    fn delete_char(&mut self) {
+        let is_not_cursor_leftmost = self.edit_filter_cursor_position != 0;
+        if is_not_cursor_leftmost {
+            // Method "remove" is not used on the saved text for deleting the selected char.
+            // Reason: Using remove on String works on bytes instead of the chars.
+            // Using remove would require special care because of char boundaries.
+
+            let current_index = self.edit_filter_cursor_position;
+            let from_left_to_current_index = current_index - 1;
+
+            // Getting all characters before the selected character.
+            let before_char_to_delete = self.filter.chars().take(from_left_to_current_index);
+            // Getting all characters after selected character.
+            let after_char_to_delete = self.filter.chars().skip(current_index);
+
+            // Put all characters together except the selected one.
+            // By leaving the selected one out, it is forgotten and therefore deleted.
+            self.filter = before_char_to_delete.chain(after_char_to_delete).collect();
+            self.move_cursor_left();
+        }
+    }
+
+    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
+        new_cursor_pos.clamp(0, self.filter.len())
+    }
+
+    fn reset_cursor(&mut self) {
+        self.edit_filter_cursor_position = 0;
+    }
+
+    pub fn set_cursor_pos(&mut self, cursor_pos: usize) {
+        self.edit_filter_cursor_position = cursor_pos;
+    }
+    pub fn get_cursor_pos(&self) -> usize {
+        self.edit_filter_cursor_position
+    }
+
+    pub fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
+        self.show_filter_edit = show_filter_edit;
+    }
+    pub fn get_show_filter_edit(&self) -> bool {
+        self.show_filter_edit
     }
 
     pub fn get_event_details(&mut self) -> Vec<(String, String, Option<String>)> {
@@ -234,8 +340,4 @@ impl App {
             })
         })
     }
-
-    // pub fn get_right_details(&mut self) -> Vec<ResourcceLabel> {
-    //     vec![]
-    // }
 }

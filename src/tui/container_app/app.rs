@@ -21,6 +21,7 @@ pub struct App {
     pub(crate) colors: TableColors,
     color_index: usize,
     table_height: usize,
+    pub(crate) filter: String,
 }
 
 impl TuiTableState for App {
@@ -72,6 +73,14 @@ impl TuiTableState for App {
 
     fn set_table_height(&mut self, table_height: usize) {
         self.table_height = table_height;
+    }
+
+    fn get_filter(&self) -> String {
+        self.filter.clone()
+    }
+
+    fn set_filter(&mut self, filter: String) {
+        self.filter = filter;
     }
 }
 
@@ -142,6 +151,7 @@ impl App {
             color_index: 2,
             table_height: 0,
             items: data_vec,
+            filter: "".to_string(),
         }
     }
 

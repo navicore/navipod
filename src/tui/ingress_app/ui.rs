@@ -30,19 +30,23 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .collect::<Row>()
         .style(header_style)
         .height(1);
-    let rows = app.items.iter().enumerate().map(|(i, data)| {
-        let color = match i % 2 {
-            0 => app.colors.normal_row_color,
-            _ => app.colors.alt_row_color,
-        };
-        let item = data.ref_array();
-        item.iter()
-            .copied()
-            .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
-            .collect::<Row>()
-            .style(Style::new().fg(app.colors.row_fg).bg(color))
-            .height(3)
-    });
+    let rows = app
+        .get_filtered_items()
+        .iter()
+        .enumerate()
+        .map(|(i, data)| {
+            let color = match i % 2 {
+                0 => app.colors.normal_row_color,
+                _ => app.colors.alt_row_color,
+            };
+            let item = data.ref_array();
+            item.iter()
+                .copied()
+                .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
+                .collect::<Row>()
+                .style(Style::new().fg(app.colors.row_fg).bg(color))
+                .height(3)
+        });
     let bar = " █ ";
     let t = Table::new(
         rows,

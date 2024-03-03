@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 use unicode_width::UnicodeWidthStr;
 
+pub trait Filterable {
+    fn filter_by(&self) -> &str;
+}
+
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ResourceEvent {
     pub resource_name: String,
@@ -40,6 +44,12 @@ pub struct Cert {
     pub is_valid: String,
     pub expires: String,
     pub issued_by: String,
+}
+
+impl Filterable for Cert {
+    fn filter_by(&self) -> &str {
+        self.host.as_str()
+    }
 }
 
 pub trait Detail {
@@ -134,6 +144,12 @@ pub struct Container {
     pub mounts: Vec<ContainerMount>,
 }
 
+impl Filterable for Container {
+    fn filter_by(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
 impl Container {
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
@@ -175,6 +191,12 @@ pub struct RsPod {
     pub containers: String,
     pub selectors: Option<BTreeMap<String, String>>,
     pub events: Vec<ResourceEvent>,
+}
+
+impl Filterable for RsPod {
+    fn filter_by(&self) -> &str {
+        self.name.as_str()
+    }
 }
 
 impl RsPod {
@@ -220,6 +242,12 @@ pub struct Rs {
     pub events: Vec<ResourceEvent>,
 }
 
+impl Filterable for Rs {
+    fn filter_by(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
 impl Rs {
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
@@ -259,6 +287,12 @@ pub struct Ingress {
     pub path: String,
     pub backend_svc: String,
     pub port: String,
+}
+
+impl Filterable for Ingress {
+    fn filter_by(&self) -> &str {
+        self.name.as_str()
+    }
 }
 
 impl Ingress {

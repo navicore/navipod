@@ -60,26 +60,35 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Pod", "Status", "C", "Age", "Description"]
+    let filter_header = match app.get_filter() {
+        filter if filter != String::new() => format!("Pod ({filter})"),
+        _ => "Pod".to_string(),
+    };
+
+    let header = [&filter_header, "Status", "C", "Age", "Description"]
         .iter()
         .copied()
         .map(Cell::from)
         .collect::<Row>()
         .style(header_style)
         .height(1);
-    let rows = app.items.iter().enumerate().map(|(i, data)| {
-        let color = match i % 2 {
-            0 => app.colors.normal_row_color,
-            _ => app.colors.alt_row_color,
-        };
-        let item = data.ref_array();
-        item.iter()
-            .copied()
-            .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
-            .collect::<Row>()
-            .style(Style::new().fg(app.colors.row_fg).bg(color))
-            .height(3) //height
-    });
+    let rows = app
+        .get_filtered_items()
+        .into_iter()
+        .enumerate()
+        .map(|(i, data)| {
+            let color = match i % 2 {
+                0 => app.colors.normal_row_color,
+                _ => app.colors.alt_row_color,
+            };
+            let item = data.ref_array();
+            item.iter()
+                .copied()
+                .map(|content| Cell::from(Text::from(format!("\n{content}\n"))))
+                .collect::<Row>()
+                .style(Style::new().fg(app.colors.row_fg).bg(color))
+                .height(3) //height
+        });
     let bar = " █ ";
     let t = Table::new(
         rows,

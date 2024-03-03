@@ -1,3 +1,4 @@
+use crate::tui::data::Filterable;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
@@ -78,12 +79,15 @@ pub fn draw_name_value_paragraphs(
     }
 }
 
-pub trait TuiTableState {
+pub trait TuiTableState
+where
+    Self::Item: Filterable + 'static,
+{
     type Item; // if items are of a specific type
 
     fn next(&mut self) {
         let pos = self.get_state().selected().unwrap_or(0);
-        let len = self.get_items().len();
+        let len = self.get_filtered_items().len();
         if len > 0 && pos < len - 1 {
             // don't wrap
             let new_pos = pos + 1;
@@ -106,19 +110,11 @@ pub trait TuiTableState {
         }
     }
 
-    fn page_forward(&mut self) {
-        let current_offset = self.get_state().offset();
-        let candidate_offset: usize = current_offset + self.get_table_height();
-        if self.get_items().len() * ITEM_HEIGHT < candidate_offset {
-            let new_state = self.get_state().clone().with_offset(candidate_offset);
-            self.set_state(new_state);
-        }
-    }
+    fn page_forward(&mut self) {}
 
     fn page_backward(&mut self) {}
 
     fn next_color(&mut self) {
-        //self.color_index = (self.color_index + 1) % PALETTES.len();
         let new_color_index = (self.get_color_index() + 1) % PALETTES.len();
         self.set_color_index(new_color_index);
     }
@@ -130,10 +126,10 @@ pub trait TuiTableState {
 
     fn get_selected_item(&mut self) -> Option<&Self::Item> {
         let selected_index = self.get_state().selected();
-        let items_len = self.get_items().len();
+        let items_len = self.get_filtered_items().len();
 
         match selected_index {
-            Some(selected) if selected < items_len => Some(&self.get_items()[selected]),
+            Some(selected) if selected < items_len => Some(self.get_filtered_items()[selected]),
             _ => {
                 self.reset_selection_state(); // Modify state as needed.
                 None
@@ -153,6 +149,16 @@ pub trait TuiTableState {
     fn reset_selection_state(&mut self);
     fn get_table_height(&self) -> usize;
     fn set_table_height(&mut self, table_height: usize);
+    fn get_filter(&self) -> String;
+    fn set_filter(&mut self, filter: String);
+
+    fn get_filtered_items(&self) -> Vec<&Self::Item> {
+        let filter = self.get_filter();
+        self.get_items()
+            .iter()
+            .filter(|item| item.filter_by().contains(&filter))
+            .collect() // This now collects into a Vec<&Self::Item>, which is valid
+    }
 }
 
 pub fn render_detail_section(

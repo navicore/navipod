@@ -122,10 +122,11 @@ pub async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Err
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn run_app<B>(
     terminal: &mut Terminal<B>,
     apps_app: &mut Apps,
-) -> Result<Option<Apps>, io::Error>
+) -> Result<(Option<Apps>, Option<Apps>), io::Error>
 where
     B: Backend + Send,
 {
@@ -133,7 +134,9 @@ where
     let key_events = async_key_events(should_stop.clone());
 
     #[allow(unused_assignments)] // we might quit or ESC
-    let mut app_holder = Some(apps_app.clone());
+    let mut old_app_holder = Some(apps_app.clone());
+    #[allow(unused_assignments)] // we might quit or ESC
+    let mut new_app_holder = None;
     match apps_app {
         Apps::Rs { ref mut app } => {
             let data_init_clone = app.clone();
@@ -143,10 +146,12 @@ where
             loop {
                 _ = current_app.draw_ui(terminal);
                 if let Some(event) = events.next().await {
-                    app_holder = current_app.handle_event(&event).await?;
+                    let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Rs { app }) = &app_holder {
                         current_app = app.clone();
+                        old_app_holder = app_holder;
                     } else {
+                        new_app_holder = app_holder;
                         break;
                     };
                 };
@@ -160,10 +165,12 @@ where
             loop {
                 _ = current_app.draw_ui(terminal);
                 if let Some(event) = events.next().await {
-                    app_holder = current_app.handle_event(&event).await?;
+                    let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Pod { app }) = &app_holder {
                         current_app = app.clone();
+                        old_app_holder = app_holder;
                     } else {
+                        new_app_holder = app_holder;
                         break;
                     };
                 };
@@ -177,10 +184,12 @@ where
             loop {
                 _ = current_app.draw_ui(terminal);
                 if let Some(event) = events.next().await {
-                    app_holder = current_app.handle_event(&event).await?;
+                    let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Container { app }) = &app_holder {
                         current_app = app.clone();
+                        old_app_holder = app_holder;
                     } else {
+                        new_app_holder = app_holder;
                         break;
                     };
                 };
@@ -194,10 +203,12 @@ where
             loop {
                 _ = current_app.draw_ui(terminal);
                 if let Some(event) = events.next().await {
-                    app_holder = current_app.handle_event(&event).await?;
+                    let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Cert { app }) = &app_holder {
                         current_app = app.clone();
+                        old_app_holder = app_holder;
                     } else {
+                        new_app_holder = app_holder;
                         break;
                     };
                 };
@@ -211,10 +222,12 @@ where
             loop {
                 _ = current_app.draw_ui(terminal);
                 if let Some(event) = events.next().await {
-                    app_holder = current_app.handle_event(&event).await?;
+                    let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Ingress { app }) = &app_holder {
                         current_app = app.clone();
+                        old_app_holder = app_holder;
                     } else {
+                        new_app_holder = app_holder;
                         break;
                     };
                 };
@@ -223,7 +236,7 @@ where
     }
 
     should_stop.store(true, Ordering::Relaxed);
-    Ok(app_holder)
+    Ok((old_app_holder, new_app_holder))
 }
 
 /// runs a stack of apps where navigation is "<Enter>" into and "<Esc>" out of
@@ -235,13 +248,18 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
 
     let mut history: Vec<Arc<Apps>> = Vec::new();
     loop {
-        if let Some(new_app_holder) = run_app(terminal, &mut app_holder).await? {
-            history.push(Arc::new(app_holder.clone())); // this is an app switch
-            app_holder = new_app_holder;
-        } else if let Some(previous_app) = history.pop() {
-            app_holder = (*previous_app).clone();
-        } else {
-            break; //quit
+        match run_app(terminal, &mut app_holder).await? {
+            (Some(old_app_holder), Some(new_app_holder)) => {
+                history.push(Arc::new(old_app_holder)); // this is an app switch
+                app_holder = new_app_holder;
+            }
+            (_, _) => {
+                if let Some(previous_app) = history.pop() {
+                    app_holder = (*previous_app).clone();
+                } else {
+                    break; //quit
+                }
+            }
         }
     }
     Ok(())

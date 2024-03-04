@@ -117,16 +117,16 @@ impl AppBehavior for container_app::app::App {
                         }
                         Enter => {
                             if let Some(selection) = self.get_selected_item() {
-                                // TODO: containers need the selectors they were retrieved with so we can go back and get logs
-                                let new_app_holder = Apps::Log {
-                                    //TODO: get rid of data in constructor and use stream
-                                    app: log_app::app::App::new(
-                                        selection.selectors.clone().unwrap(), //ejs todo
-                                        selection.pod_name.clone(),
-                                        selection.name.clone(),
-                                    ),
-                                };
-                                app_holder = Some(new_app_holder);
+                                if let Some(selectors) = selection.selectors.clone() {
+                                    let new_app_holder = Apps::Log {
+                                        app: log_app::app::App::new(
+                                            selectors,
+                                            selection.pod_name.clone(),
+                                            selection.name.clone(),
+                                        ),
+                                    };
+                                    app_holder = Some(new_app_holder);
+                                }
                             }
                         }
 

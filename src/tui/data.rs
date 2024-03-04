@@ -360,6 +360,7 @@ impl Ingress {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 pub fn log_constraint_len_calculator(items: &[LogRec]) -> (u16, u16, u16) {
     let datetime_len = items
         .iter()

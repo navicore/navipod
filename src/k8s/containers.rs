@@ -28,6 +28,7 @@ fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
+#[allow(clippy::too_many_lines)]
 pub async fn list(
     selector: BTreeMap<String, String>,
     pod_name: String,
@@ -151,6 +152,7 @@ pub async fn list(
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
+#[allow(clippy::significant_drop_tightening)]
 pub async fn logs(
     selector: BTreeMap<String, String>,
     pod_name: String,

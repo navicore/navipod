@@ -1,32 +1,42 @@
-use crate::tui::container_app;
-use crate::tui::data::{container_constraint_len_calculator, Container};
+use crate::k8s::containers::logs;
+use crate::tui::data::{log_constraint_len_calculator, LogRec};
 use crate::tui::log_app;
 use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
-use futures::{stream, Stream};
+use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
+use std::collections::BTreeMap;
 use std::io;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::time::sleep;
+use tokio_stream::wrappers::ReceiverStream;
+
+const POLL_MS: u64 = 5000;
 
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) state: TableState,
-    pub(crate) items: Vec<Container>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
+    pub(crate) items: Vec<LogRec>,
+    pub(crate) longest_item_lens: (u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     color_index: usize,
     table_height: usize,
     pub(crate) filter: String,
+    pub(crate) selector: BTreeMap<String, String>,
+    pub(crate) pod_name: String,
+    pub(crate) container_name: String,
 }
 
 impl TuiTableState for App {
-    type Item = Container;
+    type Item = LogRec;
 
     fn get_items(&self) -> &[Self::Item] {
         &self.items
@@ -85,9 +95,9 @@ impl TuiTableState for App {
     }
 }
 
-impl AppBehavior for container_app::app::App {
+impl AppBehavior for log_app::app::App {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        let mut app_holder = Some(Apps::Container { app: self.clone() });
+        let mut app_holder = Some(Apps::Log { app: self.clone() });
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
@@ -99,15 +109,15 @@ impl AppBehavior for container_app::app::App {
                         Char('j') | Down => {
                             self.next();
                             //todo: stop all this cloning
-                            app_holder = Some(Apps::Container { app: self.clone() });
+                            app_holder = Some(Apps::Log { app: self.clone() });
                         }
                         Char('k') | Up => {
                             self.previous();
-                            app_holder = Some(Apps::Container { app: self.clone() });
+                            app_holder = Some(Apps::Log { app: self.clone() });
                         }
                         Char('c' | 'C') => {
                             self.next_color();
-                            app_holder = Some(Apps::Container { app: self.clone() });
+                            app_holder = Some(Apps::Log { app: self.clone() });
                         }
                         Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.page_forward();
@@ -116,31 +126,20 @@ impl AppBehavior for container_app::app::App {
                             self.page_backward();
                         }
                         Enter => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selectors) = selection.selectors.clone() {
-                                    let new_app_holder = Apps::Log {
-                                        app: log_app::app::App::new(
-                                            selectors,
-                                            selection.pod_name.clone(),
-                                            selection.name.clone(),
-                                        ),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                }
-                            }
+                            // noop for now but will be pretty printed detail analysis popup
                         }
 
                         _k => {}
                     }
                 }
             }
-            Message::Container(data_vec) => {
+            Message::Log(data_vec) => {
                 let new_app = Self {
-                    longest_item_lens: container_constraint_len_calculator(data_vec),
+                    longest_item_lens: log_constraint_len_calculator(data_vec),
                     items: data_vec.clone(),
                     ..self.clone()
                 };
-                let new_app_holder = Apps::Container { app: new_app };
+                let new_app_holder = Apps::Log { app: new_app };
                 app_holder = Some(new_app_holder);
             }
             _ => {}
@@ -148,50 +147,63 @@ impl AppBehavior for container_app::app::App {
         Ok(app_holder)
     }
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
-        terminal.draw(|f| container_app::ui::ui(f, &mut self.clone()))?;
+        terminal.draw(|f| log_app::ui::ui(f, &mut self.clone()))?;
         Ok(())
     }
 
-    fn stream(&self, _should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
-        stream::empty()
+    fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
+        let (tx, rx) = mpsc::channel(100);
+
+        let initial_items = self.get_items().to_vec();
+        //let selector = self.selector.clone();
+        let pod_name = self.pod_name.clone();
+        let container_name = self.container_name.clone();
+        let selector = self.selector.clone();
+
+        tokio::spawn(async move {
+            while !should_stop.load(Ordering::Relaxed) {
+                //get Vec and send
+                match logs(selector.clone(), pod_name.clone(), container_name.clone()).await {
+                    Ok(d) => {
+                        if !d.is_empty() && d != initial_items {
+                            let sevent = Message::Log(d);
+                            if tx.send(sevent).await.is_err() {
+                                break;
+                            }
+                        }
+                        sleep(Duration::from_millis(POLL_MS)).await;
+                    }
+                    Err(_e) => {
+                        break;
+                    }
+                }
+                sleep(Duration::from_millis(POLL_MS)).await;
+            }
+        });
+
+        ReceiverStream::new(rx)
     }
 }
 
 impl App {
-    pub fn new(data_vec: Vec<Container>) -> Self {
+    pub fn new(
+        selector: BTreeMap<String, String>,
+        pod_name: String,
+        container_name: String,
+    ) -> Self {
+        let data_vec = vec![];
         Self {
             state: TableState::default().with_selected(0),
-            longest_item_lens: container_constraint_len_calculator(&data_vec),
+            longest_item_lens: log_constraint_len_calculator(&data_vec),
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
-            color_index: 2,
+            color_index: 3,
             table_height: 0,
             items: data_vec,
             filter: String::new(),
+            selector,
+            pod_name,
+            container_name,
         }
-    }
-
-    // pub fn get_event_details(&mut self) -> Vec<(String, String, Option<String>)> {
-    //     vec![]
-    // }
-
-    pub fn get_left_details(&mut self) -> Vec<(String, String, Option<String>)> {
-        self.get_selected_item().map_or_else(Vec::new, |container| {
-            container
-                .mounts
-                .iter()
-                .map(|label| (label.name.clone(), label.value.clone(), None))
-                .collect()
-        })
-    }
-
-    pub fn get_right_details(&mut self) -> Vec<(String, String, Option<String>)> {
-        self.get_selected_item().map_or_else(Vec::new, |container| {
-            container
-                .envvars
-                .iter()
-                .map(|label| (label.name.clone(), label.value.clone(), None))
-                .collect()
-        })
     }
 }

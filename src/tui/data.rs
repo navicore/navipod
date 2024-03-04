@@ -142,6 +142,8 @@ pub struct Container {
     pub ports: String,
     pub envvars: Vec<ContainerEnvVar>,
     pub mounts: Vec<ContainerMount>,
+    pub selectors: Option<BTreeMap<String, String>>,
+    pub pod_name: String,
 }
 
 impl Filterable for Container {
@@ -280,6 +282,37 @@ impl Rs {
     }
 }
 
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct LogRec {
+    pub datetime: String,
+    pub level: String,
+    pub message: String,
+}
+
+impl Filterable for LogRec {
+    fn filter_by(&self) -> &str {
+        self.message.as_str()
+    }
+}
+
+impl LogRec {
+    pub(crate) const fn ref_array(&self) -> [&String; 3] {
+        [&self.datetime, &self.level, &self.message]
+    }
+
+    pub(crate) fn datetime(&self) -> &str {
+        &self.datetime
+    }
+
+    pub(crate) fn level(&self) -> &str {
+        &self.level
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Ingress {
     pub name: String,
@@ -325,6 +358,29 @@ impl Ingress {
     pub(crate) fn port(&self) -> &str {
         &self.port
     }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn log_constraint_len_calculator(items: &[LogRec]) -> (u16, u16, u16) {
+    let datetime_len = items
+        .iter()
+        .map(LogRec::datetime)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let level_len = items
+        .iter()
+        .map(LogRec::level)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let message_len = items
+        .iter()
+        .map(LogRec::message)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    (datetime_len as u16, level_len as u16, message_len as u16)
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -553,6 +609,8 @@ mod tests {
                 ports: "http:1234".to_string(),
                 envvars: vec![],
                 mounts: vec![],
+                selectors: None,
+                pod_name: "my-pod-1234".to_string(),
             },
             Container {
                 name: "replica-923450-987654".to_string(),
@@ -562,6 +620,8 @@ mod tests {
                 ports: "http:1234".to_string(),
                 envvars: vec![],
                 mounts: vec![],
+                selectors: None,
+                pod_name: "my-pod-5678".to_string(),
             },
         ];
         let (

@@ -6,6 +6,7 @@ use crate::tui::cert_app;
 use crate::tui::container_app;
 use crate::tui::data;
 use crate::tui::ingress_app;
+use crate::tui::log_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app;
 use crate::tui::stream::{async_key_events, Message};
@@ -68,6 +69,7 @@ pub enum Apps {
     Container { app: container_app::app::App },
     Ingress { app: ingress_app::app::App },
     Cert { app: cert_app::app::App },
+    Log { app: log_app::app::App },
 }
 
 /// # Errors
@@ -224,6 +226,25 @@ where
                 if let Some(event) = events.next().await {
                     let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Ingress { app }) = &app_holder {
+                        current_app = app.clone();
+                        old_app_holder = app_holder;
+                    } else {
+                        new_app_holder = app_holder;
+                        break;
+                    };
+                };
+            }
+        }
+        Apps::Log { app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    let app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Log { app }) = &app_holder {
                         current_app = app.clone();
                         old_app_holder = app_holder;
                     } else {

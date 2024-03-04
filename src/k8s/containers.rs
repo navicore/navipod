@@ -1,10 +1,11 @@
 use crate::k8s::utils::format_label_selector;
-use crate::tui::data::{Container, ContainerEnvVar, ContainerMount};
+use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
 use k8s_openapi::api::core::v1::ContainerPort;
 use k8s_openapi::api::core::v1::Pod;
-use kube::api::ListParams;
-use kube::api::ObjectList;
-use kube::{Api, Client};
+use kube::{
+    api::{Api, ListParams, LogParams, ObjectList},
+    Client, ResourceExt,
+};
 use std::collections::BTreeMap;
 
 fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
@@ -50,7 +51,8 @@ pub async fn list(
             .unwrap_or_default();
 
         if let Some(name) = pod.metadata.name {
-            if name == pod_name {
+            let container_selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
+            if name == pod_name.clone() {
                 if let Some(spec) = pod.spec {
                     for container in spec.containers {
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
@@ -89,6 +91,8 @@ pub async fn list(
                             ports,
                             mounts,
                             envvars,
+                            selectors: container_selectors.clone(),
+                            pod_name: pod_name.clone(),
                         };
                         container_vec.push(c);
                     }
@@ -130,6 +134,8 @@ pub async fn list(
                                 ports: String::new(),
                                 mounts,
                                 envvars,
+                                selectors: container_selectors.clone(),
+                                pod_name: pod_name.clone(),
                             };
                             container_vec.push(c);
                         }
@@ -140,4 +146,55 @@ pub async fn list(
     }
 
     Ok(container_vec)
+}
+
+/// # Errors
+///
+/// Will return `Err` if data can not be retrieved from k8s cluster api
+pub async fn logs(
+    selector: BTreeMap<String, String>,
+    pod_name: String,
+    container_name: String,
+) -> Result<Vec<LogRec>, kube::Error> {
+    let client = Client::try_default().await?;
+    let pods: Api<Pod> = Api::default_namespaced(client);
+
+    let label_selector = format_label_selector(&selector);
+
+    let lp = ListParams::default().labels(&label_selector);
+
+    let pod_list: ObjectList<Pod> = pods.list(&lp).await?;
+
+    let mut log_vec = Vec::new();
+
+    // Find the pod by name
+    for pod in pod_list
+        .items
+        .into_iter()
+        .filter(|pod| pod.name_any() == pod_name)
+    {
+        let log_params = LogParams {
+            container: Some(container_name.clone()),
+            tail_lines: Some(100), // Adjust based on how many lines you want
+            ..Default::default()
+        };
+
+        // Fetch logs for the specified container
+        let logs = pods.logs(&pod.name_any(), &log_params).await?;
+
+        // Parse and map logs to Vec<Log>
+        logs.lines().for_each(|line| {
+            if let Some((datetime, rest)) = line.split_once(' ') {
+                if let Some((level, message)) = rest.split_once(' ') {
+                    log_vec.push(LogRec {
+                        datetime: datetime.to_string(),
+                        level: level.to_string(),
+                        message: message.to_string(),
+                    });
+                }
+            }
+        });
+    }
+
+    Ok(log_vec)
 }

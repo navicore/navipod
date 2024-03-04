@@ -19,6 +19,8 @@ pub enum Message {
     Container(Vec<data::Container>),
     #[allow(dead_code)]
     Cert(Vec<data::Cert>),
+    #[allow(dead_code)]
+    Log(Vec<data::LogRec>),
 }
 
 pub fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {

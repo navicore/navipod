@@ -28,7 +28,7 @@ kube = { version = "0.88", features = ["runtime", "derive", "client", "ws"] }
 ratatui = "0.26"
 regex = "1.10"
 reqwest = { version = "0.11", features = ["rustls-tls", "json"] }
-rustls = "0.22"
+rustls = "0.23"
 sqlx = { version = "0.7", features = [ "sqlite", "runtime-tokio-native-tls" ] }
 thiserror = "1"
 time = "0.3" # For handling dates in the certificate

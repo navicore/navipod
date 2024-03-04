@@ -184,15 +184,11 @@ pub async fn logs(
 
         // Parse and map logs to Vec<Log>
         logs.lines().for_each(|line| {
-            if let Some((datetime, rest)) = line.split_once(' ') {
-                if let Some((level, message)) = rest.split_once(' ') {
-                    log_vec.push(LogRec {
-                        datetime: datetime.to_string(),
-                        level: level.to_string(),
-                        message: message.to_string(),
-                    });
-                }
-            }
+            log_vec.push(LogRec {
+                datetime: String::new(), //need a smart parser that can figure out the format
+                level: String::new(),
+                message: line.to_string(),
+            });
         });
     }
 

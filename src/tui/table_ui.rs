@@ -2,7 +2,9 @@ use crate::tui::data::Filterable;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
+use regex::Regex;
 use std::rc::Rc;
+use tracing::debug;
 
 pub fn draw_timeseries_name_value_paragraphs(
     f: &mut Frame,
@@ -153,11 +155,18 @@ where
     fn set_filter(&mut self, filter: String);
 
     fn get_filtered_items(&self) -> Vec<&Self::Item> {
-        let filter = self.get_filter();
-        self.get_items()
-            .iter()
-            .filter(|item| item.filter_by().contains(&filter))
-            .collect() // This now collects into a Vec<&Self::Item>, which is valid
+        let filter_pattern = self.get_filter();
+        match Regex::new(&filter_pattern) {
+            Ok(regex) => self
+                .get_items()
+                .iter()
+                .filter(|item| regex.is_match(item.filter_by()))
+                .collect(),
+            Err(e) => {
+                debug!("Invalid regex pattern: {}", e); // Log the error
+                self.get_items().iter().collect() // Return the unfiltered list
+            }
+        }
     }
 }
 

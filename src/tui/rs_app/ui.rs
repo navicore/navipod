@@ -35,9 +35,11 @@ fn render_filter_edit(f: &mut Frame, app: &App) {
     //let block = Block::default().title("Edit Filter").borders(Borders::ALL);
     let input_area = centered_rect(60, 20, area);
 
-    let block = Paragraph::new(app.filter.as_str())
-        .style(edit_style)
-        .block(Block::default().borders(Borders::ALL).title("Edit Filter"));
+    let block = Paragraph::new(app.filter.as_str()).style(edit_style).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Edit Filter - try: (java|api)"),
+    );
 
     f.render_widget(Clear, input_area); //this clears out the background
     f.render_widget(block, input_area);

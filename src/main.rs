@@ -45,8 +45,7 @@ struct Args {
     command: Option<Command>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn process_command() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
     let db_location = args.db_location;
@@ -103,4 +102,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    match process_command().await {
+        Ok(()) => (),
+        Err(e) => {
+            eprintln!("Failed to run command: {e}");
+        }
+    }
 }

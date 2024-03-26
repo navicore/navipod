@@ -1,4 +1,4 @@
-A CLI for Inspecting Containers in Kubernetes
+A TUI and CLI for Inspecting Containers in Kubernetes
 ============
 
 ![an image showing navipod inspecting replicas and pod and ingress](docs/demo077.gif)

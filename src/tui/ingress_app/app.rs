@@ -119,12 +119,18 @@ impl AppBehavior for ingress_app::app::App {
                         Enter => {
                             if let Some(selection) = self.get_selected_item() {
                                 let host = &selection.host;
-                                let data_vec = create_cert_data_vec(&host.clone()).await?;
-                                let new_app_holder = Apps::Cert {
-                                    app: cert_app::app::App::new(data_vec),
-                                };
-                                app_holder = Some(new_app_holder);
-                                debug!("changing app from pod to cert...");
+                                match create_cert_data_vec(&host.clone()).await {
+                                    Ok(data_vec) => {
+                                        let new_app_holder = Apps::Cert {
+                                            app: cert_app::app::App::new(data_vec),
+                                        };
+                                        app_holder = Some(new_app_holder);
+                                        debug!("changing app from pod to cert...");
+                                    }
+                                    Err(e) => {
+                                        debug!("can not read certificate: {e}");
+                                    }
+                                }
                             };
                         }
 

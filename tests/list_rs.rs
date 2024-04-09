@@ -5,6 +5,8 @@ use navipod::k8s::rs::list_replicas;
 
 #[tokio::test]
 async fn test_list_replicas() {
+    let _ =
+        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
     let data_result = list_replicas().await;
     assert!(matches!(data_result, Ok(..),));
     let data = &data_result.unwrap();
@@ -18,6 +20,8 @@ async fn test_list_replicas() {
 
 #[tokio::test]
 async fn test_list_replica_events() {
+    let _ =
+        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
     let data_result = list_replicas().await;
     assert!(matches!(data_result, Ok(..),));
     let data = &data_result.unwrap();
@@ -26,6 +30,8 @@ async fn test_list_replica_events() {
 
 #[tokio::test]
 async fn test_list_events_for_resource() {
+    let _ =
+        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
     let client = Client::try_default().await.unwrap();
 
     let events = list_k8sevents(client.clone()).await.unwrap();

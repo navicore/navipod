@@ -47,6 +47,8 @@ struct Args {
 
 async fn process_command() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
+    let _ =
+        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
     let args = Args::parse();
     let db_location = args.db_location;
     let pool = db::init(db_location).await?;

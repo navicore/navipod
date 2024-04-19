@@ -5,8 +5,10 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use kube::{Api, Client};
+use kube::Api;
 use std::collections::BTreeMap;
+
+use super::client::k8s_client;
 
 fn calculate_pod_age(pod: &Pod) -> String {
     pod.metadata.creation_timestamp.as_ref().map_or_else(
@@ -57,7 +59,7 @@ fn get_pod_state(pod: &Pod) -> String {
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
 pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod>, kube::Error> {
-    let client = Client::try_default().await?;
+    let client = k8s_client().await?;
 
     // Format the label selector from the BTreeMap
     let label_selector = format_label_selector(&selector);
@@ -98,7 +100,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
 
                 let age = calculate_pod_age(&pod);
                 let status = get_pod_state(&pod);
-                let selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
+                let selectors = pod.metadata.labels.clone();
 
                 let resource_events =
                     list_events_for_resource(events.clone(), instance_name).await?;

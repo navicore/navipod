@@ -1,3 +1,4 @@
+use crate::k8s::client::k8s_client;
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
 use k8s_openapi::api::core::v1::ContainerPort;
@@ -52,7 +53,7 @@ pub async fn list(
             .unwrap_or_default();
 
         if let Some(name) = pod.metadata.name {
-            let container_selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
+            let container_selectors = pod.metadata.labels;
             if name == pod_name.clone() {
                 if let Some(spec) = pod.spec {
                     for container in spec.containers {
@@ -158,7 +159,7 @@ pub async fn logs(
     pod_name: String,
     container_name: String,
 ) -> Result<Vec<LogRec>, kube::Error> {
-    let client = Client::try_default().await?;
+    let client = k8s_client().await?;
     let pods: Api<Pod> = Api::default_namespaced(client);
 
     let label_selector = format_label_selector(&selector);

@@ -5,6 +5,8 @@ use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
 
+use super::client::k8s_client;
+
 fn matches_rs_labels(
     rs: &ReplicaSet,
     selector: &std::collections::BTreeMap<String, String>,
@@ -48,7 +50,8 @@ pub async fn list_ingresses(
     rs: &ReplicaSet,
     namespace: &str,
 ) -> Result<Vec<data::Ingress>, kube::Error> {
-    let client = Client::try_default().await?;
+    let client = k8s_client().await?;
+
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);
     let services = services_for_rs(&client, rs, namespace).await?;
     drop(client);

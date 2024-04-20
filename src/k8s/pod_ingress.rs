@@ -6,13 +6,13 @@ use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
 
-use super::client::k8s_client;
+use super::client::new;
 
 /// # Errors
 ///
 /// Will return `Err` if function cannot connect to Kubernetes
 pub async fn explain(namespace: &str, pod_name: &str) -> Result<()> {
-    let client = k8s_client().await?;
+    let client = new().await?;
     let pod = get_pod(&client, namespace, pod_name).await?;
 
     check_replica_set(&client, &pod, namespace).await?;

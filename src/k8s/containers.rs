@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::k8s::client::k8s_client;
+use crate::k8s::client::new;
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
 use k8s_openapi::api::core::v1::ContainerPort;
@@ -157,7 +157,7 @@ pub async fn logs(
     pod_name: String,
     container_name: String,
 ) -> Result<Vec<LogRec>> {
-    let client = k8s_client().await?;
+    let client = new().await?;
     let pods: Api<Pod> = Api::default_namespaced(client);
 
     let label_selector = format_label_selector(&selector);

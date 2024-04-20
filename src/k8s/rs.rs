@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
-use super::client::k8s_client;
+use super::client::new;
 
 fn calculate_rs_age(rs: &ReplicaSet) -> String {
     rs.metadata.creation_timestamp.as_ref().map_or_else(
@@ -29,7 +29,7 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
 pub async fn list_replicas() -> Result<Vec<Rs>> {
-    let client = k8s_client().await?;
+    let client = new().await?;
 
     let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone())
         .list(&ListParams::default())

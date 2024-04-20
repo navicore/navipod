@@ -6,7 +6,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
 
-use super::client::k8s_client;
+use super::client::new;
 
 fn matches_rs_labels(
     rs: &ReplicaSet,
@@ -44,7 +44,7 @@ async fn services_for_rs(client: &Client, rs: &ReplicaSet, namespace: &str) -> R
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 pub async fn list_ingresses(rs: &ReplicaSet, namespace: &str) -> Result<Vec<data::Ingress>> {
-    let client = k8s_client().await?;
+    let client = new().await?;
 
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);
     let services = services_for_rs(&client, rs, namespace).await?;

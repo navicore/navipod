@@ -16,6 +16,9 @@ pub enum Error {
 
     #[from]
     Infer(kube::config::InferConfigError),
+
+    #[from]
+    HttpHeader(hyper::http::Error),
 }
 
 impl From<&str> for Error {

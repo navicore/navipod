@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::RsPod;
@@ -58,7 +59,7 @@ fn get_pod_state(pod: &Pod) -> String {
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
-pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod>, kube::Error> {
+pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod>> {
     let client = k8s_client().await?;
 
     // Format the label selector from the BTreeMap

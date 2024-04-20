@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::tui::data;
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::Service;
@@ -19,11 +20,7 @@ fn matches_rs_labels(
     })
 }
 
-async fn services_for_rs(
-    client: &Client,
-    rs: &ReplicaSet,
-    namespace: &str,
-) -> Result<Vec<String>, kube::Error> {
+async fn services_for_rs(client: &Client, rs: &ReplicaSet, namespace: &str) -> Result<Vec<String>> {
     let services: Api<Service> = Api::namespaced(client.clone(), namespace);
     let service_list = services.list(&ListParams::default()).await?;
     drop(services);
@@ -46,10 +43,7 @@ async fn services_for_rs(
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
-pub async fn list_ingresses(
-    rs: &ReplicaSet,
-    namespace: &str,
-) -> Result<Vec<data::Ingress>, kube::Error> {
+pub async fn list_ingresses(rs: &ReplicaSet, namespace: &str) -> Result<Vec<data::Ingress>> {
     let client = k8s_client().await?;
 
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);

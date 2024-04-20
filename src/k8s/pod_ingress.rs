@@ -1,3 +1,4 @@
+use crate::error::Result;
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::api::core::v1::Service;
@@ -10,7 +11,7 @@ use super::client::k8s_client;
 /// # Errors
 ///
 /// Will return `Err` if function cannot connect to Kubernetes
-pub async fn explain(namespace: &str, pod_name: &str) -> Result<(), kube::Error> {
+pub async fn explain(namespace: &str, pod_name: &str) -> Result<()> {
     let client = k8s_client().await?;
     let pod = get_pod(&client, namespace, pod_name).await?;
 
@@ -22,12 +23,16 @@ pub async fn explain(namespace: &str, pod_name: &str) -> Result<(), kube::Error>
     Ok(())
 }
 
-async fn get_pod(client: &Client, namespace: &str, pod_name: &str) -> Result<Pod, kube::Error> {
+async fn get_pod(
+    client: &Client,
+    namespace: &str,
+    pod_name: &str,
+) -> std::result::Result<Pod, kube::Error> {
     let pods: Api<Pod> = Api::namespaced(client.clone(), namespace);
     pods.get(pod_name).await
 }
 
-async fn check_replica_set(client: &Client, pod: &Pod, namespace: &str) -> Result<(), kube::Error> {
+async fn check_replica_set(client: &Client, pod: &Pod, namespace: &str) -> Result<()> {
     let replica_sets: Api<ReplicaSet> = Api::namespaced(client.clone(), namespace);
     let rs_list = replica_sets.list(&ListParams::default()).await?;
     drop(replica_sets);
@@ -50,11 +55,7 @@ async fn check_replica_set(client: &Client, pod: &Pod, namespace: &str) -> Resul
     Ok(())
 }
 
-async fn services_for_pod(
-    client: &Client,
-    pod: &Pod,
-    namespace: &str,
-) -> Result<Vec<String>, kube::Error> {
+async fn services_for_pod(client: &Client, pod: &Pod, namespace: &str) -> Result<Vec<String>> {
     let services: Api<Service> = Api::namespaced(client.clone(), namespace);
     let service_list = services.list(&ListParams::default()).await?;
     drop(services);
@@ -74,7 +75,7 @@ async fn services_for_pod(
         .collect())
 }
 
-async fn check_services(client: &Client, pod: &Pod, namespace: &str) -> Result<(), kube::Error> {
+async fn check_services(client: &Client, pod: &Pod, namespace: &str) -> Result<()> {
     let services_names = services_for_pod(client, pod, namespace).await?;
     for svc_name in &services_names {
         println!("Implements Service {svc_name}");
@@ -91,7 +92,7 @@ fn matches_pod_labels(pod: &Pod, selector: &std::collections::BTreeMap<String, S
     })
 }
 
-async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<(), kube::Error> {
+async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<()> {
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);
     let services = services_for_pod(client, pod, namespace).await?;
 

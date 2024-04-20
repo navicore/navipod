@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::Rs;
@@ -27,7 +28,7 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
-pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
+pub async fn list_replicas() -> Result<Vec<Rs>> {
     let client = k8s_client().await?;
 
     let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone())
@@ -84,9 +85,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
-pub async fn get_replicaset(
-    selector: BTreeMap<String, String>,
-) -> Result<Option<ReplicaSet>, kube::Error> {
+pub async fn get_replicaset(selector: BTreeMap<String, String>) -> Result<Option<ReplicaSet>> {
     let client = Client::try_default().await?;
 
     let label_selector = format_label_selector(&selector);

@@ -1,3 +1,4 @@
+pub mod client;
 pub mod containers;
 pub mod events;
 pub mod pod_ingress;

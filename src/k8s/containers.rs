@@ -1,3 +1,5 @@
+use crate::error::Result;
+use crate::k8s::client::new;
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
 use k8s_openapi::api::core::v1::ContainerPort;
@@ -29,10 +31,7 @@ fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
 #[allow(clippy::too_many_lines)]
-pub async fn list(
-    selector: BTreeMap<String, String>,
-    pod_name: String,
-) -> Result<Vec<Container>, kube::Error> {
+pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Result<Vec<Container>> {
     let client = Client::try_default().await?;
 
     let label_selector = format_label_selector(&selector);
@@ -52,7 +51,7 @@ pub async fn list(
             .unwrap_or_default();
 
         if let Some(name) = pod.metadata.name {
-            let container_selectors = pod.metadata.labels.as_ref().map(std::clone::Clone::clone);
+            let container_selectors = pod.metadata.labels;
             if name == pod_name.clone() {
                 if let Some(spec) = pod.spec {
                     for container in spec.containers {
@@ -157,8 +156,8 @@ pub async fn logs(
     selector: BTreeMap<String, String>,
     pod_name: String,
     container_name: String,
-) -> Result<Vec<LogRec>, kube::Error> {
-    let client = Client::try_default().await?;
+) -> Result<Vec<LogRec>> {
+    let client = new().await?;
     let pods: Api<Pod> = Api::default_namespaced(client);
 
     let label_selector = format_label_selector(&selector);

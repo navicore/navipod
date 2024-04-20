@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::Rs;
@@ -8,6 +9,8 @@ use kube::{Api, Client};
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
+
+use super::client::new;
 
 fn calculate_rs_age(rs: &ReplicaSet) -> String {
     rs.metadata.creation_timestamp.as_ref().map_or_else(
@@ -25,8 +28,8 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
-pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
-    let client = Client::try_default().await?;
+pub async fn list_replicas() -> Result<Vec<Rs>> {
+    let client = new().await?;
 
     let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone())
         .list(&ListParams::default())
@@ -40,7 +43,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
     for rs in rs_list.items {
         if let Some(owners) = &rs.metadata.owner_references {
             for owner in owners {
-                let selectors = rs.metadata.labels.as_ref().map(std::clone::Clone::clone);
+                let selectors = rs.metadata.labels.clone();
 
                 let age = calculate_rs_age(&rs);
                 let instance_name = &rs.metadata.name.as_deref().unwrap_or("unknown").to_string();
@@ -82,9 +85,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>, kube::Error> {
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
-pub async fn get_replicaset(
-    selector: BTreeMap<String, String>,
-) -> Result<Option<ReplicaSet>, kube::Error> {
+pub async fn get_replicaset(selector: BTreeMap<String, String>) -> Result<Option<ReplicaSet>> {
     let client = Client::try_default().await?;
 
     let label_selector = format_label_selector(&selector);

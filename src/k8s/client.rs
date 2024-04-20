@@ -1,3 +1,4 @@
+/// almost a hundred lines of code just to add a proper User-Agent header
 use crate::error::Result as NvResult;
 use hyper::Request;
 use hyper_util::rt::TokioExecutor;
@@ -7,8 +8,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
-
-/// almost a hundred lines of code just to add a proper User-Agent header
 
 pub struct UserAgentLayer {
     user_agent: String,

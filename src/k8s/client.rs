@@ -10,6 +10,9 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const MODULE: &str = env!("CARGO_PKG_NAME");
+
 #[derive(Debug)]
 pub struct UserAgentError {
     message: String,
@@ -28,6 +31,9 @@ pub struct UserAgentLayer {
 }
 
 impl UserAgentLayer {
+    /// # Errors
+    ///
+    /// Will return `Err` if Layer cannot be created due to invalid `user_agent` header value
     pub fn new(user_agent: &str) -> Result<Self, UserAgentError> {
         let header_value =
             hyper::header::HeaderValue::from_str(user_agent).map_err(|e| UserAgentError {
@@ -93,8 +99,6 @@ pub async fn new(custom_user_agent: Option<&str>) -> NvResult<Client> {
 
     let https = config.rustls_https_connector()?;
 
-    const VERSION: &str = env!("CARGO_PKG_VERSION");
-    const MODULE: &str = env!("CARGO_PKG_NAME");
     let default_user_agent = format!("{MODULE}/{VERSION}");
     let user_agent_str = custom_user_agent.unwrap_or(&default_user_agent);
 

@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.82"
+bytes = "1.6.0"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
@@ -42,12 +43,14 @@ tokio-stream = "0.1"
 tokio-util = "0.7"
 tower = "0.4"
 tower-http = "0.5"
+tower-test = "0.4.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 unicode-width = "0.1"
 uuid = { version = "1", features = [ "v4" ] }
 webpki = "0.22"
 webpki-roots = "0.25"
+wiremock = "0.6.0"
 x509-parser = "0.16.0"
 
 [dev-dependencies]

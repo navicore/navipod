@@ -157,7 +157,7 @@ pub async fn logs(
     pod_name: String,
     container_name: String,
 ) -> Result<Vec<LogRec>> {
-    let client = new().await?;
+    let client = new(None).await?;
     let pods: Api<Pod> = Api::default_namespaced(client);
 
     let label_selector = format_label_selector(&selector);

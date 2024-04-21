@@ -2,9 +2,11 @@ use kube::Client;
 use navipod::k8s::events::list_events_for_resource;
 use navipod::k8s::events::list_k8sevents;
 use navipod::k8s::rs::list_replicas;
+mod crypto_fixture;
 
 #[tokio::test]
 async fn test_list_replicas() {
+    crypto_fixture::fixture();
     let _ =
         rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
     let data_result = list_replicas().await;
@@ -20,8 +22,7 @@ async fn test_list_replicas() {
 
 #[tokio::test]
 async fn test_list_replica_events() {
-    let _ =
-        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
+    crypto_fixture::fixture();
     let data_result = list_replicas().await;
     assert!(matches!(data_result, Ok(..),));
     let data = &data_result.unwrap();
@@ -30,8 +31,7 @@ async fn test_list_replica_events() {
 
 #[tokio::test]
 async fn test_list_events_for_resource() {
-    let _ =
-        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
+    crypto_fixture::fixture();
     let client = Client::try_default().await.unwrap();
 
     let events = list_k8sevents(client.clone()).await.unwrap();

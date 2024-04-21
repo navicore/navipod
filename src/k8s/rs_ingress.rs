@@ -44,7 +44,7 @@ async fn services_for_rs(client: &Client, rs: &ReplicaSet, namespace: &str) -> R
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 pub async fn list_ingresses(rs: &ReplicaSet, namespace: &str) -> Result<Vec<data::Ingress>> {
-    let client = new().await?;
+    let client = new(None).await?;
 
     let ingresses: Api<Ingress> = Api::namespaced(client.clone(), namespace);
     let services = services_for_rs(&client, rs, namespace).await?;

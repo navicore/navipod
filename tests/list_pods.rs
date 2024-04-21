@@ -1,10 +1,10 @@
+mod crypto_fixture;
 use navipod::k8s::pods::list_rspods;
 use navipod::k8s::rs::list_replicas;
 
 #[tokio::test]
 async fn test_list_pods() {
-    let _ =
-        rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
+    crypto_fixture::fixture();
     let data_result = list_replicas().await;
     assert!(matches!(data_result, Ok(..),));
     let data = &data_result.unwrap();

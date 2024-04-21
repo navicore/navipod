@@ -1,3 +1,4 @@
+use crate::k8s::client::UserAgentError;
 use derive_more::From;
 use k8s_openapi::serde_json;
 
@@ -6,7 +7,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug, From)]
 pub enum Error {
     #[from]
-    Custom(String),
+    UserAgentError(UserAgentError),
 
     #[from]
     Json(serde_json::Error),
@@ -19,12 +20,6 @@ pub enum Error {
 
     #[from]
     HttpHeader(hyper::http::Error),
-}
-
-impl From<&str> for Error {
-    fn from(val: &str) -> Self {
-        Self::Custom(val.to_string())
-    }
 }
 
 impl core::fmt::Display for Error {

@@ -12,7 +12,7 @@ use super::client::new;
 ///
 /// Will return `Err` if function cannot connect to Kubernetes
 pub async fn explain(namespace: &str, pod_name: &str) -> Result<()> {
-    let client = new().await?;
+    let client = new(None).await?;
     let pod = get_pod(&client, namespace, pod_name).await?;
 
     check_replica_set(&client, &pod, namespace).await?;

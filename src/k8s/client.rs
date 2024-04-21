@@ -1,24 +1,42 @@
-/// almost a hundred lines of code just to add a proper User-Agent header
+// A hundred lines of code just to add a correct User-Agent header - what am I missing?
 use crate::error::Result as NvResult;
 use hyper::Request;
 use hyper_util::rt::TokioExecutor;
 use kube::{client::ConfigExt, Client, Config};
 use pin_project::pin_project;
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
 
+#[derive(Debug)]
+pub struct UserAgentError {
+    message: String,
+}
+
+impl fmt::Display for UserAgentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for UserAgentError {}
+
 pub struct UserAgentLayer {
-    user_agent: String,
+    user_agent: hyper::header::HeaderValue,
 }
 
 impl UserAgentLayer {
-    #[must_use]
-    pub fn new(user_agent: &str) -> Self {
-        Self {
-            user_agent: user_agent.to_string(),
-        }
+    pub fn new(user_agent: &str) -> Result<Self, UserAgentError> {
+        let header_value =
+            hyper::header::HeaderValue::from_str(user_agent).map_err(|e| UserAgentError {
+                message: format!("can not parse user_agent: {e}"),
+            })?;
+
+        Ok(Self {
+            user_agent: header_value,
+        })
     }
 }
 
@@ -37,7 +55,7 @@ impl<S> Layer<S> for UserAgentLayer {
 pub struct UserAgentService<S> {
     #[pin]
     inner: S,
-    user_agent: String,
+    user_agent: hyper::header::HeaderValue,
 }
 
 impl<S, ReqBody> Service<Request<ReqBody>> for UserAgentService<S>
@@ -57,29 +75,31 @@ where
     }
 
     fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
-        let header_value = hyper::header::HeaderValue::from_str(&self.user_agent)
-            .unwrap_or_else(|_| hyper::header::HeaderValue::from_static("navipod"));
-
         req.headers_mut()
-            .insert(hyper::header::USER_AGENT, header_value);
+            .insert(hyper::header::USER_AGENT, self.user_agent.clone());
 
         let fut = self.inner.call(req);
         Box::pin(fut)
     }
 }
 
-/// Create a new k8s client to interact with k8s cluster api
+/// Create a new k8s client to interact with k8s cluster api that includes User-Agent header
 ///
 /// # Errors
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
-pub async fn new() -> NvResult<Client> {
+pub async fn new(custom_user_agent: Option<&str>) -> NvResult<Client> {
     let config = Config::infer().await?;
 
     let https = config.rustls_https_connector()?;
 
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+    const MODULE: &str = env!("CARGO_PKG_NAME");
+    let default_user_agent = format!("{MODULE}/{VERSION}");
+    let user_agent_str = custom_user_agent.unwrap_or(&default_user_agent);
+
     let service = tower::ServiceBuilder::new()
-        .layer(UserAgentLayer::new("navipod/1.0")) // todo: manage via CICD
+        .layer(UserAgentLayer::new(user_agent_str)?)
         .layer(config.base_uri_layer())
         .option_layer(config.auth_layer()?)
         .service(hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build(https));

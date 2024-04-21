@@ -60,7 +60,7 @@ fn get_pod_state(pod: &Pod) -> String {
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
 pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod>> {
-    let client = new().await?;
+    let client = new(None).await?;
 
     // Format the label selector from the BTreeMap
     let label_selector = format_label_selector(&selector);

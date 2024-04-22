@@ -192,6 +192,7 @@ pub async fn logs(
             });
         });
     }
+    log_vec.reverse(); // Reverse the order of logs to show the latest logs first
 
     Ok(log_vec)
 }

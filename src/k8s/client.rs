@@ -1,4 +1,4 @@
-// A hundred lines of code just to add a correct User-Agent header - what am I missing?
+// A hundred lines of code just to add a correct User-Agent header.
 use crate::error::Result as NvResult;
 use hyper::Request;
 use hyper_util::rt::TokioExecutor;

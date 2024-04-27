@@ -94,6 +94,24 @@ impl TuiTableState for App {
     fn set_filter(&mut self, filter: String) {
         self.filter = filter;
     }
+
+    fn set_cursor_pos(&mut self, cursor_pos: usize) {
+        self.edit_filter_cursor_position = cursor_pos;
+    }
+
+    #[allow(clippy::missing_const_for_fn)]
+    fn get_cursor_pos(&self) -> usize {
+        self.edit_filter_cursor_position
+    }
+
+    fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
+        self.show_filter_edit = show_filter_edit;
+    }
+
+    #[allow(clippy::missing_const_for_fn)]
+    fn get_show_filter_edit(&self) -> bool {
+        self.show_filter_edit
+    }
 }
 
 impl AppBehavior for App {
@@ -278,53 +296,49 @@ impl App {
         Ok(app_holder)
     }
 
-    fn move_cursor_left(&mut self) {
-        let cursor_moved_left = self.edit_filter_cursor_position.saturating_sub(1);
-        self.edit_filter_cursor_position = self.clamp_cursor(cursor_moved_left);
-    }
-
-    fn move_cursor_right(&mut self) {
-        let cursor_moved_right = self.edit_filter_cursor_position.saturating_add(1);
-        self.edit_filter_cursor_position = self.clamp_cursor(cursor_moved_right);
-    }
-
-    fn enter_char(&mut self, new_char: char) {
-        self.filter
-            .insert(self.edit_filter_cursor_position, new_char);
-
-        self.move_cursor_right();
-    }
-
-    fn delete_char(&mut self) {
-        let is_not_cursor_leftmost = self.edit_filter_cursor_position != 0;
-        if is_not_cursor_leftmost {
-            // Method "remove" is not used on the saved text for deleting the selected char.
-            // Reason: Using remove on String works on bytes instead of the chars.
-            // Using remove would require special care because of char boundaries.
-
-            let current_index = self.edit_filter_cursor_position;
-            let from_left_to_current_index = current_index - 1;
-
-            // Getting all characters before the selected character.
-            let before_char_to_delete = self.filter.chars().take(from_left_to_current_index);
-            // Getting all characters after selected character.
-            let after_char_to_delete = self.filter.chars().skip(current_index);
-
-            // Put all characters together except the selected one.
-            // By leaving the selected one out, it is forgotten and therefore deleted.
-            self.filter = before_char_to_delete.chain(after_char_to_delete).collect();
-            self.move_cursor_left();
-        }
-    }
-
-    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-        new_cursor_pos.clamp(0, self.filter.len())
-    }
-
-    fn _reset_cursor(&mut self) {
-        self.edit_filter_cursor_position = 0;
-    }
-
+    // fn move_cursor_left(&mut self) {
+    //     let cursor_moved_left = self.get_cursor_pos().saturating_sub(1);
+    //     self.set_cursor_pos(self.clamp_cursor(cursor_moved_left));
+    // }
+    //
+    // fn move_cursor_right(&mut self) {
+    //     let cursor_moved_right = self.get_cursor_pos().saturating_add(1);
+    //     self.set_cursor_pos(self.clamp_cursor(cursor_moved_right));
+    // }
+    //
+    // fn enter_char(&mut self, new_char: char) {
+    //     let mut f = self.get_filter();
+    //     f.insert(self.get_cursor_pos(), new_char);
+    //     self.set_filter(f);
+    //
+    //     self.move_cursor_right();
+    // }
+    //
+    // fn delete_char(&mut self) {
+    //     let is_not_cursor_leftmost = self.get_cursor_pos() != 0;
+    //     if is_not_cursor_leftmost {
+    //         let current_index = self.get_cursor_pos();
+    //         let from_left_to_current_index = current_index - 1;
+    //
+    //         let f = self.get_filter();
+    //         let before_char_to_delete = f.chars().take(from_left_to_current_index);
+    //         let f = self.get_filter();
+    //         let c = f.chars();
+    //         let after_char_to_delete = c.skip(current_index);
+    //
+    //         self.set_filter(before_char_to_delete.chain(after_char_to_delete).collect());
+    //         self.move_cursor_left();
+    //     }
+    // }
+    //
+    // fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
+    //     new_cursor_pos.clamp(0, self.filter.len())
+    // }
+    //
+    // fn _reset_cursor(&mut self) {
+    //     self.set_cursor_pos(0);
+    // }
+    //
     pub fn set_cursor_pos(&mut self, cursor_pos: usize) {
         self.edit_filter_cursor_position = cursor_pos;
     }

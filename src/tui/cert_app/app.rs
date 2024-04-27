@@ -81,6 +81,22 @@ impl TuiTableState for App {
     fn set_filter(&mut self, filter: String) {
         self.filter = filter;
     }
+
+    fn set_cursor_pos(&mut self, _cursor_pos: usize) {
+        todo!()
+    }
+
+    fn get_cursor_pos(&self) -> usize {
+        todo!()
+    }
+
+    fn set_show_filter_edit(&mut self, _show_filter_edit: bool) {
+        todo!()
+    }
+
+    fn get_show_filter_edit(&self) -> bool {
+        todo!()
+    }
 }
 
 impl AppBehavior for cert_app::app::App {

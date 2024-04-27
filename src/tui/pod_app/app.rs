@@ -251,7 +251,7 @@ impl App {
         })
     }
 
-    pub fn get_left_details(&mut self) -> Vec<(String, String, Option<String>)> {
+    pub fn get_label_details(&mut self) -> Vec<(String, String, Option<String>)> {
         self.get_selected_item().map_or_else(Vec::new, |pod| {
             pod.selectors.clone().map_or_else(Vec::new, |labels| {
                 let mut r = Vec::new();
@@ -262,8 +262,4 @@ impl App {
             })
         })
     }
-
-    // pub fn get_right_details(&mut self) -> Vec<ResourcceLabel> {
-    //     vec![]
-    // }
 }

@@ -63,6 +63,35 @@ pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
 
 /// # Errors
 ///
+/// Will return `Err` if events cannot be retrieved from k8s cluster api
+pub async fn _list_all(client: Client) -> Result<Vec<ResourceEvent>, kube::Error> {
+    let lp = ListParams::default();
+
+    let mut unfiltered_events: Vec<Event> = Api::default_namespaced(client).list(&lp).await?.items;
+
+    unfiltered_events.sort_by(|a, b| {
+        b.last_timestamp
+            .clone()
+            .map_or_else(chrono::Utc::now, |t| t.0)
+            .cmp(
+                &a.last_timestamp
+                    .clone()
+                    .map_or_else(chrono::Utc::now, |t| t.0),
+            )
+    });
+
+    let mut resource_events: Vec<ResourceEvent> = unfiltered_events
+        .iter()
+        .map(|e| convert_event_to_resource_event(e, ""))
+        .collect();
+
+    resource_events.retain(|e| !e.age.is_empty());
+
+    Ok(resource_events)
+}
+
+/// # Errors
+///
 /// Will return `Err` if data can not be extracted from events
 pub async fn list_events_for_resource(
     events: Vec<Event>,

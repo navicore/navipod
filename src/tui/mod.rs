@@ -1,6 +1,7 @@
 mod cert_app;
 mod container_app;
 pub mod data;
+mod event_app;
 mod ingress_app;
 mod log_app;
 mod pod_app;

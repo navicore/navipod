@@ -1,3 +1,4 @@
+use crate::error::Result as NvResult;
 use crate::tui::data::ResourceEvent;
 use k8s_openapi::api::core::v1::Event;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
@@ -64,10 +65,14 @@ pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
 /// # Errors
 ///
 /// Will return `Err` if events cannot be retrieved from k8s cluster api
-pub async fn _list_all(client: Client) -> Result<Vec<ResourceEvent>, kube::Error> {
+pub async fn list_all() -> NvResult<Vec<ResourceEvent>> {
     let lp = ListParams::default();
 
-    let mut unfiltered_events: Vec<Event> = Api::default_namespaced(client).list(&lp).await?.items;
+    let mut unfiltered_events: Vec<Event> =
+        Api::default_namespaced(super::client::new(None).await?)
+            .list(&lp)
+            .await?
+            .items;
 
     unfiltered_events.sort_by(|a, b| {
         b.last_timestamp

@@ -5,6 +5,7 @@ use crate::net::analyze_tls_certificate;
 use crate::tui::cert_app;
 use crate::tui::container_app;
 use crate::tui::data;
+use crate::tui::event_app;
 use crate::tui::ingress_app;
 use crate::tui::log_app;
 use crate::tui::pod_app;
@@ -70,6 +71,7 @@ pub enum Apps {
     Ingress { app: ingress_app::app::App },
     Cert { app: cert_app::app::App },
     Log { app: log_app::app::App },
+    Event { app: event_app::app::App },
 }
 
 /// # Errors
@@ -235,6 +237,7 @@ where
                 };
             }
         }
+
         Apps::Log { app } => {
             let data_init_clone = app.clone();
             let data_events = data_init_clone.stream(should_stop.clone());
@@ -245,6 +248,26 @@ where
                 if let Some(event) = events.next().await {
                     let app_holder = current_app.handle_event(&event).await?;
                     if let Some(Apps::Log { app }) = &app_holder {
+                        current_app = app.clone();
+                        old_app_holder = app_holder;
+                    } else {
+                        new_app_holder = app_holder;
+                        break;
+                    };
+                };
+            }
+        }
+
+        Apps::Event { app } => {
+            let data_init_clone = app.clone();
+            let data_events = data_init_clone.stream(should_stop.clone());
+            let mut events = futures::stream::select(data_events, key_events);
+            let mut current_app = app.clone();
+            loop {
+                _ = current_app.draw_ui(terminal);
+                if let Some(event) = events.next().await {
+                    let app_holder = current_app.handle_event(&event).await?;
+                    if let Some(Apps::Event { app }) = &app_holder {
                         current_app = app.clone();
                         old_app_holder = app_holder;
                     } else {

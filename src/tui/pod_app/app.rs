@@ -93,6 +93,22 @@ impl TuiTableState for App {
     fn set_filter(&mut self, filter: String) {
         self.filter = filter;
     }
+
+    fn set_cursor_pos(&mut self, _cursor_pos: usize) {
+        todo!()
+    }
+
+    fn get_cursor_pos(&self) -> usize {
+        todo!()
+    }
+
+    fn set_show_filter_edit(&mut self, _show_filter_edit: bool) {
+        todo!()
+    }
+
+    fn get_show_filter_edit(&self) -> bool {
+        todo!()
+    }
 }
 
 impl AppBehavior for pod_app::app::App {
@@ -235,7 +251,7 @@ impl App {
         })
     }
 
-    pub fn get_left_details(&mut self) -> Vec<(String, String, Option<String>)> {
+    pub fn get_label_details(&mut self) -> Vec<(String, String, Option<String>)> {
         self.get_selected_item().map_or_else(Vec::new, |pod| {
             pod.selectors.clone().map_or_else(Vec::new, |labels| {
                 let mut r = Vec::new();
@@ -246,8 +262,4 @@ impl App {
             })
         })
     }
-
-    // pub fn get_right_details(&mut self) -> Vec<ResourcceLabel> {
-    //     vec![]
-    // }
 }

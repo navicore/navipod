@@ -26,7 +26,7 @@ fn render_details(f: &mut Frame, app: &mut App, area: Rect) {
     let detail_rects =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
-    let left_details = app.get_left_details();
+    let left_details = app.get_label_details();
     let event_details = app.get_event_details();
 
     let (foreground_color, background_color) = get_colors(app);

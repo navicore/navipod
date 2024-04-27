@@ -108,7 +108,6 @@ impl AppBehavior for pod_app::app::App {
                         }
                         Char('j') | Down => {
                             self.next();
-                            //todo: stop all this cloning
                             app_holder = Some(Apps::Pod { app: self.clone() });
                         }
                         Char('k') | Up => {

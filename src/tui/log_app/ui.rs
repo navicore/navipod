@@ -2,7 +2,10 @@ use crate::tui::log_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use ratatui::{
     prelude::*,
-    widgets::{Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table},
+    widgets::{
+        Block, Borders, Cell, Clear, HighlightSpacing, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, Table,
+    },
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
@@ -13,6 +16,55 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     render_table(f, app, rects[0]);
 
     render_scrollbar(f, app, rects[0]);
+
+    if app.get_show_filter_edit() {
+        render_filter_edit(f, app);
+    }
+}
+
+fn render_filter_edit(f: &mut Frame, app: &App) {
+    let edit_style = Style::default()
+        .fg(app.colors.header_fg)
+        .bg(app.colors.header_bg);
+
+    let area = f.size();
+
+    //let block = Block::default().title("Edit Filter").borders(Borders::ALL);
+    let input_area = centered_rect(60, 20, area);
+
+    let block = Paragraph::new(app.filter.as_str()).style(edit_style).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Edit Filter - try: (java|api)"),
+    );
+
+    f.render_widget(Clear, input_area); //this clears out the background
+    f.render_widget(block, input_area);
+
+    #[allow(clippy::cast_possible_truncation)]
+    f.set_cursor(
+        // Draw the cursor at the current position in the input field.
+        // This position is can be controlled via the left and right arrow key
+        input_area.x + app.edit_filter_cursor_position as u16 + 1,
+        // Move one line down, from the border to the input line
+        input_area.y + 1,
+    );
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Percentage((100 - percent_y) / 2),
+        Constraint::Percentage(percent_y),
+        Constraint::Percentage((100 - percent_y) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Percentage((100 - percent_x) / 2),
+        Constraint::Percentage(percent_x),
+        Constraint::Percentage((100 - percent_x) / 2),
+    ])
+    .split(popup_layout[1])[1]
 }
 
 fn render_table(f: &mut Frame, app: &mut App, area: Rect) {

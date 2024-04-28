@@ -28,11 +28,13 @@ fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEven
         .to_string();
 
     let reason = event.reason.clone().unwrap_or_default();
+    let object = event.involved_object.name.clone().unwrap_or_default();
     let type_ = event.type_.clone().unwrap_or_default();
     let age = calculate_event_age(event.last_timestamp.as_ref());
 
     ResourceEvent {
         resource_name: rs_name.to_string(),
+        object,
         message,
         reason,
         type_,

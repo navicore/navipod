@@ -75,7 +75,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .add_modifier(Modifier::REVERSED)
         .fg(app.colors.selected_style_fg);
 
-    let header = ["Message", "Reason", "Type", "Age"]
+    let header = ["Resource", "Message", "Reason", "Type", "Age"]
         .iter()
         .copied()
         .map(Cell::from)
@@ -87,7 +87,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         .into_iter()
         .enumerate()
         .map(|(i, data)| {
-            let color = match i % 4 {
+            let color = match i % 5 {
                 0 => app.colors.normal_row_color,
                 _ => app.colors.alt_row_color,
             };
@@ -104,6 +104,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         rows,
         [
             // + 1 is for padding.
+            Constraint::Min(app.longest_item_lens.0 + 1),
             Constraint::Min(app.longest_item_lens.1 + 1),
             Constraint::Min(app.longest_item_lens.2 + 1),
             Constraint::Min(app.longest_item_lens.3 + 1),

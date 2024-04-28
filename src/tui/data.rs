@@ -8,6 +8,7 @@ pub trait Filterable {
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ResourceEvent {
     pub resource_name: String,
+    pub object: String,
     pub message: String,
     pub reason: String,
     pub type_: String,
@@ -15,12 +16,18 @@ pub struct ResourceEvent {
 }
 
 impl ResourceEvent {
-    pub(crate) const fn ref_array(&self) -> [&String; 4] {
-        [&self.message, &self.reason, &self.type_, &self.age]
+    pub(crate) const fn ref_array(&self) -> [&String; 5] {
+        [
+            &self.object,
+            &self.message,
+            &self.reason,
+            &self.type_,
+            &self.age,
+        ]
     }
 
-    pub(crate) fn resource_name(&self) -> &str {
-        &self.resource_name
+    pub(crate) fn object(&self) -> &str {
+        &self.object
     }
 
     pub(crate) fn message(&self) -> &str {
@@ -422,9 +429,9 @@ pub fn log_constraint_len_calculator(items: &[LogRec]) -> (u16, u16, u16) {
 
 #[allow(clippy::cast_possible_truncation)]
 pub fn event_constraint_len_calculator(items: &[ResourceEvent]) -> (u16, u16, u16, u16, u16) {
-    let resource_name_len = items
+    let object_len = items
         .iter()
-        .map(ResourceEvent::resource_name)
+        .map(ResourceEvent::object)
         .map(UnicodeWidthStr::width)
         .max()
         .unwrap_or(0);
@@ -453,7 +460,7 @@ pub fn event_constraint_len_calculator(items: &[ResourceEvent]) -> (u16, u16, u1
         .max()
         .unwrap_or(0);
     (
-        resource_name_len as u16,
+        object_len as u16,
         message_len as u16,
         reason_len as u16,
         type_len as u16,

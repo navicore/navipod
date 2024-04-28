@@ -8,10 +8,43 @@ pub trait Filterable {
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ResourceEvent {
     pub resource_name: String,
+    pub object: String,
     pub message: String,
     pub reason: String,
     pub type_: String,
     pub age: String,
+}
+
+impl ResourceEvent {
+    pub(crate) const fn ref_array(&self) -> [&String; 5] {
+        [
+            &self.object,
+            &self.message,
+            &self.reason,
+            &self.type_,
+            &self.age,
+        ]
+    }
+
+    pub(crate) fn object(&self) -> &str {
+        &self.object
+    }
+
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub(crate) fn reason(&self) -> &str {
+        &self.reason
+    }
+
+    pub(crate) fn type_(&self) -> &str {
+        &self.type_
+    }
+
+    pub(crate) fn age(&self) -> &str {
+        &self.age
+    }
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -108,6 +141,12 @@ impl Detail for ResourceEvent {
     }
     fn age(&self) -> Option<String> {
         Some(self.age.clone())
+    }
+}
+
+impl Filterable for ResourceEvent {
+    fn filter_by(&self) -> &str {
+        self.message.as_str()
     }
 }
 
@@ -381,6 +420,52 @@ pub fn log_constraint_len_calculator(items: &[LogRec]) -> (u16, u16, u16) {
         .max()
         .unwrap_or(0);
     (datetime_len as u16, level_len as u16, message_len as u16)
+}
+// pub resource_name: String,
+// pub message: String,
+// pub reason: String,
+// pub type_: String,
+// pub age: String,
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn event_constraint_len_calculator(items: &[ResourceEvent]) -> (u16, u16, u16, u16, u16) {
+    let object_len = items
+        .iter()
+        .map(ResourceEvent::object)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let message_len = items
+        .iter()
+        .map(ResourceEvent::message)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let reason_len = items
+        .iter()
+        .map(ResourceEvent::reason)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let type_len = items
+        .iter()
+        .map(ResourceEvent::type_)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let age_len = items
+        .iter()
+        .map(ResourceEvent::age)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    (
+        object_len as u16,
+        message_len as u16,
+        reason_len as u16,
+        type_len as u16,
+        age_len as u16,
+    )
 }
 
 #[allow(clippy::cast_possible_truncation)]

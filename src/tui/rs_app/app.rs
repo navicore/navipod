@@ -1,12 +1,12 @@
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
-use crate::tui::ingress_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app::ui;
 use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
+use crate::tui::{event_app, ingress_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::Stream;
 use ratatui::prelude::*;
@@ -241,6 +241,13 @@ impl App {
                         Char('c' | 'C') => {
                             self.next_color();
                             app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('e' | 'E') => {
+                            let new_app_holder = Apps::Event {
+                                app: event_app::app::App::new(),
+                            };
+                            app_holder = Some(new_app_holder);
+                            debug!("changing app from rs to event...");
                         }
                         Char('i' | 'I') => {
                             if let Some(selection) = self.get_selected_item() {

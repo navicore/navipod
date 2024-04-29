@@ -7,7 +7,6 @@ use ratatui::{
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let rects = Layout::vertical([Constraint::Min(8), Constraint::Percentage(40)]).split(f.size());
-
     app.set_colors();
 
     let table_area = rects[0];
@@ -98,7 +97,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(app.longest_item_lens.1 + 1),
             Constraint::Min(app.longest_item_lens.2 + 1),
             Constraint::Min(app.longest_item_lens.3 + 1),
-            Constraint::Min(app.longest_item_lens.4 + 1),
+            Constraint::Min(app.longest_item_lens.4),
         ],
     )
     .header(header)

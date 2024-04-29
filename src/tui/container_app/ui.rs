@@ -63,7 +63,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
             Constraint::Min(app.longest_item_lens.1 + 2),
             Constraint::Min(app.longest_item_lens.2 + 2),
             Constraint::Min(app.longest_item_lens.3 + 2),
-            Constraint::Min(app.longest_item_lens.4 + 2),
+            Constraint::Min(app.longest_item_lens.4),
         ],
     )
     .header(header)

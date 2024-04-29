@@ -231,6 +231,9 @@ impl App {
             Message::Log(data_vec) => {
                 let new_app = Self {
                     longest_item_lens: log_constraint_len_calculator(data_vec),
+                    scroll_state: ScrollbarState::new(
+                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                    ),
                     items: data_vec.clone(),
                     ..self.clone()
                 };
@@ -278,6 +281,9 @@ impl App {
                 debug!("updating log app data...");
                 let new_app = Self {
                     longest_item_lens: log_constraint_len_calculator(data_vec),
+                    scroll_state: ScrollbarState::new(
+                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                    ),
                     items: data_vec.clone(),
                     ..self.clone()
                 };

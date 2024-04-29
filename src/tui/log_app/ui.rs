@@ -106,7 +106,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
             // + 1 is for padding.
             Constraint::Min(app.longest_item_lens.0 + 1),
             Constraint::Min(app.longest_item_lens.1 + 1),
-            Constraint::Min(app.longest_item_lens.2 + 1),
+            Constraint::Min(app.longest_item_lens.2),
         ],
     )
     .header(header)

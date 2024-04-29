@@ -207,6 +207,9 @@ impl App {
                 debug!("updating rs app data...");
                 let new_app = Self {
                     longest_item_lens: rs_constraint_len_calculator(data_vec),
+                    scroll_state: ScrollbarState::new(
+                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                    ),
                     items: data_vec.clone(),
                     ..self.clone()
                 };
@@ -292,6 +295,9 @@ impl App {
                 debug!("updating rs app data...");
                 let new_app = Self {
                     longest_item_lens: rs_constraint_len_calculator(data_vec),
+                    scroll_state: ScrollbarState::new(
+                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                    ),
                     items: data_vec.clone(),
                     ..self.clone()
                 };
@@ -303,49 +309,6 @@ impl App {
         Ok(app_holder)
     }
 
-    // fn move_cursor_left(&mut self) {
-    //     let cursor_moved_left = self.get_cursor_pos().saturating_sub(1);
-    //     self.set_cursor_pos(self.clamp_cursor(cursor_moved_left));
-    // }
-    //
-    // fn move_cursor_right(&mut self) {
-    //     let cursor_moved_right = self.get_cursor_pos().saturating_add(1);
-    //     self.set_cursor_pos(self.clamp_cursor(cursor_moved_right));
-    // }
-    //
-    // fn enter_char(&mut self, new_char: char) {
-    //     let mut f = self.get_filter();
-    //     f.insert(self.get_cursor_pos(), new_char);
-    //     self.set_filter(f);
-    //
-    //     self.move_cursor_right();
-    // }
-    //
-    // fn delete_char(&mut self) {
-    //     let is_not_cursor_leftmost = self.get_cursor_pos() != 0;
-    //     if is_not_cursor_leftmost {
-    //         let current_index = self.get_cursor_pos();
-    //         let from_left_to_current_index = current_index - 1;
-    //
-    //         let f = self.get_filter();
-    //         let before_char_to_delete = f.chars().take(from_left_to_current_index);
-    //         let f = self.get_filter();
-    //         let c = f.chars();
-    //         let after_char_to_delete = c.skip(current_index);
-    //
-    //         self.set_filter(before_char_to_delete.chain(after_char_to_delete).collect());
-    //         self.move_cursor_left();
-    //     }
-    // }
-    //
-    // fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
-    //     new_cursor_pos.clamp(0, self.filter.len())
-    // }
-    //
-    // fn _reset_cursor(&mut self) {
-    //     self.set_cursor_pos(0);
-    // }
-    //
     pub fn set_cursor_pos(&mut self, cursor_pos: usize) {
         self.edit_filter_cursor_position = cursor_pos;
     }

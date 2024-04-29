@@ -177,6 +177,9 @@ impl AppBehavior for pod_app::app::App {
                 let new_app = Self {
                     longest_item_lens: pod_constraint_len_calculator(data_vec),
                     items: data_vec.clone(),
+                    scroll_state: ScrollbarState::new(
+                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                    ),
                     ..self.clone()
                 };
                 let new_app_holder = Apps::Pod { app: new_app };

@@ -142,18 +142,21 @@ where
     fn get_items(&self) -> &[Self::Item];
     fn get_state(&mut self) -> &mut TableState;
     fn set_state(&mut self, state: TableState);
+
     fn get_scroll_state(&self) -> &ScrollbarState;
     fn set_scroll_state(&mut self, scroll_state: ScrollbarState);
     fn get_table_colors(&self) -> &TableColors;
+
     fn set_table_colors(&mut self, colors: TableColors);
     fn get_color_index(&self) -> usize;
     fn set_color_index(&mut self, color_index: usize);
+
     fn reset_selection_state(&mut self);
     fn get_table_height(&self) -> usize;
     fn set_table_height(&mut self, table_height: usize);
+
     fn get_filter(&self) -> String;
     fn set_filter(&mut self, filter: String);
-
     fn get_filtered_items(&self) -> Vec<&Self::Item> {
         let filter_pattern = self.get_filter();
         match Regex::new(&filter_pattern) {
@@ -168,16 +171,15 @@ where
             }
         }
     }
+
     fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.get_cursor_pos().saturating_sub(1);
         self.set_cursor_pos(self.clamp_cursor(cursor_moved_left));
     }
-
     fn move_cursor_right(&mut self) {
         let cursor_moved_right = self.get_cursor_pos().saturating_add(1);
         self.set_cursor_pos(self.clamp_cursor(cursor_moved_right));
     }
-
     fn enter_char(&mut self, new_char: char) {
         let mut f = self.get_filter();
         f.insert(self.get_cursor_pos(), new_char);
@@ -185,7 +187,6 @@ where
 
         self.move_cursor_right();
     }
-
     fn delete_char(&mut self) {
         let is_not_cursor_leftmost = self.get_cursor_pos() != 0;
         if is_not_cursor_leftmost {
@@ -202,20 +203,16 @@ where
             self.move_cursor_left();
         }
     }
-
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
         new_cursor_pos.clamp(0, self.get_filter().len())
     }
-
     fn _reset_cursor(&mut self) {
         self.set_cursor_pos(0);
     }
-
+    // begin abstract functions to be implemented in each app
     fn set_cursor_pos(&mut self, cursor_pos: usize);
     fn get_cursor_pos(&self) -> usize;
-
     fn set_show_filter_edit(&mut self, show_filter_edit: bool);
-
     fn get_show_filter_edit(&self) -> bool;
 }
 

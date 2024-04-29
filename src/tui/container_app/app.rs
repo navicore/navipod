@@ -153,6 +153,9 @@ impl AppBehavior for container_app::app::App {
             Message::Container(data_vec) => {
                 let new_app = Self {
                     longest_item_lens: container_constraint_len_calculator(data_vec),
+                    scroll_state: ScrollbarState::new(
+                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                    ),
                     items: data_vec.clone(),
                     ..self.clone()
                 };

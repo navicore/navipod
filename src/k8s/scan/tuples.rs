@@ -10,7 +10,7 @@ pub fn format(
     let datetime: DateTime<Utc> = Utc::now();
     let date_string: String = datetime.to_rfc3339();
     info!(
-        "formating {} metrics for app {} and pod {} in ns {}",
+        "formatting {} metrics for app {} and pod {} in ns {}",
         metrics.len(),
         podname,
         appname,

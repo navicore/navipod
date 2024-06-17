@@ -1335,7 +1335,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "log",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-native-certs",
  "rustls-pki-types",
  "tokio",
@@ -1593,7 +1593,7 @@ dependencies = [
  "kube-core",
  "pem",
  "rand 0.8.5",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-pemfile",
  "secrecy",
  "serde",
@@ -1849,7 +1849,7 @@ dependencies = [
  "ratatui",
  "regex",
  "reqwest",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "sqlx",
  "thiserror",
  "time",
@@ -2629,9 +2629,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.9"
+version = "0.23.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a218f0f6d05669de4eabfb24f31ce802035c952429d037507b4a4a39f0e60c5b"
+checksum = "05cff451f60db80f490f3c182b77c35260baace73209e9cdbbe526bfe3a4d402"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -3481,7 +3481,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-pki-types",
  "tokio",
 ]

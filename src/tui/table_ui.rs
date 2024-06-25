@@ -141,19 +141,19 @@ where
 
     fn get_items(&self) -> &[Self::Item];
     fn get_state(&mut self) -> &mut TableState;
-    fn set_state(&mut self, state: TableState);
+    //fn set_state(&mut self, state: TableState);
 
     fn get_scroll_state(&self) -> &ScrollbarState;
     fn set_scroll_state(&mut self, scroll_state: ScrollbarState);
-    fn get_table_colors(&self) -> &TableColors;
+    //fn get_table_colors(&self) -> &TableColors;
 
     fn set_table_colors(&mut self, colors: TableColors);
     fn get_color_index(&self) -> usize;
     fn set_color_index(&mut self, color_index: usize);
 
     fn reset_selection_state(&mut self);
-    fn get_table_height(&self) -> usize;
-    fn set_table_height(&mut self, table_height: usize);
+    // fn get_table_height(&self) -> usize;
+    // fn set_table_height(&mut self, table_height: usize);
 
     fn get_filter(&self) -> String;
     fn set_filter(&mut self, filter: String);

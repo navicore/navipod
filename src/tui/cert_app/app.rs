@@ -20,7 +20,6 @@ pub struct App {
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     pub(crate) color_index: usize,
-    pub(crate) table_height: usize,
     pub(crate) filter: String,
 }
 
@@ -35,9 +34,9 @@ impl TuiTableState for App {
         &mut self.state
     }
 
-    fn set_state(&mut self, state: TableState) {
-        self.state = state;
-    }
+    // fn set_state(&mut self, state: TableState) {
+    //     self.state = state;
+    // }
 
     fn get_scroll_state(&self) -> &ScrollbarState {
         &self.scroll_state
@@ -46,9 +45,9 @@ impl TuiTableState for App {
     fn set_scroll_state(&mut self, scroll_state: ScrollbarState) {
         self.scroll_state = scroll_state;
     }
-    fn get_table_colors(&self) -> &TableColors {
-        &self.colors
-    }
+    // fn get_table_colors(&self) -> &TableColors {
+    //     &self.colors
+    // }
 
     fn set_table_colors(&mut self, colors: TableColors) {
         self.colors = colors;
@@ -66,13 +65,13 @@ impl TuiTableState for App {
         self.state = TableState::default().with_selected(0);
         self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
     }
-    fn get_table_height(&self) -> usize {
-        self.table_height
-    }
-
-    fn set_table_height(&mut self, table_height: usize) {
-        self.table_height = table_height;
-    }
+    // fn get_table_height(&self) -> usize {
+    //     self.table_height
+    // }
+    //
+    // fn set_table_height(&mut self, table_height: usize) {
+    //     self.table_height = table_height;
+    // }
 
     fn get_filter(&self) -> String {
         self.filter.clone()
@@ -167,7 +166,6 @@ impl App {
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 1,
-            table_height: 0,
             items: data_vec,
             filter: String::new(),
         }

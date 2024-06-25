@@ -229,7 +229,7 @@ impl App {
                     match key.code {
                         Char('q') => {
                             app_holder = None;
-                            debug!("quiting...");
+                            debug!("quitting...");
                         }
                         Char('j') | Down => {
                             self.next();

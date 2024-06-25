@@ -16,5 +16,5 @@ or...
 
 top level hidden nav is "Nodes" "ReplicaSets"
 
-replicaset page and all sub pages have a 50/50 virtical section, lower section
+replicaset page and all sub pages have a 50/50 vertical section, lower section
 is tabbed details of: facts( requests, limits, image, ports, healthurls), events

@@ -1812,7 +1812,7 @@ dependencies = [
 
 [[package]]
 name = "navipod"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1847,7 +1847,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-width",
- "uuid 1.9.0",
+ "uuid 1.9.1",
  "webpki",
  "webpki-roots 0.25.4",
  "wiremock",

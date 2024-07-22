@@ -893,9 +893,9 @@ dependencies = [
 
 [[package]]
 name = "fakeit"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d12d906f7c8cc6ea357fb677d065b38f0a34da6ac78e17d3fcc371e53e2a5f7f"
+checksum = "7926667ef705d624c77bfad7ee4a3a52df3d0957b4962d8f085da6a97e29e114"
 dependencies = [
  "libmath",
  "rand 0.6.5",

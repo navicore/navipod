@@ -19,7 +19,7 @@ bytes = "1.6.1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-crossterm = "0.27"
+crossterm = "0.28"
 csv = "1.3"
 derive_more = { version="1.0.0-beta", features = ["from"] }
 fakeit = "1.3"

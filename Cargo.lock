@@ -1309,7 +1309,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.0",
  "tower-service",
- "webpki-roots 0.26.3",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -1845,7 +1845,7 @@ dependencies = [
  "unicode-width",
  "uuid 1.10.0",
  "webpki",
- "webpki-roots 0.25.4",
+ "webpki-roots",
  "wiremock",
  "x509-parser",
 ]
@@ -2561,7 +2561,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.26.3",
+ "webpki-roots",
  "winreg",
 ]
 
@@ -3927,12 +3927,6 @@ dependencies = [
  "ring",
  "untrusted",
 ]
-
-[[package]]
-name = "webpki-roots"
-version = "0.25.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"

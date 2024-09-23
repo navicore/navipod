@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.89"
-bytes = "1.6.1"
+bytes = "1.7.2"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"

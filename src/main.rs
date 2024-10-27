@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Parser};
+se clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
 use kube::{config::KubeConfigOptions, Config};
 

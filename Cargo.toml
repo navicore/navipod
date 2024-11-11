@@ -35,7 +35,7 @@ regex = "1.11"
 reqwest = { version = "0.12", features = ["rustls-tls", "json"] }
 rustls = "0.23"
 sqlx = { version = "0.8", features = [ "sqlite", "runtime-tokio-native-tls" ] }
-thiserror = "1"
+thiserror = "2"
 time = "0.3" # For handling dates in the certificate
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 tokio-rustls = "=0.24"

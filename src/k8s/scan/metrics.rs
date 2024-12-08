@@ -52,7 +52,7 @@ fn parse_metric(
         let re = Regex::new(r"(?P<metric_name>[^{]+)\{(?P<labels>.*)\} (?P<value>.*)")?;
         let caps = re
             .captures(metrics_text)
-            .ok_or(format!("Failed to parse the input string: {metrics_text}"))?;
+            .ok_or_else(|| format!("Failed to parse the input string: {metrics_text}"))?;
 
         // Get the value for "navipod_metric_name" key
         result.push((

@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
-    let rects = Layout::vertical([Constraint::Min(8), Constraint::Percentage(40)]).split(f.size());
+    let rects = Layout::vertical([Constraint::Min(8), Constraint::Percentage(40)]).split(f.area());
 
     app.set_colors();
 
@@ -67,7 +67,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         ],
     )
     .header(header)
-    .highlight_style(selected_style)
+    .row_highlight_style(selected_style)
     .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]))
     .bg(app.colors.buffer_bg)
     .highlight_spacing(HighlightSpacing::Always);

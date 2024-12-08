@@ -57,7 +57,7 @@ pub async fn list_ingresses(rs: &ReplicaSet, namespace: &str) -> Result<Vec<data
 
     for ingress in ingress_list {
         if let Some(rules_ref) = ingress.spec.as_ref().map(|spec| &spec.rules) {
-            let ingresses_for_rule = handle_ingress_rules(rules_ref, &services, &ingress);
+            let ingresses_for_rule = handle_ingress_rules(rules_ref.as_ref(), &services, &ingress);
             all_ingresses.extend(ingresses_for_rule);
         }
     }
@@ -66,7 +66,7 @@ pub async fn list_ingresses(rs: &ReplicaSet, namespace: &str) -> Result<Vec<data
 }
 
 fn handle_ingress_rules(
-    rules: &Option<Vec<k8s_openapi::api::networking::v1::IngressRule>>,
+    rules: Option<&Vec<k8s_openapi::api::networking::v1::IngressRule>>,
     services: &[String],
     ingress: &Ingress,
 ) -> Vec<data::Ingress> {

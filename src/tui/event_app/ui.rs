@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
-    let rects = Layout::vertical([Constraint::Min(5)]).split(f.size());
+    let rects = Layout::vertical([Constraint::Min(5)]).split(f.area());
 
     app.set_colors();
 
@@ -27,7 +27,7 @@ fn render_filter_edit(f: &mut Frame, app: &App) {
         .fg(app.colors.header_fg)
         .bg(app.colors.header_bg);
 
-    let area = f.size();
+    let area = f.area();
 
     //let block = Block::default().title("Edit Filter").borders(Borders::ALL);
     let input_area = centered_rect(60, 20, area);
@@ -42,13 +42,11 @@ fn render_filter_edit(f: &mut Frame, app: &App) {
     f.render_widget(block, input_area);
 
     #[allow(clippy::cast_possible_truncation)]
-    f.set_cursor(
-        // Draw the cursor at the current position in the input field.
-        // This position is can be controlled via the left and right arrow key
-        input_area.x + app.edit_filter_cursor_position as u16 + 1,
-        // Move one line down, from the border to the input line
-        input_area.y + 1,
-    );
+    let p = Position {
+        x: input_area.x + app.edit_filter_cursor_position as u16 + 1,
+        y: input_area.y as u16 + 1,
+    };
+    f.set_cursor_position(p);
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
@@ -112,7 +110,7 @@ fn render_table(f: &mut Frame, app: &mut App, area: Rect) {
         ],
     )
     .header(header)
-    .highlight_style(selected_style)
+    .row_highlight_style(selected_style)
     .highlight_symbol(Text::from(vec!["".into(), bar.into(), "".into()]))
     .bg(app.colors.buffer_bg)
     .highlight_spacing(HighlightSpacing::Always);

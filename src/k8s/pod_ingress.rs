@@ -100,7 +100,7 @@ async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<
     drop(ingresses);
     for ingress in ingress_list.iter() {
         if let Some(rules_ref) = &ingress.spec.as_ref() {
-            handle_ingress_rules(&rules_ref.rules, &services, ingress);
+            handle_ingress_rules(rules_ref.rules.as_ref(), &services, ingress);
         }
     }
 
@@ -108,7 +108,7 @@ async fn check_ingresses(client: &Client, pod: &Pod, namespace: &str) -> Result<
 }
 
 fn handle_ingress_rules(
-    rules: &Option<Vec<k8s_openapi::api::networking::v1::IngressRule>>,
+    rules: Option<&Vec<k8s_openapi::api::networking::v1::IngressRule>>,
     services: &[String],
     ingress: &Ingress,
 ) {

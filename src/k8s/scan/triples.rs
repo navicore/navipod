@@ -32,9 +32,8 @@ pub async fn persist(
     Ok(())
 }
 
-/// Each `Vec` is a collection of name value pairs.  This function generates a
-/// `uuid` to group the pairs together for when they are later stored with other
-/// metrics, making them now a collection of triples.
+/// Each `Vec` is a collection of name value pairs.  Generates a `uuid` to group the pairs making
+/// them now a collection of triples.
 #[must_use]
 pub fn format(tuples: Vec<Vec<(String, String)>>) -> Vec<Vec<(String, String, String)>> {
     tuples

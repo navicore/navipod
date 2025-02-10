@@ -21,7 +21,7 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 crossterm = "0.28"
 csv = "1.3"
-derive_more = { version="1.0.0", features = ["from"] }
+derive_more = { version="2.0.1", features = ["from"] }
 fakeit = "1.3"
 futures = "0.3"
 hyper = "1.6.0"

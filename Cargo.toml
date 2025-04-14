@@ -14,7 +14,7 @@ name = "navipod"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 bytes = "1.10.1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }

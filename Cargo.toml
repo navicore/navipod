@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Ed Sweeney <ed@onextent.com>"]
 description = "A cli tool for inspecting containers in Kubernetes"
-keywords = ["kubernetes", "commandline", "k8s", "tui", "ratatui"]
+keywords = ["kubernetes", "commandline", "k8s", "tui", "ratatui", "ws"]
 documentation = "https://docs.rs/navipod"
 repository = "https://github.com/navicore/navipod"
 
@@ -27,8 +27,8 @@ futures = "0.3"
 hyper = "1.6.0"
 hyper-util = "0.1.11"
 itertools = "0.14"
-k8s-openapi = { version = "0.23", features = ["v1_29"] }
-kube = { version = "0.95.0", features = ["runtime", "derive", "client", "ws"] }
+k8s-openapi = { version = "0.25", features = ["latest"] }
+kube = { version = "1", features = ["runtime", "derive", "ws"] }
 ratatui = "0.29"
 pin-project = "1.1.10"
 regex = "1.11"
@@ -41,7 +41,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 tokio-rustls = "=0.24"
 tokio-stream = "0.1"
 tokio-util = "0.7"
-tower = "0.4"
+tower = {version = "0.4", features = ["util"] }
 tower-http = "0.6"
 tower-test = "0.4.0"
 tracing = "0.1"

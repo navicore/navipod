@@ -2076,7 +2076,7 @@ dependencies = [
  "unicode-width 0.2.0",
  "uuid 1.16.0",
  "webpki",
- "webpki-roots 0.25.4",
+ "webpki-roots 1.0.0",
  "wiremock",
  "x509-parser",
 ]
@@ -4295,12 +4295,6 @@ dependencies = [
  "ring",
  "untrusted",
 ]
-
-[[package]]
-name = "webpki-roots"
-version = "0.25.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"

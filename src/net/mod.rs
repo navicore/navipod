@@ -1,10 +1,11 @@
 use der_parser::oid::Oid;
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 use webpki_roots::TLS_SERVER_ROOTS;
 use x509_parser::prelude::*;
+use rustls::pki_types::ServerName;
 
 pub struct CertificateInfo {
     pub host: String,
@@ -12,8 +13,6 @@ pub struct CertificateInfo {
     pub expires: ASN1Time,
     pub issued_by: String,
 }
-
-use std::convert::TryFrom;
 
 /// # Errors
 ///
@@ -24,22 +23,19 @@ pub async fn analyze_tls_certificate(
     let addr = format!("{host}:443");
     let tcp_stream = TcpStream::connect(addr).await?;
 
+    // Create a root cert store with WebPKI roots
+    // In webpki-roots 1.0.0, TLS_SERVER_ROOTS is a &[TrustAnchor]
+    // We can use the extend method to add all anchors
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_trust_anchors(TLS_SERVER_ROOTS.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    root_cert_store.extend(TLS_SERVER_ROOTS.iter().cloned());
 
+    // Create a client config with the root certificates
     let config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_cert_store)
         .with_no_client_auth();
 
     let connector = TlsConnector::from(Arc::new(config));
-    let server_name = ServerName::try_from(host)?;
+    let server_name = ServerName::try_from(host)?.to_owned();
 
     let tls_stream = connector.connect(server_name, tcp_stream).await?;
     let certificates = tls_stream
@@ -49,10 +45,12 @@ pub async fn analyze_tls_certificate(
         .ok_or("No certificates found")?;
 
     let certificate = certificates.first().ok_or("No certificates found")?;
-    let parsed_cert = &certificate.0; // DER-encoded certificate
+    
+    // Get the DER encoded certificate data
+    let der_data = certificate.as_ref();
 
     let (_, cert) =
-        parse_x509_certificate(parsed_cert).map_err(|_| "Failed to parse certificate")?;
+        parse_x509_certificate(der_data).map_err(|_| "Failed to parse certificate")?;
 
     let validity = cert.validity();
     let not_after = validity.not_after;

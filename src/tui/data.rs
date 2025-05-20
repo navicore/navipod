@@ -679,8 +679,8 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u1
 #[cfg(test)]
 mod tests {
     use crate::tui::data::{
-        container_constraint_len_calculator, pod_constraint_len_calculator,
-        rs_constraint_len_calculator, Container, Rs, RsPod,
+        Container, Rs, RsPod, container_constraint_len_calculator, pod_constraint_len_calculator,
+        rs_constraint_len_calculator,
     };
 
     #[test]

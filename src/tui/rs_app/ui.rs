@@ -1,6 +1,6 @@
 use crate::tui::rs_app::app::App;
-use crate::tui::table_ui::render_detail_section;
 use crate::tui::table_ui::TuiTableState;
+use crate::tui::table_ui::render_detail_section;
 use ratatui::widgets::{Cell, HighlightSpacing, Row, Scrollbar, ScrollbarOrientation, Table};
 use ratatui::{
     prelude::*,

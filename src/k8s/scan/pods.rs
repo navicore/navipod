@@ -2,8 +2,8 @@ use crate::k8s::scan::metrics;
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ObjectList;
 use kube::{
-    api::{Api, ListParams},
     Client,
+    api::{Api, ListParams},
 };
 use sqlx::sqlite::SqlitePool;
 use tracing::error;

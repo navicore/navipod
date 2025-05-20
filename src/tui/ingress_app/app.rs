@@ -1,17 +1,17 @@
 use crate::tui::cert_app;
-use crate::tui::data::{ingress_constraint_len_calculator, Ingress};
+use crate::tui::data::{Ingress, ingress_constraint_len_calculator};
 use crate::tui::ingress_app;
 use crate::tui::stream::Message;
-use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
+use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{create_cert_data_vec, AppBehavior, Apps};
+use crate::tui::ui_loop::{AppBehavior, Apps, create_cert_data_vec};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
-use futures::{stream, Stream};
+use futures::{Stream, stream};
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tracing::debug;
 
 #[derive(Clone, Debug)]

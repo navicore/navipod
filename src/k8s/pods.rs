@@ -4,9 +4,9 @@ use crate::k8s::utils::format_label_selector;
 use crate::tui::data::RsPod;
 use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::Pod;
+use kube::Api;
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use kube::Api;
 use std::collections::BTreeMap;
 
 use super::client::new;

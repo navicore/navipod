@@ -10,19 +10,19 @@ use crate::tui::ingress_app;
 use crate::tui::log_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app;
-use crate::tui::stream::{async_key_events, Message};
+use crate::tui::stream::{Message, async_key_events};
 use crate::tui::utils::time::asn1time_to_future_days_string;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use futures::stream::Stream;
 use futures::stream::StreamExt;
 use ratatui::prelude::*;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{error::Error, io};
 use tracing::error;
 

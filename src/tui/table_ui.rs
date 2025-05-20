@@ -1,5 +1,5 @@
 use crate::tui::data::Filterable;
-use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
+use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
 use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
 use regex::Regex;

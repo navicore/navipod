@@ -1,16 +1,16 @@
 use crate::tui::cert_app;
-use crate::tui::data::{cert_constraint_len_calculator, Cert};
+use crate::tui::data::{Cert, cert_constraint_len_calculator};
 use crate::tui::stream::Message;
-use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
+use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
-use futures::{stream, Stream};
+use futures::{Stream, stream};
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 #[derive(Clone, Debug)]
 pub struct App {

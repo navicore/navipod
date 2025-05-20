@@ -5,8 +5,8 @@ use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
 use k8s_openapi::api::core::v1::ContainerPort;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    api::{Api, ListParams, LogParams, ObjectList},
     Client, ResourceExt,
+    api::{Api, ListParams, LogParams, ObjectList},
 };
 use std::collections::BTreeMap;
 

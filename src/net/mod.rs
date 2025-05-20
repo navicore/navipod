@@ -1,11 +1,11 @@
 use der_parser::oid::Oid;
+use rustls::pki_types::ServerName;
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use webpki_roots::TLS_SERVER_ROOTS;
 use x509_parser::prelude::*;
-use rustls::pki_types::ServerName;
 
 pub struct CertificateInfo {
     pub host: String,
@@ -45,12 +45,11 @@ pub async fn analyze_tls_certificate(
         .ok_or("No certificates found")?;
 
     let certificate = certificates.first().ok_or("No certificates found")?;
-    
+
     // Get the DER encoded certificate data
     let der_data = certificate.as_ref();
 
-    let (_, cert) =
-        parse_x509_certificate(der_data).map_err(|_| "Failed to parse certificate")?;
+    let (_, cert) = parse_x509_certificate(der_data).map_err(|_| "Failed to parse certificate")?;
 
     let validity = cert.validity();
     let not_after = validity.not_after;

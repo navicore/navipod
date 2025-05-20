@@ -142,7 +142,7 @@ where
     #[allow(unused_assignments)] // we might quit or ESC
     let mut new_app_holder = None;
     match apps_app {
-        Apps::Rs { ref mut app } => {
+        Apps::Rs { app } => {
             let data_init_clone = app.clone();
             let data_events = data_init_clone.stream(should_stop.clone());
             let mut events = futures::stream::select(data_events, key_events);

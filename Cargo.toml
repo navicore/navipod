@@ -50,7 +50,7 @@ unicode-width = "0.2"
 uuid = { version = "1", features = [ "v4" ] }
 webpki = "0.22"
 webpki-roots = "1"
-wiremock = "0.6.3"
+wiremock = "0.6.4"
 x509-parser = "0.17.0"
 
 [dev-dependencies]

@@ -16,7 +16,7 @@ pub async fn fetch(
 ) -> Result<(ObjectList<Pod>, Api<Pod>), Box<dyn std::error::Error>> {
     let client = Client::try_default()
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
 
     let lp = ListParams::default();
     let pods: Api<Pod> = Api::namespaced(client.clone(), namespace.as_str());
@@ -24,7 +24,7 @@ pub async fn fetch(
     let pod_list: ObjectList<Pod> = pods
         .list(&lp)
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
 
     Ok((pod_list, pods))
 }

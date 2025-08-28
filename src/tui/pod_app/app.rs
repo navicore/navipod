@@ -129,8 +129,8 @@ impl AppBehavior for pod_app::app::App {
                                     };
                                     app_holder = Some(new_app_holder);
                                     debug!("changing app from rs to ingress...");
-                                };
-                            };
+                                }
+                            }
                         }
                         Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.page_forward();
@@ -150,7 +150,7 @@ impl AppBehavior for pod_app::app::App {
                                         app: container_app::app::App::new(data_vec),
                                     };
                                     app_holder = Some(new_app_holder);
-                                };
+                                }
                             }
                         }
                         _k => {}

@@ -88,7 +88,7 @@ fn matches_pod_labels(pod: &Pod, selector: &std::collections::BTreeMap<String, S
         pod.metadata
             .labels
             .as_ref()
-            .map_or(false, |labels| labels.get(key.as_str()) == Some(value))
+            .is_some_and(|labels| labels.get(key.as_str()) == Some(value))
     })
 }
 

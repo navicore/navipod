@@ -83,7 +83,7 @@ pub async fn analyze_tls_certificate(
 
             if attr_type_string == "_" {
                 continue;
-            };
+            }
 
             // Inside your loop where you iterate over the attributes
             let attr_value_string = value.as_str().map_or_else(

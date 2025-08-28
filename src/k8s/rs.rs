@@ -73,7 +73,7 @@ pub async fn list_replicas() -> Result<Vec<Rs>> {
 
                 if desired_replicas <= &0 {
                     continue;
-                };
+                }
                 rs_vec.push(data);
             }
         }

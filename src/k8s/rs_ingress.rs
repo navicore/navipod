@@ -16,7 +16,7 @@ fn matches_rs_labels(
         rs.metadata
             .labels
             .as_ref()
-            .map_or(false, |labels| labels.get(key.as_str()) == Some(value))
+            .is_some_and(|labels| labels.get(key.as_str()) == Some(value))
     })
 }
 

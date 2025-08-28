@@ -131,7 +131,7 @@ impl AppBehavior for App {
                     Err(_e) => {
                         break;
                     }
-                };
+                }
             }
         });
 
@@ -245,8 +245,8 @@ impl App {
                                     };
                                     app_holder = Some(new_app_holder);
                                     debug!("changing app from rs to ingress...");
-                                };
-                            };
+                                }
+                            }
                         }
                         Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.page_forward();
@@ -263,8 +263,8 @@ impl App {
                                     };
                                     app_holder = Some(new_app_holder);
                                     debug!("changing app from rs to pod...");
-                                };
-                            };
+                                }
+                            }
                         }
                         Char('/') => {
                             self.set_show_filter_edit(true);
@@ -292,7 +292,7 @@ impl App {
         Ok(app_holder)
     }
 
-    pub fn set_cursor_pos(&mut self, cursor_pos: usize) {
+    pub const fn set_cursor_pos(&mut self, cursor_pos: usize) {
         self.edit_filter_cursor_position = cursor_pos;
     }
     #[allow(clippy::missing_const_for_fn)]
@@ -300,7 +300,7 @@ impl App {
         self.edit_filter_cursor_position
     }
 
-    pub fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
+    pub const fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
         self.show_filter_edit = show_filter_edit;
     }
     #[allow(clippy::missing_const_for_fn)]

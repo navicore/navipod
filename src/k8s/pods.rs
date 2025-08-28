@@ -35,7 +35,7 @@ fn get_pod_state(pod: &Pod) -> String {
             return match phase.as_str() {
                 "Pending" => "Pending".to_string(),
                 "Running" => {
-                    if status.conditions.as_ref().map_or(false, |conds| {
+                    if status.conditions.as_ref().is_some_and(|conds| {
                         conds
                             .iter()
                             .any(|c| c.type_ == "Ready" && c.status == "True")

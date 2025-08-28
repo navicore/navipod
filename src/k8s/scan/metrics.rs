@@ -139,8 +139,7 @@ pub async fn get_text(
 
     let mut port_forwarder = pods.portforward(metadata_name, &[local_port]).await?;
     let Some(mut port_stream) = port_forwarder.take_stream(local_port) else {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(std::io::Error::other(
             "Unable to take stream",
         )));
     };

@@ -17,6 +17,11 @@ impl fmt::Display for UserAgentError {
 impl std::error::Error for UserAgentError {}
 
 impl UserAgentError {
+    /// Creates a new `UserAgentError` with the given message.
+    ///
+    /// # Errors
+    ///
+    /// This function always returns `Ok` and never fails.
     pub fn new(message: &str) -> NvResult<Self> {
         Ok(Self {
             message: message.to_string(),

@@ -131,7 +131,7 @@ impl AppBehavior for ingress_app::app::App {
                                         debug!("can not read certificate: {e}");
                                     }
                                 }
-                            };
+                            }
                         }
 
                         _k => {}

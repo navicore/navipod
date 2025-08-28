@@ -10,19 +10,19 @@ use crate::tui::ingress_app;
 use crate::tui::log_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app;
-use crate::tui::stream::{Message, async_key_events};
+use crate::tui::stream::{async_key_events, Message};
 use crate::tui::utils::time::asn1time_to_future_days_string;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use futures::stream::Stream;
 use futures::stream::StreamExt;
 use ratatui::prelude::*;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::{error::Error, io};
 use tracing::error;
 
@@ -83,7 +83,7 @@ pub async fn create_container_data_vec(
 ) -> Result<Vec<data::Container>, io::Error> {
     match list_containers(selectors, pod_name).await {
         Ok(cntrs) => Ok(cntrs),
-        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+        Err(e) => Err(io::Error::other(e.to_string())),
     }
 }
 
@@ -97,11 +97,11 @@ pub async fn create_ingress_data_vec(
         Ok(rso) => match rso {
             Some(rs) => match list_ingresses(&rs, "").await {
                 Ok(ingress) => Ok(ingress),
-                Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+                Err(e) => Err(io::Error::other(e.to_string())),
             },
             _ => Ok(vec![]),
         },
-        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+        Err(e) => Err(io::Error::other(e.to_string())),
     }
 }
 
@@ -121,7 +121,7 @@ pub async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Err
         }
         Err(e) => {
             let emsg = format!("host: {host} error: {e}");
-            Err(io::Error::new(io::ErrorKind::Other, emsg))
+            Err(io::Error::other(emsg))
         }
     }
 }
@@ -157,8 +157,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
         Apps::Pod { app } => {
@@ -176,8 +176,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
         Apps::Container { app } => {
@@ -195,8 +195,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
         Apps::Cert { app } => {
@@ -214,8 +214,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
         Apps::Ingress { app } => {
@@ -233,8 +233,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
 
@@ -253,8 +253,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
 
@@ -273,8 +273,8 @@ where
                     } else {
                         new_app_holder = app_holder;
                         break;
-                    };
-                };
+                    }
+                }
             }
         }
     }

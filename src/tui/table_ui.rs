@@ -1,5 +1,5 @@
 use crate::tui::data::Filterable;
-use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
+use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
 use regex::Regex;
@@ -237,9 +237,7 @@ pub fn render_detail_section(
 }
 
 fn get_chunks_from_area(area: Rect, sz: usize) -> Rc<[Rect]> {
-    let constraints = std::iter::repeat(Constraint::Length(1))
-        .take(sz)
-        .collect::<Vec<Constraint>>();
+    let constraints = std::iter::repeat_n(Constraint::Length(1), sz).collect::<Vec<Constraint>>();
 
     Layout::default()
         .direction(Direction::Vertical)

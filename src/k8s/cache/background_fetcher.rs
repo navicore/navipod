@@ -69,7 +69,7 @@ impl BackgroundFetcher {
     }
 
     #[must_use]
-    pub fn start(mut self) -> mpsc::Sender<()> {
+    pub fn start(mut self) -> (Arc<Self>, mpsc::Sender<()>) {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         self.shutdown_tx = Some(shutdown_tx.clone());
         
@@ -82,13 +82,13 @@ impl BackgroundFetcher {
         });
         
         // Spawn the refresh loop for expired entries
-        let fetcher_clone = fetcher;
+        let fetcher_clone = fetcher.clone();
         let (_refresh_shutdown_tx, refresh_shutdown_rx) = mpsc::channel(1);
         tokio::spawn(async move {
             fetcher_clone.run_refresh_loop(refresh_shutdown_rx).await;
         });
         
-        shutdown_tx
+        (fetcher, shutdown_tx)
     }
 
     async fn run_fetch_loop(&self, mut shutdown_rx: mpsc::Receiver<()>) {

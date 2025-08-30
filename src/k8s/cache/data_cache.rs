@@ -8,7 +8,7 @@ use super::subscription::SubscriptionManager;
 
 pub struct K8sDataCache {
     cache: Arc<RwLock<HashMap<String, CachedEntry>>>,
-    subscription_manager: Arc<SubscriptionManager>,
+    pub subscription_manager: Arc<SubscriptionManager>,
     max_memory_bytes: usize,
     current_memory_bytes: Arc<RwLock<usize>>,
 }

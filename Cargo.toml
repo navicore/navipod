@@ -1,11 +1,11 @@
 [package]
 name = "navipod"
-version = "0.8.22"
+version = "0.8.24"
 edition = "2024"
 license = "MIT"
 authors = ["Ed Sweeney <ed@onextent.com>"]
 description = "A cli tool for inspecting containers in Kubernetes"
-keywords = ["kubernetes", "commandline", "k8s", "tui", "ratatui", "ws"]
+keywords = ["kubernetes", "commandline", "k8s", "tui", "ratatui"]
 documentation = "https://docs.rs/navipod"
 repository = "https://github.com/navicore/navipod"
 
@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.99"
+async-trait = "0.1"
 bytes = "1.10.1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }

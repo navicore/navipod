@@ -8,6 +8,7 @@ build:
 test:
 	cargo test --lib
 	cargo test --test cache_integration_test
+	cargo test --test k8s_cache_integration
 
 cache-test:
 	cargo test --lib k8s::cache

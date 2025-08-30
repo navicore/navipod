@@ -34,7 +34,7 @@ ratatui = "0.29"
 pin-project = "1.1.10"
 regex = "1.11"
 reqwest = { version = "0.12", features = ["rustls-tls", "json"] }
-rustls = { version = "0.23", features = ["logging", "tls12"] }
+rustls = { version = "0.23", features = ["logging", "tls12", "aws_lc_rs"] }
 sqlx = { version = "0.8", features = [ "sqlite", "runtime-tokio-native-tls" ] }
 thiserror = "2"
 time = "0.3" # For handling dates in the certificate

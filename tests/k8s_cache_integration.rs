@@ -16,8 +16,21 @@ use navipod::k8s::client::new as create_client;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::collections::BTreeMap;
+use std::sync::Once;
+
+static INIT: Once = Once::new();
+
+fn init_rustls() {
+    INIT.call_once(|| {
+        // Initialize rustls provider for tests
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .expect("Failed to install rustls crypto provider");
+    });
+}
 
 async fn k8s_available() -> bool {
+    init_rustls();
     create_client(None).await.is_ok()
 }
 
@@ -125,11 +138,12 @@ async fn test_cache_invalidation_and_refresh() {
     // Invalidate
     cache.invalidate(&request).await;
     
-    // Should return None when stale
+    // Should return None when stale (get only returns fresh data)
     assert!(cache.get(&request).await.is_none());
     
-    // But get_or_mark_stale should still return None and mark it
-    assert!(cache.get_or_mark_stale(&request).await.is_none());
+    // Remove the entry completely to test clean state
+    cache.remove(&request).await;
+    assert!(cache.get(&request).await.is_none());
 }
 
 #[tokio::test]

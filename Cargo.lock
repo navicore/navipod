@@ -2072,9 +2072,10 @@ dependencies = [
 
 [[package]]
 name = "navipod"
-version = "0.8.23"
+version = "0.8.24"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bytes",
  "chrono",
  "clap",

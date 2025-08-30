@@ -6,7 +6,7 @@ pub struct CachedData<T> {
     pub last_updated: Instant,
     pub ttl: Duration,
     pub fetch_status: FetchStatus,
-    pub version: u64,  // For tracking updates
+    pub version: u64, // For tracking updates
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,7 +79,7 @@ mod tests {
         let data = CachedData::new("test".to_string(), Duration::from_millis(100));
         assert!(!data.is_expired());
         assert!(data.is_fresh());
-        
+
         sleep(Duration::from_millis(150));
         assert!(data.is_expired());
         assert!(!data.is_fresh());
@@ -89,7 +89,7 @@ mod tests {
     fn test_cached_data_update() {
         let mut data = CachedData::new(1, Duration::from_secs(60));
         assert_eq!(data.version, 0);
-        
+
         data.update(2);
         assert_eq!(data.data, 2);
         assert_eq!(data.version, 1);
@@ -100,13 +100,13 @@ mod tests {
     fn test_fetch_status_transitions() {
         let mut data = CachedData::new(vec![1, 2, 3], Duration::from_secs(60));
         assert_eq!(data.fetch_status, FetchStatus::Fresh);
-        
+
         data.mark_stale();
         assert_eq!(data.fetch_status, FetchStatus::Stale);
-        
+
         data.mark_fetching();
         assert_eq!(data.fetch_status, FetchStatus::Fetching);
-        
+
         data.mark_error("API error".to_string());
         assert!(matches!(data.fetch_status, FetchStatus::Error(_)));
     }

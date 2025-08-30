@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use crate::error::Result;
 use super::cached_data::{CachedData, FetchStatus};
 use super::fetcher::{DataRequest, FetchResult};
 use super::subscription::SubscriptionManager;
+use crate::error::Result;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 pub struct K8sDataCache {
     cache: Arc<RwLock<HashMap<String, CachedEntry>>>,
@@ -33,7 +33,7 @@ impl K8sDataCache {
     pub async fn get(&self, request: &DataRequest) -> Option<FetchResult> {
         let key = request.cache_key();
         let cache = self.cache.read().await;
-        
+
         cache.get(&key).and_then(|entry| {
             if entry.metadata.is_fresh() {
                 Some(entry.data.clone())
@@ -46,7 +46,7 @@ impl K8sDataCache {
     pub async fn get_or_mark_stale(&self, request: &DataRequest) -> Option<FetchResult> {
         let key = request.cache_key();
         let mut cache = self.cache.write().await;
-        
+
         cache.get_mut(&key).and_then(|entry| {
             if entry.metadata.is_expired() {
                 entry.metadata.mark_stale();
@@ -67,41 +67,41 @@ impl K8sDataCache {
         let key = request.cache_key();
         let ttl = request.default_ttl();
         let size_bytes = self.estimate_size(&data);
-        
+
         // Check memory limit
         let mut current_size = self.current_memory_bytes.write().await;
         if *current_size + size_bytes > self.max_memory_bytes {
             self.evict_lru().await?;
         }
-        
+
         let entry = CachedEntry {
             data: data.clone(),
             metadata: CachedData::new((), ttl),
             size_bytes,
         };
-        
+
         {
             let mut cache = self.cache.write().await;
-            
+
             // Update memory tracking
             if let Some(old_entry) = cache.get(&key) {
                 *current_size = current_size.saturating_sub(old_entry.size_bytes);
             }
             *current_size += size_bytes;
-            
+
             cache.insert(key.clone(), entry);
         } // Drop cache lock here
-        
+
         // Notify subscribers
         self.subscription_manager.notify(&key, data).await;
-        
+
         Ok(())
     }
 
     pub async fn invalidate(&self, request: &DataRequest) {
         let key = request.cache_key();
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.get_mut(&key) {
             entry.metadata.mark_stale();
         }
@@ -110,7 +110,7 @@ impl K8sDataCache {
     pub async fn remove(&self, request: &DataRequest) {
         let key = request.cache_key();
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.remove(&key) {
             let mut current_size = self.current_memory_bytes.write().await;
             *current_size = current_size.saturating_sub(entry.size_bytes);
@@ -119,7 +119,7 @@ impl K8sDataCache {
 
     pub async fn clear(&self) {
         self.cache.write().await.clear();
-        
+
         let mut current_size = self.current_memory_bytes.write().await;
         *current_size = 0;
     }
@@ -127,7 +127,7 @@ impl K8sDataCache {
     pub async fn mark_fetching(&self, request: &DataRequest) {
         let key = request.cache_key();
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.get_mut(&key) {
             entry.metadata.mark_fetching();
         }
@@ -136,7 +136,7 @@ impl K8sDataCache {
     pub async fn mark_error(&self, request: &DataRequest, error: String) {
         let key = request.cache_key();
         let mut cache = self.cache.write().await;
-        
+
         if let Some(entry) = cache.get_mut(&key) {
             entry.metadata.mark_error(error);
         }
@@ -144,20 +144,20 @@ impl K8sDataCache {
 
     async fn evict_lru(&self) -> Result<()> {
         let mut cache = self.cache.write().await;
-        
+
         // Find the least recently used entry
         let oldest_key = cache
             .iter()
             .min_by_key(|(_, entry)| entry.metadata.last_updated)
             .map(|(key, _)| key.clone());
-        
+
         if let Some(key) = oldest_key {
             if let Some(entry) = cache.remove(&key) {
                 let mut current_size = self.current_memory_bytes.write().await;
                 *current_size = current_size.saturating_sub(entry.size_bytes);
             }
         }
-        
+
         Ok(())
     }
 
@@ -178,12 +178,18 @@ impl K8sDataCache {
     pub async fn stats(&self) -> CacheStats {
         let cache = self.cache.read().await;
         let current_size = *self.current_memory_bytes.read().await;
-        
+
         let total_entries = cache.len();
         let fresh_entries = cache.values().filter(|e| e.metadata.is_fresh()).count();
-        let stale_entries = cache.values().filter(|e| matches!(e.metadata.fetch_status, FetchStatus::Stale)).count();
-        let error_entries = cache.values().filter(|e| matches!(e.metadata.fetch_status, FetchStatus::Error(_))).count();
-        
+        let stale_entries = cache
+            .values()
+            .filter(|e| matches!(e.metadata.fetch_status, FetchStatus::Stale))
+            .count();
+        let error_entries = cache
+            .values()
+            .filter(|e| matches!(e.metadata.fetch_status, FetchStatus::Error(_)))
+            .count();
+
         CacheStats {
             total_entries,
             fresh_entries,
@@ -210,11 +216,11 @@ impl K8sDataCache {
         match request {
             DataRequest::ReplicaSets { .. } => {
                 // When fetching ReplicaSets, prefetch pods
-                vec![]  // Will be implemented with actual prefetch logic
+                vec![] // Will be implemented with actual prefetch logic
             }
             DataRequest::Pods { .. } => {
                 // When fetching Pods, consider prefetching containers and events
-                vec![]  // Will be implemented with actual prefetch logic
+                vec![] // Will be implemented with actual prefetch logic
             }
             _ => vec![],
         }
@@ -248,19 +254,19 @@ mod tests {
     #[tokio::test]
     async fn test_cache_basic_operations() {
         let cache = K8sDataCache::new(10); // 10MB limit
-        
+
         let request = DataRequest::ReplicaSets {
             namespace: Some("default".to_string()),
             labels: BTreeMap::new(),
         };
-        
+
         // Test empty cache
         assert!(cache.get(&request).await.is_none());
-        
+
         // Test put and get
         let data = FetchResult::ReplicaSets(vec![]);
         cache.put(&request, data.clone()).await.unwrap();
-        
+
         let retrieved = cache.get(&request).await;
         assert!(retrieved.is_some());
     }
@@ -268,21 +274,21 @@ mod tests {
     #[tokio::test]
     async fn test_cache_expiry() {
         let cache = K8sDataCache::new(10);
-        
+
         let request = DataRequest::Events {
             resource: super::super::fetcher::ResourceRef::Pod("test".to_string()),
             limit: 10,
         };
-        
+
         let data = FetchResult::Events(vec![]);
         cache.put(&request, data).await.unwrap();
-        
+
         // Should be fresh initially
         assert!(cache.get(&request).await.is_some());
-        
+
         // Mark as stale
         cache.invalidate(&request).await;
-        
+
         // Should return None when stale
         assert!(cache.get(&request).await.is_none());
     }

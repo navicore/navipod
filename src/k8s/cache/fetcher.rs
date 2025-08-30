@@ -1,8 +1,8 @@
+use crate::error::Result;
+use crate::tui::data::{Container, Ingress, Rs, RsPod};
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::time::Duration;
-use crate::error::Result;
-use crate::tui::data::{Rs, RsPod, Container, Ingress};
 
 #[derive(Debug, Clone, Default)]
 pub struct FetchParams {
@@ -14,27 +14,27 @@ pub struct FetchParams {
 
 #[derive(Debug, Clone)]
 pub enum DataRequest {
-    ReplicaSets { 
-        namespace: Option<String>, 
-        labels: BTreeMap<String, String> 
+    ReplicaSets {
+        namespace: Option<String>,
+        labels: BTreeMap<String, String>,
     },
-    Pods { 
-        namespace: String, 
-        selector: PodSelector 
+    Pods {
+        namespace: String,
+        selector: PodSelector,
     },
-    Containers { 
-        pod_name: String, 
-        namespace: String 
+    Containers {
+        pod_name: String,
+        namespace: String,
     },
-    Events { 
-        resource: ResourceRef, 
-        limit: usize 
+    Events {
+        resource: ResourceRef,
+        limit: usize,
     },
     Ingresses {
         namespace: String,
         labels: BTreeMap<String, String>,
     },
-    Custom { 
+    Custom {
         fetcher_id: String,
         params: FetchParams,
     },
@@ -62,10 +62,16 @@ impl DataRequest {
             Self::ReplicaSets { namespace, labels } => {
                 format!("rs:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
             }
-            Self::Pods { namespace, selector } => {
+            Self::Pods {
+                namespace,
+                selector,
+            } => {
                 format!("pods:{namespace}:{selector:?}")
             }
-            Self::Containers { pod_name, namespace } => {
+            Self::Containers {
+                pod_name,
+                namespace,
+            } => {
                 format!("containers:{namespace}:{pod_name}")
             }
             Self::Events { resource, limit } => {
@@ -75,7 +81,10 @@ impl DataRequest {
                 format!("ingress:{namespace}:{labels:?}")
             }
             Self::Custom { fetcher_id, params } => {
-                format!("custom:{fetcher_id}:{:?}:{:?}", params.namespace, params.labels)
+                format!(
+                    "custom:{fetcher_id}:{:?}:{:?}",
+                    params.namespace, params.labels
+                )
             }
         }
     }
@@ -112,13 +121,13 @@ pub trait DataFetcher: Send + Sync {
     type Output: Clone + Send + Sync;
 
     async fn fetch(&self, params: FetchParams) -> Result<Self::Output>;
-    
+
     fn cache_key(&self, params: &FetchParams) -> String;
-    
+
     fn ttl(&self) -> Duration {
         Duration::from_secs(30)
     }
-    
+
     fn priority(&self) -> FetchPriority {
         FetchPriority::Medium
     }

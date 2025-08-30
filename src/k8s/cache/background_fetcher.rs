@@ -1,20 +1,20 @@
+use super::data_cache::K8sDataCache;
+use super::fetcher::{DataRequest, FetchPriority, FetchResult};
+use crate::error::Result;
 use std::collections::{BinaryHeap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use crate::error::Result;
-use super::data_cache::K8sDataCache;
-use super::fetcher::{DataRequest, FetchPriority, FetchResult};
 
 // Import existing fetching functions
-use crate::k8s::rs::list_replicas;
-use crate::k8s::pods::list_rspods;
 use crate::k8s::containers::list as list_containers;
 use crate::k8s::events::list_all as list_events;
-use crate::k8s::rs_ingress::list_ingresses;
+use crate::k8s::pods::list_rspods;
 use crate::k8s::rs::get_replicaset;
+use crate::k8s::rs::list_replicas;
+use crate::k8s::rs_ingress::list_ingresses;
 
 #[derive(Debug)]
 struct FetchTask {
@@ -57,7 +57,7 @@ pub struct BackgroundFetcher {
 }
 
 impl BackgroundFetcher {
-    #[must_use] 
+    #[must_use]
     pub fn new(cache: Arc<K8sDataCache>, max_concurrent: usize) -> Self {
         Self {
             cache,
@@ -72,28 +72,28 @@ impl BackgroundFetcher {
     pub fn start(mut self) -> (Arc<Self>, mpsc::Sender<()>) {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         self.shutdown_tx = Some(shutdown_tx.clone());
-        
+
         let fetcher = Arc::new(self);
-        
+
         // Spawn the main fetch loop
         let fetcher_clone = fetcher.clone();
         tokio::spawn(async move {
             fetcher_clone.run_fetch_loop(shutdown_rx).await;
         });
-        
+
         // Spawn the refresh loop for expired entries
         let fetcher_clone = fetcher.clone();
         let (_refresh_shutdown_tx, refresh_shutdown_rx) = mpsc::channel(1);
         tokio::spawn(async move {
             fetcher_clone.run_refresh_loop(refresh_shutdown_rx).await;
         });
-        
+
         (fetcher, shutdown_tx)
     }
 
     async fn run_fetch_loop(&self, mut shutdown_rx: mpsc::Receiver<()>) {
         info!("Background fetcher started");
-        
+
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
@@ -104,7 +104,7 @@ impl BackgroundFetcher {
                     // Continue processing
                 }
             }
-            
+
             // Small delay to prevent busy loop
             sleep(Duration::from_millis(100)).await;
         }
@@ -112,7 +112,7 @@ impl BackgroundFetcher {
 
     async fn run_refresh_loop(&self, mut shutdown_rx: mpsc::Receiver<()>) {
         info!("Cache refresh loop started");
-        
+
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
@@ -129,11 +129,11 @@ impl BackgroundFetcher {
     async fn process_next_batch(&self) {
         let active_count = self.active_fetches.read().await.len();
         let available_slots = self.max_concurrent_fetches.saturating_sub(active_count);
-        
+
         if available_slots == 0 {
             return;
         }
-        
+
         let mut tasks_to_process = Vec::new();
         {
             let mut queue = self.task_queue.write().await;
@@ -145,7 +145,7 @@ impl BackgroundFetcher {
                 }
             }
         }
-        
+
         for task in tasks_to_process {
             self.spawn_fetch_task(task).await;
         }
@@ -153,7 +153,7 @@ impl BackgroundFetcher {
 
     async fn spawn_fetch_task(&self, task: FetchTask) {
         let cache_key = task.request.cache_key();
-        
+
         // Check if already fetching
         {
             let mut active = self.active_fetches.write().await;
@@ -162,19 +162,19 @@ impl BackgroundFetcher {
             }
             active.insert(cache_key.clone());
         }
-        
+
         let cache = self.cache.clone();
         let active_fetches = self.active_fetches.clone();
         let task_queue = self.task_queue.clone();
-        
+
         tokio::spawn(async move {
             debug!("Fetching data for: {}", cache_key);
-            
+
             // Mark as fetching in cache
             cache.mark_fetching(&task.request).await;
-            
+
             let result = Self::fetch_data(&task.request).await;
-            
+
             match result {
                 Ok(data) => {
                     if let Err(e) = cache.put(&task.request, data).await {
@@ -185,19 +185,20 @@ impl BackgroundFetcher {
                 Err(e) => {
                     error!("Failed to fetch data for {}: {}", cache_key, e);
                     cache.mark_error(&task.request, e.to_string()).await;
-                    
+
                     // Retry logic
                     if task.retry_count < 3 {
                         let mut retry_task = task;
                         retry_task.retry_count += 1;
-                        retry_task.scheduled_at = Instant::now() + Duration::from_secs(2_u64.pow(retry_task.retry_count));
-                        
+                        retry_task.scheduled_at =
+                            Instant::now() + Duration::from_secs(2_u64.pow(retry_task.retry_count));
+
                         let mut queue = task_queue.write().await;
                         queue.push(retry_task);
                     }
                 }
             }
-            
+
             // Remove from active fetches
             let mut active = active_fetches.write().await;
             active.remove(&cache_key);
@@ -210,7 +211,10 @@ impl BackgroundFetcher {
                 let data = list_replicas().await?;
                 Ok(FetchResult::ReplicaSets(data))
             }
-            DataRequest::Pods { namespace: _, selector } => {
+            DataRequest::Pods {
+                namespace: _,
+                selector,
+            } => {
                 let labels = match selector {
                     super::fetcher::PodSelector::ByLabels(labels) => labels.clone(),
                     _ => std::collections::BTreeMap::new(),
@@ -218,7 +222,10 @@ impl BackgroundFetcher {
                 let data = list_rspods(labels).await?;
                 Ok(FetchResult::Pods(data))
             }
-            DataRequest::Containers { pod_name, namespace: _ } => {
+            DataRequest::Containers {
+                pod_name,
+                namespace: _,
+            } => {
                 // Need to get pod labels first
                 let labels = std::collections::BTreeMap::new(); // Would need to fetch from pod
                 let data = list_containers(labels, pod_name.clone()).await?;
@@ -238,20 +245,20 @@ impl BackgroundFetcher {
                     Ok(FetchResult::Ingresses(vec![]))
                 }
             }
-            DataRequest::Custom { .. } => {
-                Err(crate::error::Error::Kube(kube::Error::Api(kube::error::ErrorResponse {
+            DataRequest::Custom { .. } => Err(crate::error::Error::Kube(kube::Error::Api(
+                kube::error::ErrorResponse {
                     status: "CustomNotImplemented".to_string(),
                     message: "Custom fetchers not yet implemented".to_string(),
                     reason: "NotImplemented".to_string(),
                     code: 501,
-                })))
-            }
+                },
+            ))),
         }
     }
 
     async fn refresh_expired_entries(&self) {
         let expired_keys = self.cache.get_expired_keys().await;
-        
+
         for key in expired_keys {
             // Parse the key back into a DataRequest
             // This is a simplified version - you'd need proper parsing
@@ -268,14 +275,14 @@ impl BackgroundFetcher {
             scheduled_at: Instant::now(),
             retry_count: 0,
         };
-        
+
         let mut queue = self.task_queue.write().await;
         queue.push(task);
     }
 
     pub async fn schedule_fetch_batch(&self, requests: Vec<DataRequest>) {
         let mut queue = self.task_queue.write().await;
-        
+
         for request in requests {
             let task = FetchTask {
                 priority: request.priority(),
@@ -290,17 +297,22 @@ impl BackgroundFetcher {
     pub async fn prefetch_for(&self, request: &DataRequest) {
         let related = self.cache.prefetch_related(request).await;
         for related_request in related {
-            self.schedule_fetch(related_request, FetchPriority::Low).await;
+            self.schedule_fetch(related_request, FetchPriority::Low)
+                .await;
         }
     }
 
     fn parse_cache_key(key: &str) -> Option<DataRequest> {
         // Simple parsing - would need to be more robust
         let parts: Vec<&str> = key.split(':').collect();
-        
+
         match *(parts.first()?) {
             "rs" => Some(DataRequest::ReplicaSets {
-                namespace: if parts.get(1)? == &"all" { None } else { Some(parts[1].to_string()) },
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
                 labels: std::collections::BTreeMap::new(),
             }),
             "pods" => Some(DataRequest::Pods {
@@ -335,7 +347,7 @@ mod tests {
             scheduled_at: Instant::now(),
             retry_count: 0,
         };
-        
+
         let low_priority = FetchTask {
             request: DataRequest::Events {
                 resource: super::super::fetcher::ResourceRef::Pod("test".to_string()),
@@ -345,7 +357,7 @@ mod tests {
             scheduled_at: Instant::now(),
             retry_count: 0,
         };
-        
+
         assert!(high_priority > low_priority);
     }
 }

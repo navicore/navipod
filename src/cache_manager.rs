@@ -5,7 +5,7 @@ This module provides a singleton cache that can be accessed throughout the app.
 It initializes the cache and background fetcher at startup.
 */
 use crate::error::Result;
-use crate::k8s::cache::{BackgroundFetcher, K8sDataCache};
+use crate::k8s::cache::{BackgroundFetcher, K8sDataCache, WatchManager};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -13,18 +13,25 @@ use tracing::{error, info, warn};
 /// Global cache instance
 static CACHE: OnceLock<Arc<K8sDataCache>> = OnceLock::new();
 /// Background fetcher shutdown channel
-static SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+static FETCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+/// Watch manager shutdown channel
+static WATCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 
 /// Initialize the global cache and background fetcher
 ///
 /// # Errors
 ///
 /// Returns an error if cache is already initialized or if initialization fails
+#[allow(clippy::cognitive_complexity)]
 pub async fn initialize_cache() -> Result<()> {
     let cache = Arc::new(K8sDataCache::new(100)); // 100MB cache
     let fetcher = BackgroundFetcher::new(cache.clone(), 8); // 8 concurrent fetches
 
-    let (fetcher_arc, shutdown_tx) = fetcher.start();
+    let (_fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
+    
+    // Initialize watch manager for real-time invalidation
+    let watch_manager = WatchManager::new(cache.clone()).await?;
+    let watcher_shutdown_tx = watch_manager.start();
 
     // Store the cache globally
     if CACHE.set(cache).is_err() {
@@ -39,22 +46,33 @@ pub async fn initialize_cache() -> Result<()> {
         )));
     }
 
-    if SHUTDOWN_TX.set(shutdown_tx).is_err() {
-        error!("Shutdown channel already initialized");
+    if FETCHER_SHUTDOWN_TX.set(fetcher_shutdown_tx).is_err() {
+        error!("Fetcher shutdown channel already initialized");
         return Err(crate::error::Error::Kube(kube::Error::Api(
             kube::error::ErrorResponse {
                 status: "AlreadyExists".to_string(),
-                message: "Shutdown channel already initialized".to_string(),
+                message: "Fetcher shutdown channel already initialized".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
+    }
+    
+    if WATCHER_SHUTDOWN_TX.set(watcher_shutdown_tx).is_err() {
+        error!("Watcher shutdown channel already initialized");
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Watcher shutdown channel already initialized".to_string(),
                 reason: "AlreadyInitialized".to_string(),
                 code: 409,
             },
         )));
     }
 
-    info!("Cache initialized with 100MB limit and 8 concurrent fetchers");
+    info!("Cache initialized with 100MB limit, 8 concurrent fetchers, and K8s watch streams");
 
-    // Start prefetching common data
-    initial_prefetch(fetcher_arc).await;
+    // Note: Prefetching is now handled by the background fetcher automatically
     Ok(())
 }
 
@@ -80,38 +98,18 @@ pub fn get_cache_or_default() -> Arc<K8sDataCache> {
     )
 }
 
-/// Shutdown the background fetcher
+/// Shutdown the cache system (background fetcher and watch manager)
 ///
 /// This should be called on application exit
 pub async fn shutdown_cache() {
-    if let Some(shutdown_tx) = SHUTDOWN_TX.get() {
-        let _ = shutdown_tx.send(()).await;
-        info!("Cache shutdown requested");
+    if let Some(fetcher_shutdown_tx) = FETCHER_SHUTDOWN_TX.get() {
+        let _ = fetcher_shutdown_tx.send(()).await;
+        info!("Background fetcher shutdown requested");
+    }
+    
+    if let Some(watcher_shutdown_tx) = WATCHER_SHUTDOWN_TX.get() {
+        let _ = watcher_shutdown_tx.send(()).await;
+        info!("Watch manager shutdown requested");
     }
 }
 
-/// Start prefetching commonly accessed data
-async fn initial_prefetch(fetcher: Arc<BackgroundFetcher>) {
-    use crate::k8s::cache::{DataRequest, FetchPriority};
-    use std::collections::BTreeMap;
-
-    // Prefetch all ReplicaSets (most common starting view)
-    let rs_request = DataRequest::ReplicaSets {
-        namespace: None,
-        labels: BTreeMap::new(),
-    };
-    fetcher
-        .schedule_fetch(rs_request, FetchPriority::High)
-        .await;
-
-    // Prefetch default namespace pods
-    let pod_request = DataRequest::Pods {
-        namespace: "default".to_string(),
-        selector: crate::k8s::cache::PodSelector::All,
-    };
-    fetcher
-        .schedule_fetch(pod_request, FetchPriority::Medium)
-        .await;
-
-    info!("Initial prefetch scheduled");
-}

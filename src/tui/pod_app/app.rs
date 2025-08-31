@@ -120,8 +120,8 @@ impl AppBehavior for pod_app::app::App {
                             app_holder = Some(Apps::Pod { app: self.clone() });
                         }
                         Char('i' | 'I') => {
-                            if let Some(selection) = self.get_selected_item()
-                                && let Some(selector) = selection.selectors.clone() {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selector) = selection.selectors.clone() {
                                 let data_vec =
                                     create_ingress_data_vec(selector.clone()).await?;
                                 let new_app_holder = Apps::Ingress {
@@ -129,6 +129,7 @@ impl AppBehavior for pod_app::app::App {
                                 };
                                 app_holder = Some(new_app_holder);
                                 debug!("changing app from rs to ingress...");
+                                }
                             }
                         }
                         Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -138,8 +139,8 @@ impl AppBehavior for pod_app::app::App {
                             self.page_backward();
                         }
                         Enter => {
-                            if let Some(selection) = self.get_selected_item()
-                                && let Some(selectors) = selection.selectors.clone() {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selectors) = selection.selectors.clone() {
                                 let data_vec = create_container_data_vec(
                                     selectors,
                                     selection.name.clone(),
@@ -149,6 +150,7 @@ impl AppBehavior for pod_app::app::App {
                                     app: container_app::app::App::new(data_vec),
                                 };
                                 app_holder = Some(new_app_holder);
+                                }
                             }
                         }
                         _k => {}

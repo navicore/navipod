@@ -30,8 +30,8 @@ fn get_pod_state(pod: &Pod) -> String {
     }
 
     // Then proceed to check the pod's status as before
-    if let Some(status) = &pod.status
-        && let Some(phase) = &status.phase {
+    if let Some(status) = &pod.status {
+        if let Some(phase) = &status.phase {
         return match phase.as_str() {
             "Pending" => "Pending".to_string(),
             "Running" => {
@@ -49,6 +49,7 @@ fn get_pod_state(pod: &Pod) -> String {
             "Failed" => "Failed".to_string(),
             _ => "Unknown".to_string(),
         };
+        }
     }
 
     "Unknown".to_string()

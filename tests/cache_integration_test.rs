@@ -193,9 +193,17 @@ async fn test_prefetch_suggestions() {
         labels: BTreeMap::new(),
     };
 
-    // Get prefetch suggestions (currently returns empty, but structure is in place)
+    // Get prefetch suggestions - should return Pod request for ReplicaSet namespace
     let suggestions = cache.prefetch_related(&request).await;
-    assert_eq!(suggestions.len(), 0); // Will change when prefetch logic is implemented
+    assert_eq!(suggestions.len(), 1); // Predictive prefetch should suggest Pod data
+    
+    // Verify the suggestion is for Pods in the same namespace
+    match &suggestions[0] {
+        DataRequest::Pods { namespace, selector: _ } => {
+            assert_eq!(namespace, "default");
+        }
+        _ => panic!("Expected Pod request suggestion"),
+    }
 }
 
 #[tokio::test]

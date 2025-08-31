@@ -287,17 +287,52 @@ impl K8sDataCache {
             .collect()
     }
 
-    #[allow(clippy::unused_async)]
     pub async fn prefetch_related(&self, request: &DataRequest) -> Vec<DataRequest> {
+        use super::fetcher::PodSelector;
+        
         // Determine what related data should be prefetched
         match request {
-            DataRequest::ReplicaSets { .. } => {
-                // When fetching ReplicaSets, prefetch pods
-                vec![] // Will be implemented with actual prefetch logic
+            DataRequest::ReplicaSets { namespace, .. } => {
+                // When fetching ReplicaSets, we should prefetch pods for common selectors
+                // This is the core predictive behavior - assume user will drill down
+                let namespace = namespace.clone().unwrap_or_else(|| {
+                    crate::cache_manager::get_current_namespace_or_default()
+                });
+                
+                debug!("🔮 PREFETCH: Generating Pod requests for ReplicaSet namespace: {}", namespace);
+                
+                // Get the current cached ReplicaSets to extract their selectors
+                if let Some(super::fetcher::FetchResult::ReplicaSets(replicasets)) = self.get(request).await {
+                    let mut prefetch_requests = Vec::new();
+                    
+                    for rs in replicasets.iter().take(10) { // Limit to avoid overwhelming
+                        if let Some(selectors) = &rs.selectors {
+                            let pod_request = DataRequest::Pods {
+                                namespace: namespace.clone(),
+                                selector: PodSelector::ByLabels(selectors.clone()),
+                            };
+                            prefetch_requests.push(pod_request);
+                            debug!("🔮 PREFETCH: Generated Pod request for RS {} with selectors: {:?}", 
+                                   rs.name, selectors);
+                        }
+                    }
+                    
+                    info!("🔮 PREFETCH: Generated {} Pod requests for ReplicaSet data", prefetch_requests.len());
+                    prefetch_requests
+                } else {
+                    // If ReplicaSets not in cache yet, create a generic Pod request
+                    vec![DataRequest::Pods {
+                        namespace,
+                        selector: PodSelector::All,
+                    }]
+                }
             }
-            DataRequest::Pods { .. } => {
-                // When fetching Pods, consider prefetching containers and events
-                vec![] // Will be implemented with actual prefetch logic
+            DataRequest::Pods { namespace: _, selector: _ } => {
+                // When fetching Pods, consider prefetching events for the namespace
+                vec![DataRequest::Events {
+                    resource: super::fetcher::ResourceRef::All,
+                    limit: 50,
+                }]
             }
             _ => vec![],
         }

@@ -114,6 +114,7 @@ impl AppBehavior for App {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
         let (tx, rx) = mpsc::channel(1);
         let initial_items = self.get_items().to_vec(); // Clone or get owned data from self
@@ -148,6 +149,31 @@ impl AppBehavior for App {
                     // Try to get updates from cache first
                     update = cache_rx.recv() => {
                         if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update {
+                            // IMMEDIATE PREFETCH: Trigger Pod fetching for subscription updates too
+                            use crate::k8s::cache::fetcher::PodSelector;
+
+                            if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
+                                let namespace = cache_manager::get_current_namespace_or_default();
+                                let mut prefetch_requests = Vec::new();
+
+                                // Generate Pod requests for each updated ReplicaSet
+                                for rs in new_items.iter().take(10) {
+                                    if let Some(selectors) = &rs.selectors {
+                                        let pod_request = DataRequest::Pods {
+                                            namespace: namespace.clone(),
+                                            selector: PodSelector::ByLabels(selectors.clone()),
+                                        };
+                                        prefetch_requests.push(pod_request);
+                                    }
+                                }
+
+                                if !prefetch_requests.is_empty() {
+                                    debug!("🚀 UPDATE PREFETCH: Scheduling {} Pod requests for {} updated ReplicaSets",
+                                           prefetch_requests.len(), new_items.len());
+                                    bg_fetcher.schedule_fetch_batch(prefetch_requests).await;
+                                }
+                            }
+
                             if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
                                 break;
                             }
@@ -158,7 +184,32 @@ impl AppBehavior for App {
                         // Try cache first
 
                      if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
+                         // IMMEDIATE PREFETCH: Trigger Pod fetching for cached ReplicaSets too
+                         use crate::k8s::cache::fetcher::PodSelector;
                          debug!("⚡ Using cached ReplicaSets data ({} items)", cached_items.len());
+
+                         if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
+                             let namespace = cache_manager::get_current_namespace_or_default();
+                             let mut prefetch_requests = Vec::new();
+
+                             // Generate Pod requests for each cached ReplicaSet
+                             for rs in cached_items.iter().take(10) {
+                                 if let Some(selectors) = &rs.selectors {
+                                     let pod_request = DataRequest::Pods {
+                                         namespace: namespace.clone(),
+                                         selector: PodSelector::ByLabels(selectors.clone()),
+                                     };
+                                     prefetch_requests.push(pod_request);
+                                 }
+                             }
+
+                             if !prefetch_requests.is_empty() {
+                                 debug!("🚀 CACHED PREFETCH: Scheduling {} Pod requests for {} cached ReplicaSets",
+                                        prefetch_requests.len(), cached_items.len());
+                                 bg_fetcher.schedule_fetch_batch(prefetch_requests).await;
+                             }
+                         }
+
                          if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Rs(cached_items)).await.is_err() {
                              break;
                          }
@@ -167,10 +218,35 @@ impl AppBehavior for App {
                          warn!("🌐 API FALLBACK: ReplicaSets cache miss, calling K8s API");
                          match list_replicas().await {
                              Ok(new_items) => {
+                                     // IMMEDIATE PREFETCH: Trigger Pod fetching for visible ReplicaSets
+                                     use crate::k8s::cache::fetcher::PodSelector;
+
                                  if !new_items.is_empty() {
                                      // Store in cache for next time
                                      let fetch_result = FetchResult::ReplicaSets(new_items.clone());
                                      let _ = cache.put(&request, fetch_result).await;
+
+                                     if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
+                                             let namespace = cache_manager::get_current_namespace_or_default();
+                                             let mut prefetch_requests = Vec::new();
+
+                                             // Generate Pod requests for each visible ReplicaSet
+                                             for rs in new_items.iter().take(10) {
+                                                 if let Some(selectors) = &rs.selectors {
+                                                     let pod_request = DataRequest::Pods {
+                                                         namespace: namespace.clone(),
+                                                         selector: PodSelector::ByLabels(selectors.clone()),
+                                                     };
+                                                     prefetch_requests.push(pod_request);
+                                                 }
+                                             }
+
+                                             if !prefetch_requests.is_empty() {
+                                                 debug!("🚀 IMMEDIATE PREFETCH: Scheduling {} Pod requests for {} ReplicaSets",
+                                                        prefetch_requests.len(), new_items.len());
+                                                 bg_fetcher.schedule_fetch_batch(prefetch_requests).await;
+                                             }
+                                         }
 
                                      if new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
                                          break;

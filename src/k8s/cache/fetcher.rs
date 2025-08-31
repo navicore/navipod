@@ -93,9 +93,12 @@ impl DataRequest {
     #[must_use]
     pub const fn default_ttl(&self) -> Duration {
         match self {
-            Self::ReplicaSets { .. } | Self::Custom { .. } => Duration::from_secs(30),
-            Self::Pods { .. } | Self::Containers { .. } => Duration::from_secs(15),
-            Self::Events { .. } | Self::Ingresses { .. } => Duration::from_secs(60),
+            // Longer TTL for predictive cache - ReplicaSets change infrequently
+            Self::ReplicaSets { .. } | Self::Custom { .. } => Duration::from_secs(300), // 5 minutes
+            // Pods change more frequently but still want to avoid cache misses during navigation
+            Self::Pods { .. } | Self::Containers { .. } => Duration::from_secs(120), // 2 minutes
+            // Events and Ingresses can be cached longer since they're less critical for navigation
+            Self::Events { .. } | Self::Ingresses { .. } => Duration::from_secs(180), // 3 minutes
         }
     }
 

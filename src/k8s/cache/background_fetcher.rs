@@ -189,10 +189,31 @@ impl BackgroundFetcher {
             let elapsed = start.elapsed();
             match result {
                 Ok(data) => {
-                    if let Err(e) = cache.put(&task.request, data).await {
+                    if let Err(e) = cache.put(&task.request, data.clone()).await {
                         error!("❌ Failed to cache data for {}: {}", cache_key, e);
                     } else {
                         info!("✅ FETCH SUCCESS: {} ({:.2}s)", cache_key, elapsed.as_secs_f64());
+                        
+                        // PREDICTIVE PREFETCH: After successful cache storage, prefetch related data
+                        let prefetch_requests = cache.prefetch_related(&task.request).await;
+                        if !prefetch_requests.is_empty() {
+                            info!("🔮 PREFETCH TRIGGERED: {} related requests for {}", 
+                                  prefetch_requests.len(), cache_key);
+                            
+                            for prefetch_req in prefetch_requests {
+                                let task_queue_clone = task_queue.clone();
+                                tokio::spawn(async move {
+                                    let prefetch_task = FetchTask {
+                                        request: prefetch_req,
+                                        priority: FetchPriority::Low, // Prefetch at low priority
+                                        scheduled_at: Instant::now(),
+                                        retry_count: 0,
+                                    };
+                                    let mut queue = task_queue_clone.write().await;
+                                    queue.push(prefetch_task);
+                                });
+                            }
+                        }
                     }
                 }
                 Err(e) => {

@@ -16,6 +16,8 @@ use tracing::{error, info, warn};
 
 /// Global cache instance
 static CACHE: OnceLock<Arc<K8sDataCache>> = OnceLock::new();
+/// Background fetcher instance
+static BACKGROUND_FETCHER: OnceLock<Arc<BackgroundFetcher>> = OnceLock::new();
 /// Background fetcher shutdown channel
 static FETCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Watch manager shutdown channel
@@ -35,7 +37,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     let cache = Arc::new(K8sDataCache::new(DEFAULT_CACHE_SIZE_MB));
     let fetcher = BackgroundFetcher::new(cache.clone(), DEFAULT_CONCURRENT_FETCHERS);
 
-    let (_fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
+    let (fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
 
     // Initialize watch manager for real-time invalidation (namespace-scoped)
     let watch_manager = match WatchManager::new(cache.clone(), namespace.clone()).await {
@@ -57,6 +59,11 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     if CACHE.set(cache.clone()).is_err() {
         error!("Cache already initialized");
         return Err(already_initialized_error("Cache"));
+    }
+
+    if BACKGROUND_FETCHER.set(fetcher_arc).is_err() {
+        error!("Background fetcher already initialized");
+        return Err(already_initialized_error("Background fetcher"));
     }
 
     if FETCHER_SHUTDOWN_TX.set(fetcher_shutdown_tx).is_err() {
@@ -137,6 +144,14 @@ pub fn get_current_namespace() -> Option<String> {
 #[must_use]
 pub fn get_current_namespace_or_default() -> String {
     get_current_namespace().unwrap_or_else(|| "default".to_string())
+}
+
+/// Get the global background fetcher instance
+///
+/// Returns None if fetcher hasn't been initialized yet
+#[must_use]
+pub fn get_background_fetcher() -> Option<Arc<BackgroundFetcher>> {
+    BACKGROUND_FETCHER.get().cloned()
 }
 
 /// Shutdown the cache system (background fetcher and watch manager)

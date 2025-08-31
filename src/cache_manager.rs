@@ -16,6 +16,8 @@ static CACHE: OnceLock<Arc<K8sDataCache>> = OnceLock::new();
 static FETCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Watch manager shutdown channel
 static WATCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+/// Current namespace context
+static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
 
 /// Initialize the global cache and background fetcher
 ///
@@ -23,17 +25,29 @@ static WATCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 ///
 /// Returns an error if cache is already initialized or if initialization fails
 #[allow(clippy::cognitive_complexity)]
-pub async fn initialize_cache() -> Result<()> {
+pub async fn initialize_cache(namespace: String) -> Result<()> {
     let cache = Arc::new(K8sDataCache::new(100)); // 100MB cache
     let fetcher = BackgroundFetcher::new(cache.clone(), 8); // 8 concurrent fetches
 
     let (_fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
     
-    // Initialize watch manager for real-time invalidation
-    let watch_manager = WatchManager::new(cache.clone()).await?;
+    // Initialize watch manager for real-time invalidation (namespace-scoped)
+    let watch_manager = WatchManager::new(cache.clone(), namespace.clone()).await?;
     let watcher_shutdown_tx = watch_manager.start();
 
-    // Store the cache globally
+    // Store the namespace and cache globally
+    if CURRENT_NAMESPACE.set(namespace).is_err() {
+        error!("Namespace already set");
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Namespace already set".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
+    }
+    
     if CACHE.set(cache).is_err() {
         error!("Cache already initialized");
         return Err(crate::error::Error::Kube(kube::Error::Api(
@@ -96,6 +110,20 @@ pub fn get_cache_or_default() -> Arc<K8sDataCache> {
         },
         std::clone::Clone::clone,
     )
+}
+
+/// Get the current namespace context
+///
+/// Returns the namespace that was set during cache initialization
+#[must_use]
+pub fn get_current_namespace() -> Option<String> {
+    CURRENT_NAMESPACE.get().cloned()
+}
+
+/// Get the current namespace with fallback to "default"
+#[must_use]
+pub fn get_current_namespace_or_default() -> String {
+    get_current_namespace().unwrap_or_else(|| "default".to_string())
 }
 
 /// Shutdown the cache system (background fetcher and watch manager)

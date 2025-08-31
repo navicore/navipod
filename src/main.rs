@@ -73,7 +73,7 @@ async fn process_command() -> Result<(), Box<dyn std::error::Error>> {
     match command {
         Command::Tui => {
             // Initialize cache before starting UI
-            navipod::cache_manager::initialize_cache().await?;
+            navipod::cache_manager::initialize_cache(namespace.clone()).await?;
             tui::ui_loop::run().await?;
             // Shutdown cache on exit
             navipod::cache_manager::shutdown_cache().await;

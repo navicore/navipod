@@ -41,6 +41,7 @@ pub enum InvalidationEvent {
 pub struct WatchManager {
     cache: Arc<K8sDataCache>,
     client: Client,
+    namespace: String,
     shutdown_tx: Option<mpsc::Sender<()>>,
     invalidation_tx: mpsc::Sender<InvalidationEvent>,
     invalidation_rx: Option<mpsc::Receiver<InvalidationEvent>>,
@@ -52,13 +53,14 @@ impl WatchManager {
     /// # Errors
     /// 
     /// Returns an error if K8s client creation fails
-    pub async fn new(cache: Arc<K8sDataCache>) -> Result<Self> {
+    pub async fn new(cache: Arc<K8sDataCache>, namespace: String) -> Result<Self> {
         let client = Client::try_default().await?;
         let (invalidation_tx, invalidation_rx) = mpsc::channel(100);
 
         Ok(Self {
             cache,
             client,
+            namespace,
             shutdown_tx: None,
             invalidation_tx,
             invalidation_rx: Some(invalidation_rx),
@@ -93,10 +95,11 @@ impl WatchManager {
             Self::run_invalidation_processor(cache, invalidation_rx, shutdown_rx).await;
         });
 
-        // Start individual watch streams
-        Self::start_pod_watcher(client.clone(), invalidation_tx.clone());
-        Self::start_replicaset_watcher(client.clone(), invalidation_tx.clone());
-        Self::start_event_watcher(client, invalidation_tx);
+        // Start individual watch streams (namespace-scoped)
+        let namespace = self.namespace.clone();
+        Self::start_pod_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
+        Self::start_replicaset_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
+        Self::start_event_watcher(client, invalidation_tx, namespace);
 
         info!("🔍 Watch streams started for Pods, ReplicaSets, and Events");
         
@@ -150,13 +153,13 @@ impl WatchManager {
     }
 
     /// Start watching Pod resources
-    fn start_pod_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>) {
+    fn start_pod_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) {
 
         tokio::spawn(async move {
             info!("🔍 Starting Pod watcher");
             
             loop {
-                match Self::watch_pods(client.clone(), invalidation_tx.clone()).await {
+                match Self::watch_pods(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                     Ok(()) => {
                         info!("🔍 Pod watcher stream ended, restarting...");
                     }
@@ -172,13 +175,13 @@ impl WatchManager {
     }
 
     /// Start watching `ReplicaSet` resources  
-    fn start_replicaset_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>) {
+    fn start_replicaset_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) {
 
         tokio::spawn(async move {
             info!("🔍 Starting ReplicaSet watcher");
             
             loop {
-                match Self::watch_replicasets(client.clone(), invalidation_tx.clone()).await {
+                match Self::watch_replicasets(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                     Ok(()) => {
                         info!("🔍 ReplicaSet watcher stream ended, restarting...");
                     }
@@ -194,13 +197,13 @@ impl WatchManager {
     }
 
     /// Start watching Event resources
-    fn start_event_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>) {
+    fn start_event_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) {
 
         tokio::spawn(async move {
             info!("🔍 Starting Event watcher");
             
             loop {
-                match Self::watch_events(client.clone(), invalidation_tx.clone()).await {
+                match Self::watch_events(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                     Ok(()) => {
                         info!("🔍 Event watcher stream ended, restarting...");
                     }
@@ -218,12 +221,13 @@ impl WatchManager {
     /// Watch Pod resources and send invalidation events
     async fn watch_pods(
         client: Client, 
-        invalidation_tx: mpsc::Sender<InvalidationEvent>
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String
     ) -> Result<()> {
         use futures::{pin_mut, TryStreamExt};
 
-        let pods: Api<Pod> = Api::all(client);
-        let wp = WatchParams::default().timeout(300); // 5 minute timeout
+        let pods: Api<Pod> = Api::namespaced(client, &namespace);
+        let wp = WatchParams::default().timeout(294); // 5 minute timeout
         
         let stream = pods.watch(&wp, "0").await?;
         pin_mut!(stream);
@@ -261,12 +265,13 @@ impl WatchManager {
     /// Watch `ReplicaSet` resources and send invalidation events
     async fn watch_replicasets(
         client: Client, 
-        invalidation_tx: mpsc::Sender<InvalidationEvent>
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String
     ) -> Result<()> {
         use futures::{pin_mut, TryStreamExt};
 
-        let replicasets: Api<ReplicaSet> = Api::all(client);
-        let wp = WatchParams::default().timeout(300);
+        let replicasets: Api<ReplicaSet> = Api::namespaced(client, &namespace);
+        let wp = WatchParams::default().timeout(294);
         
         let stream = replicasets.watch(&wp, "0").await?;
         pin_mut!(stream);
@@ -298,12 +303,13 @@ impl WatchManager {
     /// Watch Event resources and send invalidation events
     async fn watch_events(
         client: Client, 
-        invalidation_tx: mpsc::Sender<InvalidationEvent>
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String
     ) -> Result<()> {
         use futures::{pin_mut, TryStreamExt};
 
-        let events: Api<Event> = Api::all(client);
-        let wp = WatchParams::default().timeout(300);
+        let events: Api<Event> = Api::namespaced(client, &namespace);
+        let wp = WatchParams::default().timeout(294);
         
         let stream = events.watch(&wp, "0").await?;
         pin_mut!(stream);
@@ -379,7 +385,7 @@ mod tests {
         );
         
         let cache = Arc::new(K8sDataCache::new(10));
-        let _manager = WatchManager::new(cache).await.unwrap();
+        let _manager = WatchManager::new(cache, "default".to_string()).await.unwrap();
 
         // Test ReplicaSet key parsing
         let rs_key = "rs:all:{}";

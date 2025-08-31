@@ -279,19 +279,22 @@ impl WatchManager {
         while let Some(event) = stream.try_next().await? {
             match event {
                 WatchEvent::Added(rs) => {
-                    let pattern = "rs:*".to_string();
+                    let ns = rs.namespace().unwrap_or_default();
+                    let pattern = format!("rs:{ns}:*");
                     let _ = invalidation_tx.send(InvalidationEvent::Pattern(pattern)).await;
-                    info!("➕ ReplicaSet added: {}/{}", rs.namespace().unwrap_or_default(), rs.name_any());
+                    info!("➕ ReplicaSet added: {}/{}", ns, rs.name_any());
                 }
                 WatchEvent::Modified(rs) => {
-                    let pattern = "rs:*".to_string(); 
+                    let ns = rs.namespace().unwrap_or_default();
+                    let pattern = format!("rs:{ns}:*");
                     let _ = invalidation_tx.send(InvalidationEvent::Pattern(pattern)).await;
-                    debug!("📝 ReplicaSet modified: {}/{}", rs.namespace().unwrap_or_default(), rs.name_any());
+                    debug!("📝 ReplicaSet modified: {}/{}", ns, rs.name_any());
                 }
                 WatchEvent::Deleted(rs) => {
-                    let pattern = "rs:*".to_string();
+                    let ns = rs.namespace().unwrap_or_default();
+                    let pattern = format!("rs:{ns}:*");
                     let _ = invalidation_tx.send(InvalidationEvent::Pattern(pattern)).await;
-                    info!("🗑️  ReplicaSet deleted: {}/{}", rs.namespace().unwrap_or_default(), rs.name_any());
+                    info!("🗑️  ReplicaSet deleted: {}/{}", ns, rs.name_any());
                 }
                 _ => {}
             }

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 #[tokio::test]
 async fn test_cache_manager_initialization() {
     // Initialize the cache
-    cache_manager::initialize_cache().await.unwrap();
+    cache_manager::initialize_cache("default".to_string()).await.unwrap();
     
     // Get cache instance
     let cache = cache_manager::get_cache().unwrap();

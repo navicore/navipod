@@ -5,7 +5,7 @@ This module provides a singleton cache that can be accessed throughout the app.
 It initializes the cache and background fetcher at startup.
 */
 use crate::error::Result;
-use crate::k8s::cache::{BackgroundFetcher, K8sDataCache, WatchManager};
+use crate::k8s::cache::{BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -36,7 +36,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     let watcher_shutdown_tx = watch_manager.start();
 
     // Store the namespace and cache globally
-    if CURRENT_NAMESPACE.set(namespace).is_err() {
+    if CURRENT_NAMESPACE.set(namespace.clone()).is_err() {
         error!("Namespace already set");
         return Err(crate::error::Error::Kube(kube::Error::Api(
             kube::error::ErrorResponse {
@@ -48,7 +48,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         )));
     }
     
-    if CACHE.set(cache).is_err() {
+    if CACHE.set(cache.clone()).is_err() {
         error!("Cache already initialized");
         return Err(crate::error::Error::Kube(kube::Error::Api(
             kube::error::ErrorResponse {
@@ -86,7 +86,27 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
 
     info!("Cache initialized with 100MB limit, 8 concurrent fetchers, and K8s watch streams");
 
-    // Note: Prefetching is now handled by the background fetcher automatically
+    // Direct fetch essential data for immediate UI responsiveness
+    let essential_request = DataRequest::ReplicaSets {
+        namespace: Some(namespace),
+        labels: std::collections::BTreeMap::new(),
+    };
+    
+    // Fetch ReplicaSet data directly and populate cache immediately
+    match crate::k8s::rs::list_replicas().await {
+        Ok(rs_data) => {
+            let fetch_result = FetchResult::ReplicaSets(rs_data);
+            if let Err(e) = cache.put(&essential_request, fetch_result).await {
+                warn!("Failed to populate cache with ReplicaSet data: {}", e);
+            } else {
+                info!("🚀 Cache pre-populated with ReplicaSet data for instant UI startup");
+            }
+        }
+        Err(e) => {
+            warn!("Failed to fetch initial ReplicaSet data: {}", e);
+        }
+    }
+
     Ok(())
 }
 

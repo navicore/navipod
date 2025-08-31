@@ -41,13 +41,13 @@ async fn check_replica_set(client: &Client, pod: &Pod, namespace: &str) -> Resul
         if let Some(rs_ref) = rs.spec.as_ref() {
             if let Some(selector) = rs_ref.selector.match_labels.clone() {
                 if matches_pod_labels(pod, &selector) {
-            if let Some(owners) = rs.metadata.owner_references.clone() {
-                for owner in owners {
-                    let kind = owner.kind;
-                    let name = owner.name;
-                    println!("Belongs to {kind} {name}");
-                }
-            }
+                    if let Some(owners) = rs.metadata.owner_references.clone() {
+                        for owner in owners {
+                            let kind = owner.kind;
+                            let name = owner.name;
+                            println!("Belongs to {kind} {name}");
+                        }
+                    }
                 }
             }
         }
@@ -139,7 +139,7 @@ fn handle_http_path(
 ) {
     if let Some(backend_service_name) = &path.backend.service {
         if services.contains(&backend_service_name.name) {
-        print_ingress_info(ingress, host, path, backend_service_name);
+            print_ingress_info(ingress, host, path, backend_service_name);
         }
     }
 }

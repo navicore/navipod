@@ -4,10 +4,10 @@
  * Manages multiple K8s watch streams for real-time cache invalidation.
  * Provides surgical cache updates based on K8s resource events.
  */
+use super::config::*;
 use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
-// use crate::tui::data::{Rs, RsPod};
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
@@ -61,7 +61,7 @@ impl WatchManager {
     /// Returns an error if K8s client creation fails
     pub async fn new(cache: Arc<K8sDataCache>, namespace: String) -> Result<Self> {
         let client = Client::try_default().await?;
-        let (invalidation_tx, invalidation_rx) = mpsc::channel(100);
+        let (invalidation_tx, invalidation_rx) = mpsc::channel(INVALIDATION_CHANNEL_CAPACITY);
         let stats = Arc::new(std::sync::RwLock::new(WatchStats {
             active_watchers: 3,
             total_invalidations: 0,
@@ -194,44 +194,14 @@ impl WatchManager {
         namespace: String,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            const MAX_RESTARTS: u32 = 50;
-            const MAX_BACKOFF: u64 = 60;
-            info!("🔍 Starting Pod watcher");
-
-            let mut backoff_seconds = 1;
-            let mut restart_count = 0;
-
-            loop {
-                if restart_count >= MAX_RESTARTS {
-                    error!(
-                        "❌ Pod watcher exceeded maximum restart attempts ({}), stopping",
-                        MAX_RESTARTS
-                    );
-                    break;
-                }
-
-                match Self::watch_pods(client.clone(), invalidation_tx.clone(), namespace.clone())
-                    .await
-                {
-                    Ok(()) => {
-                        info!("🔍 Pod watcher stream ended normally, restarting...");
-                        backoff_seconds = 1; // Reset backoff on successful run
-                        restart_count = 0; // Reset restart count on successful run
-                    }
-                    Err(e) => {
-                        restart_count += 1;
-                        error!(
-                            "❌ Pod watcher failed (attempt {}/{}): {}, restarting in {}s",
-                            restart_count, MAX_RESTARTS, e, backoff_seconds
-                        );
-                        sleep(Duration::from_secs(backoff_seconds)).await;
-                        backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF);
-                        // Exponential backoff
-                    }
-                }
-
-                sleep(Duration::from_secs(1)).await; // Brief delay before restart
-            }
+            Self::run_resource_watcher(
+                "Pod",
+                client,
+                invalidation_tx,
+                namespace,
+                Self::watch_pods,
+            )
+            .await;
         })
     }
 
@@ -242,48 +212,14 @@ impl WatchManager {
         namespace: String,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            const MAX_RESTARTS: u32 = 50;
-            const MAX_BACKOFF: u64 = 60;
-            info!("🔍 Starting ReplicaSet watcher");
-
-            let mut backoff_seconds = 1;
-            let mut restart_count = 0;
-
-            loop {
-                if restart_count >= MAX_RESTARTS {
-                    error!(
-                        "❌ ReplicaSet watcher exceeded maximum restart attempts ({}), stopping",
-                        MAX_RESTARTS
-                    );
-                    break;
-                }
-
-                match Self::watch_replicasets(
-                    client.clone(),
-                    invalidation_tx.clone(),
-                    namespace.clone(),
-                )
-                .await
-                {
-                    Ok(()) => {
-                        info!("🔍 ReplicaSet watcher stream ended normally, restarting...");
-                        backoff_seconds = 1; // Reset backoff on successful run
-                        restart_count = 0; // Reset restart count on successful run
-                    }
-                    Err(e) => {
-                        restart_count += 1;
-                        error!(
-                            "❌ ReplicaSet watcher failed (attempt {}/{}): {}, restarting in {}s",
-                            restart_count, MAX_RESTARTS, e, backoff_seconds
-                        );
-                        sleep(Duration::from_secs(backoff_seconds)).await;
-                        backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF);
-                        // Exponential backoff
-                    }
-                }
-
-                sleep(Duration::from_secs(1)).await;
-            }
+            Self::run_resource_watcher(
+                "ReplicaSet",
+                client,
+                invalidation_tx,
+                namespace,
+                Self::watch_replicasets,
+            )
+            .await;
         })
     }
 
@@ -294,45 +230,62 @@ impl WatchManager {
         namespace: String,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            const MAX_RESTARTS: u32 = 50;
-            const MAX_BACKOFF: u64 = 60;
-            info!("🔍 Starting Event watcher");
-
-            let mut backoff_seconds = 1;
-            let mut restart_count = 0;
-
-            loop {
-                if restart_count >= MAX_RESTARTS {
-                    error!(
-                        "❌ Event watcher exceeded maximum restart attempts ({}), stopping",
-                        MAX_RESTARTS
-                    );
-                    break;
-                }
-
-                match Self::watch_events(client.clone(), invalidation_tx.clone(), namespace.clone())
-                    .await
-                {
-                    Ok(()) => {
-                        info!("🔍 Event watcher stream ended normally, restarting...");
-                        backoff_seconds = 1; // Reset backoff on successful run
-                        restart_count = 0; // Reset restart count on successful run
-                    }
-                    Err(e) => {
-                        restart_count += 1;
-                        error!(
-                            "❌ Event watcher failed (attempt {}/{}): {}, restarting in {}s",
-                            restart_count, MAX_RESTARTS, e, backoff_seconds
-                        );
-                        sleep(Duration::from_secs(backoff_seconds)).await;
-                        backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF);
-                        // Exponential backoff
-                    }
-                }
-
-                sleep(Duration::from_secs(1)).await;
-            }
+            Self::run_resource_watcher(
+                "Event",
+                client,
+                invalidation_tx,
+                namespace,
+                Self::watch_events,
+            )
+            .await;
         })
+    }
+
+    /// Generic resource watcher with retry logic and exponential backoff
+    async fn run_resource_watcher<F, Fut>(
+        resource_type: &str,
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+        watcher_fn: F,
+    )
+    where
+        F: Fn(Client, mpsc::Sender<InvalidationEvent>, String) -> Fut,
+        Fut: std::future::Future<Output = Result<()>>,
+    {
+        info!("🔍 Starting {} watcher", resource_type);
+        
+        let mut backoff_seconds = INITIAL_BACKOFF_SECONDS;
+        let mut restart_count = 0;
+
+        loop {
+            if restart_count >= MAX_WATCH_RESTARTS {
+                error!(
+                    "❌ {} watcher exceeded maximum restart attempts ({}), stopping",
+                    resource_type, MAX_WATCH_RESTARTS
+                );
+                break;
+            }
+
+            match watcher_fn(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
+                Ok(()) => {
+                    info!("🔍 {} watcher stream ended normally, restarting...", resource_type);
+                    backoff_seconds = INITIAL_BACKOFF_SECONDS; // Reset backoff on successful run
+                    restart_count = 0; // Reset restart count on successful run
+                }
+                Err(e) => {
+                    restart_count += 1;
+                    error!(
+                        "❌ {} watcher failed (attempt {}/{}): {}, restarting in {}s",
+                        resource_type, restart_count, MAX_WATCH_RESTARTS, e, backoff_seconds
+                    );
+                    sleep(Duration::from_secs(backoff_seconds)).await;
+                    backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF_SECONDS);
+                }
+            }
+
+            sleep(Duration::from_secs(RESTART_DELAY_SECONDS)).await;
+        }
     }
 
     /// Watch Pod resources and send invalidation events
@@ -344,7 +297,7 @@ impl WatchManager {
         use futures::{pin_mut, TryStreamExt};
 
         let pods: Api<Pod> = Api::namespaced(client, &namespace);
-        let wp = WatchParams::default().timeout(294); // 5 minute timeout
+        let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
 
         let stream = pods.watch(&wp, "0").await?;
         pin_mut!(stream);
@@ -394,7 +347,7 @@ impl WatchManager {
         use futures::{pin_mut, TryStreamExt};
 
         let replicasets: Api<ReplicaSet> = Api::namespaced(client, &namespace);
-        let wp = WatchParams::default().timeout(294);
+        let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
 
         let stream = replicasets.watch(&wp, "0").await?;
         pin_mut!(stream);
@@ -441,7 +394,7 @@ impl WatchManager {
         use futures::{pin_mut, TryStreamExt};
 
         let events: Api<Event> = Api::namespaced(client, &namespace);
-        let wp = WatchParams::default().timeout(294);
+        let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
 
         let stream = events.watch(&wp, "0").await?;
         pin_mut!(stream);
@@ -519,9 +472,26 @@ pub struct WatchManagerHandle {
 impl WatchManagerHandle {
     /// Shutdown all watch manager tasks
     pub fn shutdown(self) {
-        for handle in self.task_handles {
-            handle.abort();
+        info!("🛑 Shutting down {} watch manager tasks", self.task_handles.len());
+        for (i, handle) in self.task_handles.into_iter().enumerate() {
+            if !handle.is_finished() {
+                debug!("Aborting watch task {}", i);
+                handle.abort();
+            }
         }
+        info!("✅ Watch manager shutdown complete");
+    }
+
+    /// Get the number of active tasks
+    #[must_use]
+    pub fn task_count(&self) -> usize {
+        self.task_handles.len()
+    }
+
+    /// Check if all tasks are finished
+    #[must_use] 
+    pub fn all_finished(&self) -> bool {
+        self.task_handles.iter().all(|h| h.is_finished())
     }
 }
 

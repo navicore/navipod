@@ -4,7 +4,11 @@
  * Manages multiple K8s watch streams for real-time cache invalidation.
  * Provides surgical cache updates based on K8s resource events.
  */
-use super::config::*;
+use super::config::{
+    DEFAULT_CACHE_SIZE_MB, DEFAULT_CONCURRENT_FETCHERS, INITIAL_BACKOFF_SECONDS,
+    INVALIDATION_CHANNEL_CAPACITY, MAX_BACKOFF_SECONDS, MAX_WATCH_RESTARTS,
+    RESTART_DELAY_SECONDS, WATCH_TIMEOUT_SECONDS,
+};
 use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
@@ -259,33 +263,66 @@ impl WatchManager {
         let mut restart_count = 0;
 
         loop {
-            if restart_count >= MAX_WATCH_RESTARTS {
-                error!(
-                    "❌ {} watcher exceeded maximum restart attempts ({}), stopping",
-                    resource_type, MAX_WATCH_RESTARTS
-                );
+            if Self::should_stop_retries(resource_type, restart_count) {
                 break;
             }
 
             match watcher_fn(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                 Ok(()) => {
-                    info!("🔍 {} watcher stream ended normally, restarting...", resource_type);
-                    backoff_seconds = INITIAL_BACKOFF_SECONDS; // Reset backoff on successful run
-                    restart_count = 0; // Reset restart count on successful run
+                    Self::handle_watcher_success(resource_type, &mut backoff_seconds, &mut restart_count);
                 }
                 Err(e) => {
-                    restart_count += 1;
-                    error!(
-                        "❌ {} watcher failed (attempt {}/{}): {}, restarting in {}s",
-                        resource_type, restart_count, MAX_WATCH_RESTARTS, e, backoff_seconds
-                    );
-                    sleep(Duration::from_secs(backoff_seconds)).await;
-                    backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF_SECONDS);
+                    Self::handle_watcher_error(
+                        resource_type,
+                        e,
+                        &mut restart_count,
+                        &mut backoff_seconds,
+                    ).await;
                 }
             }
 
             sleep(Duration::from_secs(RESTART_DELAY_SECONDS)).await;
         }
+    }
+
+    /// Check if we should stop retrying the watcher
+    fn should_stop_retries(resource_type: &str, restart_count: u32) -> bool {
+        if restart_count >= MAX_WATCH_RESTARTS {
+            error!(
+                "❌ {} watcher exceeded maximum restart attempts ({}), stopping",
+                resource_type, MAX_WATCH_RESTARTS
+            );
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Handle successful watcher completion
+    fn handle_watcher_success(
+        resource_type: &str,
+        backoff_seconds: &mut u64,
+        restart_count: &mut u32,
+    ) {
+        info!("🔍 {} watcher stream ended normally, restarting...", resource_type);
+        *backoff_seconds = INITIAL_BACKOFF_SECONDS; // Reset backoff on successful run
+        *restart_count = 0; // Reset restart count on successful run
+    }
+
+    /// Handle watcher error with backoff
+    async fn handle_watcher_error(
+        resource_type: &str,
+        error: crate::error::Error,
+        restart_count: &mut u32,
+        backoff_seconds: &mut u64,
+    ) {
+        *restart_count += 1;
+        error!(
+            "❌ {} watcher failed (attempt {}/{}): {}, restarting in {}s",
+            resource_type, restart_count, MAX_WATCH_RESTARTS, error, backoff_seconds
+        );
+        sleep(Duration::from_secs(*backoff_seconds)).await;
+        *backoff_seconds = (*backoff_seconds * 2).min(MAX_BACKOFF_SECONDS);
     }
 
     /// Watch Pod resources and send invalidation events
@@ -484,14 +521,14 @@ impl WatchManagerHandle {
 
     /// Get the number of active tasks
     #[must_use]
-    pub fn task_count(&self) -> usize {
+    pub const fn task_count(&self) -> usize {
         self.task_handles.len()
     }
 
     /// Check if all tasks are finished
     #[must_use] 
     pub fn all_finished(&self) -> bool {
-        self.task_handles.iter().all(|h| h.is_finished())
+        self.task_handles.iter().all(tokio::task::JoinHandle::is_finished)
     }
 }
 

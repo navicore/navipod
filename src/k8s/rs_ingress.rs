@@ -28,14 +28,10 @@ async fn services_for_rs(client: &Client, rs: &ReplicaSet, namespace: &str) -> R
     Ok(service_list
         .iter()
         .filter_map(|service| {
-            if let Some(svc_ref) = service.spec.as_ref() {
-                if let Some(selector) = svc_ref.selector.clone() {
-                    if matches_rs_labels(rs, &selector) {
-                        return service.metadata.name.clone();
-                    }
-                }
-            }
-            None
+            service.spec.as_ref()
+                .and_then(|svc_ref| svc_ref.selector.clone())
+                .filter(|selector| matches_rs_labels(rs, selector))
+                .and_then(|_| service.metadata.name.clone())
         })
         .collect())
 }

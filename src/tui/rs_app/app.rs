@@ -1,24 +1,26 @@
+use crate::cache_manager;
+use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::rs::list_replicas;
-use crate::tui::data::{Rs, rs_constraint_len_calculator};
+use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::pod_app;
 use crate::tui::rs_app::ui;
 use crate::tui::stream::Message;
-use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
+use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{AppBehavior, Apps, create_ingress_data_vec};
+use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
 use crate::tui::{event_app, ingress_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::io;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::debug;
+use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
 
@@ -117,22 +119,93 @@ impl AppBehavior for App {
         let initial_items = self.get_items().to_vec(); // Clone or get owned data from self
 
         tokio::spawn(async move {
-            while !should_stop.load(Ordering::Relaxed) {
-                match list_replicas().await {
-                    Ok(new_items) => {
-                        if !new_items.is_empty() && new_items != initial_items {
-                            let sevent = Message::Rs(new_items);
-                            if tx.send(sevent).await.is_err() {
-                                break;
-                            }
-                        }
-                        sleep(Duration::from_millis(POLL_MS)).await;
-                    }
-                    Err(_e) => {
-                        break;
+            let cache = cache_manager::get_cache_or_default();
+            let request = DataRequest::ReplicaSets {
+                namespace: None,
+                labels: std::collections::BTreeMap::new(),
+            };
+
+            // Subscribe to cache updates
+            let (sub_id, mut cache_rx) = cache
+                .subscription_manager
+                .subscribe("rs:*".to_string())
+                .await;
+
+            // Start with cached data if available
+            if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
+                if !cached_items.is_empty() && cached_items != initial_items {
+                    let sevent = Message::Rs(cached_items);
+                    if tx.send(sevent).await.is_err() {
+                        cache.subscription_manager.unsubscribe(&sub_id).await;
+                        return;
                     }
                 }
             }
+
+            // Listen for cache updates or fallback to direct polling
+            while !should_stop.load(Ordering::Relaxed) {
+                tokio::select! {
+                    // Try to get updates from cache first
+                    update = cache_rx.recv() => {
+                        if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update {
+                            if !new_items.is_empty() && new_items != initial_items {
+                                let sevent = Message::Rs(new_items);
+                                if tx.send(sevent).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // Fallback: check cache periodically and refresh if needed
+                    () = sleep(Duration::from_millis(POLL_MS)) => {
+                        // Try cache first
+
+                     if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
+                         debug!("⚡ Using cached ReplicaSets data ({} items)", cached_items.len());
+                         if !cached_items.is_empty() && cached_items != initial_items {
+                             let sevent = Message::Rs(cached_items);
+                             if tx.send(sevent).await.is_err() {
+                                 break;
+                             }
+                         }
+                     } else {
+                         // Cache miss - fall back to direct API call
+                         warn!("🌐 API FALLBACK: ReplicaSets cache miss, calling K8s API");
+                         match list_replicas().await {
+                             Ok(new_items) => {
+                                 if !new_items.is_empty() {
+                                     // Store in cache for next time
+                                     let fetch_result = FetchResult::ReplicaSets(new_items.clone());
+                                     let _ = cache.put(&request, fetch_result).await;
+
+                                     if new_items != initial_items {
+                                         let sevent = Message::Rs(new_items);
+                                         if tx.send(sevent).await.is_err() {
+                                             break;
+                                         }
+                                     }
+                                 }
+                             }
+                             Err(_e) => {
+
+                                 // Still try to use stale cache data
+                                 if let Some(FetchResult::ReplicaSets(stale_items)) = cache.get_or_mark_stale(&request).await {
+                                         if !stale_items.is_empty() && stale_items != initial_items {
+                                             let sevent = Message::Rs(stale_items);
+                                             if tx.send(sevent).await.is_err() {
+                                                 break;
+                                             }
+                                         }
+                                 }
+                             }
+                         }
+                     }
+                    }
+                }
+            }
+
+            // Cleanup subscription
+            cache.subscription_manager.unsubscribe(&sub_id).await;
         });
 
         ReceiverStream::new(rx)

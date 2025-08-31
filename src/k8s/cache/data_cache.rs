@@ -5,7 +5,9 @@ use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug, info};
 
+#[derive(Debug)]
 pub struct K8sDataCache {
     cache: Arc<RwLock<HashMap<String, CachedEntry>>>,
     pub subscription_manager: Arc<SubscriptionManager>,
@@ -13,6 +15,7 @@ pub struct K8sDataCache {
     current_memory_bytes: Arc<RwLock<usize>>,
 }
 
+#[derive(Debug)]
 struct CachedEntry {
     data: FetchResult,
     metadata: CachedData<()>,
@@ -34,13 +37,20 @@ impl K8sDataCache {
         let key = request.cache_key();
         let cache = self.cache.read().await;
 
-        cache.get(&key).and_then(|entry| {
-            if entry.metadata.is_fresh() {
+        match cache.get(&key) {
+            Some(entry) if entry.metadata.is_fresh() => {
+                debug!("🎯 Cache HIT: {}", key);
                 Some(entry.data.clone())
-            } else {
+            }
+            Some(_) => {
+                debug!("🔄 Cache STALE: {}", key);
                 None
             }
-        })
+            None => {
+                debug!("❌ Cache MISS: {}", key);
+                None
+            }
+        }
     }
 
     pub async fn get_or_mark_stale(&self, request: &DataRequest) -> Option<FetchResult> {
@@ -67,6 +77,8 @@ impl K8sDataCache {
         let key = request.cache_key();
         let ttl = request.default_ttl();
         let size_bytes = self.estimate_size(&data);
+        
+        info!("💾 Cache STORE: {} ({}KB, TTL: {}s)", key, size_bytes / 1024, ttl.as_secs());
 
         // Check memory limit
         let mut current_size = self.current_memory_bytes.write().await;

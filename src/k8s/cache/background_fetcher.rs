@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::sleep;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 // Import existing fetching functions
 use crate::k8s::containers::list as list_containers;
@@ -92,12 +92,12 @@ impl BackgroundFetcher {
     }
 
     async fn run_fetch_loop(&self, mut shutdown_rx: mpsc::Receiver<()>) {
-        info!("Background fetcher started");
+        info!("🚀 Background fetcher started (max {} concurrent)", self.max_concurrent_fetches);
 
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    info!("Background fetcher shutting down");
+                    info!("🛑 Background fetcher shutting down");
                     break;
                 }
                 () = self.process_next_batch() => {
@@ -111,12 +111,12 @@ impl BackgroundFetcher {
     }
 
     async fn run_refresh_loop(&self, mut shutdown_rx: mpsc::Receiver<()>) {
-        info!("Cache refresh loop started");
+        info!("🔄 Cache refresh loop started");
 
         loop {
             tokio::select! {
                 _ = shutdown_rx.recv() => {
-                    info!("Refresh loop shutting down");
+                    info!("🔄 Refresh loop shutting down");
                     break;
                 }
                 () = sleep(Duration::from_secs(5)) => {
@@ -132,6 +132,12 @@ impl BackgroundFetcher {
 
         if available_slots == 0 {
             return;
+        }
+
+        let queue_size = self.task_queue.read().await.len();
+        if queue_size > 0 {
+            debug!("📋 Processing batch: {} queued, {} active, {} slots available", 
+                   queue_size, active_count, available_slots);
         }
 
         let mut tasks_to_process = Vec::new();
@@ -158,6 +164,7 @@ impl BackgroundFetcher {
         {
             let mut active = self.active_fetches.write().await;
             if active.contains(&cache_key) {
+                debug!("⚠️  Skipping duplicate fetch for: {}", cache_key);
                 return;
             }
             active.insert(cache_key.clone());
@@ -166,35 +173,46 @@ impl BackgroundFetcher {
         let cache = self.cache.clone();
         let active_fetches = self.active_fetches.clone();
         let task_queue = self.task_queue.clone();
+        let priority = task.priority;
+        let retry_count = task.retry_count;
 
         tokio::spawn(async move {
-            debug!("Fetching data for: {}", cache_key);
+            let start = Instant::now();
+            info!("🔄 FETCH START: {} (priority: {:?}, attempt: {})", 
+                  cache_key, priority, retry_count + 1);
 
             // Mark as fetching in cache
             cache.mark_fetching(&task.request).await;
 
             let result = Self::fetch_data(&task.request).await;
 
+            let elapsed = start.elapsed();
             match result {
                 Ok(data) => {
                     if let Err(e) = cache.put(&task.request, data).await {
-                        error!("Failed to cache data for {}: {}", cache_key, e);
+                        error!("❌ Failed to cache data for {}: {}", cache_key, e);
+                    } else {
+                        info!("✅ FETCH SUCCESS: {} ({:.2}s)", cache_key, elapsed.as_secs_f64());
                     }
-                    debug!("Successfully cached data for: {}", cache_key);
                 }
                 Err(e) => {
-                    error!("Failed to fetch data for {}: {}", cache_key, e);
+                    error!("❌ FETCH FAILED: {} ({:.2}s) - {}", cache_key, elapsed.as_secs_f64(), e);
                     cache.mark_error(&task.request, e.to_string()).await;
 
                     // Retry logic
                     if task.retry_count < 3 {
+                        let retry_delay = Duration::from_secs(2_u64.pow(task.retry_count + 1));
+                        warn!("🔄 FETCH RETRY: {} scheduled in {}s (attempt {}/3)", 
+                              cache_key, retry_delay.as_secs(), task.retry_count + 2);
+                        
                         let mut retry_task = task;
                         retry_task.retry_count += 1;
-                        retry_task.scheduled_at =
-                            Instant::now() + Duration::from_secs(2_u64.pow(retry_task.retry_count));
+                        retry_task.scheduled_at = Instant::now() + retry_delay;
 
                         let mut queue = task_queue.write().await;
                         queue.push(retry_task);
+                    } else {
+                        error!("💀 FETCH ABANDONED: {} after 3 attempts", cache_key);
                     }
                 }
             }
@@ -259,16 +277,26 @@ impl BackgroundFetcher {
     async fn refresh_expired_entries(&self) {
         let expired_keys = self.cache.get_expired_keys().await;
 
+        if !expired_keys.is_empty() {
+            info!("🔄 REFRESH: Found {} expired cache entries to refresh", expired_keys.len());
+        }
+
         for key in expired_keys {
             // Parse the key back into a DataRequest
             // This is a simplified version - you'd need proper parsing
             if let Some(request) = Self::parse_cache_key(&key) {
+                debug!("🔄 REFRESH SCHEDULED: {}", key);
                 self.schedule_fetch(request, FetchPriority::Low).await;
+            } else {
+                warn!("⚠️  Could not parse expired cache key: {}", key);
             }
         }
     }
 
     pub async fn schedule_fetch(&self, request: DataRequest, priority: FetchPriority) {
+        let cache_key = request.cache_key();
+        debug!("📝 SCHEDULED: {} (priority: {:?})", cache_key, priority);
+        
         let task = FetchTask {
             request,
             priority,
@@ -281,11 +309,16 @@ impl BackgroundFetcher {
     }
 
     pub async fn schedule_fetch_batch(&self, requests: Vec<DataRequest>) {
+        info!("📝 BATCH SCHEDULED: {} fetch tasks", requests.len());
         let mut queue = self.task_queue.write().await;
 
         for request in requests {
+            let cache_key = request.cache_key();
+            let priority = request.priority();
+            debug!("📝 BATCH ITEM: {} (priority: {:?})", cache_key, priority);
+            
             let task = FetchTask {
-                priority: request.priority(),
+                priority,
                 request,
                 scheduled_at: Instant::now(),
                 retry_count: 0,
@@ -296,6 +329,11 @@ impl BackgroundFetcher {
 
     pub async fn prefetch_for(&self, request: &DataRequest) {
         let related = self.cache.prefetch_related(request).await;
+        if !related.is_empty() {
+            info!("🔮 PREFETCH: Scheduling {} related fetches for {}", 
+                  related.len(), request.cache_key());
+        }
+        
         for related_request in related {
             self.schedule_fetch(related_request, FetchPriority::Low)
                 .await;

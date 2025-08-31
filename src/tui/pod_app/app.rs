@@ -1,4 +1,4 @@
-use crate::{cache_manager, k8s::cache::{DataRequest, FetchResult, PodSelector}};
+use crate::{cache_manager, k8s::{cache::{DataRequest, FetchResult, PodSelector}, pods::list_rspods}};
 use crate::tui::container_app;
 use crate::tui::data::{RsPod, pod_constraint_len_calculator};
 use crate::tui::ingress_app;
@@ -189,8 +189,10 @@ impl AppBehavior for pod_app::app::App {
             let cache = cache_manager::get_cache_or_default();
             let request = DataRequest::Pods {
                 namespace: cache_manager::get_current_namespace_or_default(),
-                selector: PodSelector::ByLabels(selector),
+                selector: PodSelector::ByLabels(selector.clone()),
             };
+            
+            debug!("Pod app requesting cache key: {}", request.cache_key());
 
             // Subscribe to cache updates
             let (sub_id, mut cache_rx) = cache
@@ -233,10 +235,27 @@ impl AppBehavior for pod_app::app::App {
                                 debug!("⚠️ Unexpected data type in cache for Pod request");
                             }
                             None => {
-                                // Cache miss - try stale data while background fetcher works
-                                if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
-                                    if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Pod(stale_items)).await.is_err() {
-                                        break;
+                                // Cache miss - fall back to direct API call
+                                debug!("🌐 API FALLBACK: Pods cache miss, calling K8s API");
+                                match list_rspods(selector.clone()).await {
+                                    Ok(new_items) => {
+                                        if !new_items.is_empty() {
+                                            // Store in cache for next time
+                                            let fetch_result = FetchResult::Pods(new_items.clone());
+                                            let _ = cache.put(&request, fetch_result).await;
+
+                                            if new_items != initial_items && tx.send(Message::Pod(new_items)).await.is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    Err(_e) => {
+                                        // Still try to use stale cache data
+                                        if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
+                                            if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Pod(stale_items)).await.is_err() {
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                             }

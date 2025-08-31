@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
+const MAX_PREFETCH_REPLICASETS: usize = 10;
+
 #[derive(Debug)]
 pub struct K8sDataCache {
     cache: Arc<RwLock<HashMap<String, CachedEntry>>>,
@@ -305,7 +307,7 @@ impl K8sDataCache {
                 if let Some(super::fetcher::FetchResult::ReplicaSets(replicasets)) = self.get(request).await {
                     let mut prefetch_requests = Vec::new();
                     
-                    for rs in replicasets.iter().take(10) { // Limit to avoid overwhelming
+                    for rs in replicasets.iter().take(MAX_PREFETCH_REPLICASETS) { // Limit to avoid overwhelming
                         if let Some(selectors) = &rs.selectors {
                             let pod_request = DataRequest::Pods {
                                 namespace: namespace.clone(),
@@ -320,11 +322,10 @@ impl K8sDataCache {
                     info!("🔮 PREFETCH: Generated {} Pod requests for ReplicaSet data", prefetch_requests.len());
                     prefetch_requests
                 } else {
-                    // If ReplicaSets not in cache yet, create a generic Pod request
-                    vec![DataRequest::Pods {
-                        namespace,
-                        selector: PodSelector::All,
-                    }]
+                    // If ReplicaSets not in cache yet, don't prefetch Pods blindly
+                    // This avoids the performance overhead of fetching all pods
+                    debug!("🔮 PREFETCH: No cached ReplicaSets available, skipping Pod prefetch");
+                    vec![]
                 }
             }
             DataRequest::Pods { namespace: _, selector: _ } => {

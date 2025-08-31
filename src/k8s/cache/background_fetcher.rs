@@ -8,6 +8,8 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
+const MAX_PREFETCH_QUEUE_SIZE: usize = 100;
+
 // Import existing fetching functions
 use crate::k8s::containers::list as list_containers;
 use crate::k8s::events::list_all as list_events;
@@ -200,18 +202,22 @@ impl BackgroundFetcher {
                             info!("🔮 PREFETCH TRIGGERED: {} related requests for {}", 
                                   prefetch_requests.len(), cache_key);
                             
-                            for prefetch_req in prefetch_requests {
-                                let task_queue_clone = task_queue.clone();
-                                tokio::spawn(async move {
+                            // Batch the prefetch tasks instead of spawning individual tasks
+                            let mut queue = task_queue.write().await;
+                            
+                            // Check queue size limit before adding prefetch tasks
+                            if queue.len() + prefetch_requests.len() <= MAX_PREFETCH_QUEUE_SIZE {
+                                for prefetch_req in prefetch_requests {
                                     let prefetch_task = FetchTask {
                                         request: prefetch_req,
                                         priority: FetchPriority::Low, // Prefetch at low priority
                                         scheduled_at: Instant::now(),
                                         retry_count: 0,
                                     };
-                                    let mut queue = task_queue_clone.write().await;
                                     queue.push(prefetch_task);
-                                });
+                                }
+                            } else {
+                                warn!("⚠️  Prefetch queue full, dropping {} requests", prefetch_requests.len());
                             }
                         }
                     }
@@ -329,9 +335,16 @@ impl BackgroundFetcher {
         queue.push(task);
     }
 
-    pub async fn schedule_fetch_batch(&self, requests: Vec<DataRequest>) {
+    pub async fn schedule_fetch_batch(&self, requests: Vec<DataRequest>) -> Result<()> {
         info!("📝 BATCH SCHEDULED: {} fetch tasks", requests.len());
         let mut queue = self.task_queue.write().await;
+
+        // Check if queue is getting too large to prevent memory issues
+        if queue.len() + requests.len() > MAX_PREFETCH_QUEUE_SIZE {
+            warn!("⚠️  Prefetch queue approaching limit ({} + {} > {}), dropping batch",
+                  queue.len(), requests.len(), MAX_PREFETCH_QUEUE_SIZE);
+            return Ok(());
+        }
 
         for request in requests {
             let cache_key = request.cache_key();
@@ -346,6 +359,7 @@ impl BackgroundFetcher {
             };
             queue.push(task);
         }
+        Ok(())
     }
 
     pub async fn prefetch_for(&self, request: &DataRequest) {

@@ -129,11 +129,10 @@ impl AppBehavior for event_app::app::App {
                 .await;
 
             // Start with cached data if available
-            if let Some(FetchResult::Events(cached_items)) = cache.get(&request).await {
-                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Event(cached_items)).await.is_err() {
-                    cache.subscription_manager.unsubscribe(&sub_id).await;
-                    return;
-                }
+            if let Some(FetchResult::Events(cached_items)) = cache.get(&request).await
+                && !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Event(cached_items)).await.is_err() {
+                cache.subscription_manager.unsubscribe(&sub_id).await;
+                return;
             }
 
             // Listen for cache updates or fallback to direct polling
@@ -164,10 +163,9 @@ impl AppBehavior for event_app::app::App {
                             }
                             None => {
                                 // Cache miss - try stale data while background fetcher works
-                                if let Some(FetchResult::Events(stale_items)) = cache.get_or_mark_stale(&request).await {
-                                    if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Event(stale_items)).await.is_err() {
-                                        break;
-                                    }
+                                if let Some(FetchResult::Events(stale_items)) = cache.get_or_mark_stale(&request).await
+                                    && !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Event(stale_items)).await.is_err() {
+                                    break;
                                 }
                             }
                         }

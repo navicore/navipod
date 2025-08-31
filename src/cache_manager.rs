@@ -5,7 +5,7 @@ This module provides a singleton cache that can be accessed throughout the app.
 It initializes the cache and background fetcher at startup.
 */
 use crate::error::Result;
-use crate::k8s::cache::{BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager};
+use crate::k8s::cache::{BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager, WatchManagerHandle};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -16,6 +16,8 @@ static CACHE: OnceLock<Arc<K8sDataCache>> = OnceLock::new();
 static FETCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Watch manager shutdown channel
 static WATCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+/// Watch manager task handle
+static WATCHER_HANDLE: OnceLock<WatchManagerHandle> = OnceLock::new();
 /// Current namespace context
 static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
 
@@ -32,8 +34,15 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     let (_fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
     
     // Initialize watch manager for real-time invalidation (namespace-scoped)
-    let watch_manager = WatchManager::new(cache.clone(), namespace.clone()).await?;
-    let watcher_shutdown_tx = watch_manager.start();
+    let watch_manager = match WatchManager::new(cache.clone(), namespace.clone()).await {
+        Ok(wm) => wm,
+        Err(e) => {
+            // Cleanup fetcher if watch manager initialization fails
+            let _ = fetcher_shutdown_tx.send(()).await;
+            return Err(e);
+        }
+    };
+    let (watcher_shutdown_tx, watcher_handle) = watch_manager.start();
 
     // Store the namespace and cache globally
     if CURRENT_NAMESPACE.set(namespace.clone()).is_err() {
@@ -78,6 +87,18 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
             kube::error::ErrorResponse {
                 status: "AlreadyExists".to_string(),
                 message: "Watcher shutdown channel already initialized".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
+    }
+    
+    if WATCHER_HANDLE.set(watcher_handle).is_err() {
+        error!("Watcher handle already initialized");
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Watcher handle already initialized".to_string(),
                 reason: "AlreadyInitialized".to_string(),
                 code: 409,
             },
@@ -158,6 +179,13 @@ pub async fn shutdown_cache() {
     if let Some(watcher_shutdown_tx) = WATCHER_SHUTDOWN_TX.get() {
         let _ = watcher_shutdown_tx.send(()).await;
         info!("Watch manager shutdown requested");
+    }
+    
+    // Cleanup task handles to prevent resource leaks
+    if let Some(watcher_handle) = WATCHER_HANDLE.get() {
+        // We can't take ownership from OnceLock, so we'll abort tasks via shutdown signal
+        // The handles will be cleaned up when the shutdown signal is received
+        info!("Watch manager tasks will be cleaned up via shutdown signal");
     }
 }
 

@@ -45,6 +45,8 @@ pub struct WatchManager {
     shutdown_tx: Option<mpsc::Sender<()>>,
     invalidation_tx: mpsc::Sender<InvalidationEvent>,
     invalidation_rx: Option<mpsc::Receiver<InvalidationEvent>>,
+    stats: Arc<std::sync::RwLock<WatchStats>>,
+    task_handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
 impl WatchManager {
@@ -56,6 +58,11 @@ impl WatchManager {
     pub async fn new(cache: Arc<K8sDataCache>, namespace: String) -> Result<Self> {
         let client = Client::try_default().await?;
         let (invalidation_tx, invalidation_rx) = mpsc::channel(100);
+        let stats = Arc::new(std::sync::RwLock::new(WatchStats {
+            active_watchers: 3,
+            total_invalidations: 0,
+            connection_status: WatchConnectionStatus::Connected,
+        }));
 
         Ok(Self {
             cache,
@@ -64,6 +71,8 @@ impl WatchManager {
             shutdown_tx: None,
             invalidation_tx,
             invalidation_rx: Some(invalidation_rx),
+            stats,
+            task_handles: Vec::new(),
         })
     }
 
@@ -79,7 +88,7 @@ impl WatchManager {
     /// 
     /// Returns a shutdown sender that can be used to stop all watches
     #[allow(clippy::expect_used)]
-    pub fn start(mut self) -> mpsc::Sender<()> {
+    pub fn start(mut self) -> (mpsc::Sender<()>, WatchManagerHandle) {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
         self.shutdown_tx = Some(shutdown_tx.clone());
 
@@ -91,26 +100,32 @@ impl WatchManager {
         let client = self.client.clone();
 
         // Start the invalidation processor
-        tokio::spawn(async move {
-            Self::run_invalidation_processor(cache, invalidation_rx, shutdown_rx).await;
+        let stats_clone = self.stats.clone();
+        let processor_handle = tokio::spawn(async move {
+            Self::run_invalidation_processor(cache, invalidation_rx, shutdown_rx, stats_clone).await;
         });
 
         // Start individual watch streams (namespace-scoped)
         let namespace = self.namespace.clone();
-        Self::start_pod_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
-        Self::start_replicaset_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
-        Self::start_event_watcher(client, invalidation_tx, namespace);
+        let pod_handle = Self::start_pod_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
+        let rs_handle = Self::start_replicaset_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
+        let event_handle = Self::start_event_watcher(client, invalidation_tx, namespace);
 
         info!("🔍 Watch streams started for Pods, ReplicaSets, and Events");
         
-        shutdown_tx
+        let handle = WatchManagerHandle {
+            task_handles: vec![processor_handle, pod_handle, rs_handle, event_handle],
+        };
+        
+        (shutdown_tx, handle)
     }
 
     /// Process invalidation events from watch streams
     async fn run_invalidation_processor(
         cache: Arc<K8sDataCache>,
         mut invalidation_rx: mpsc::Receiver<InvalidationEvent>,
-        mut shutdown_rx: mpsc::Receiver<()>
+        mut shutdown_rx: mpsc::Receiver<()>,
+        stats: Arc<std::sync::RwLock<WatchStats>>
     ) {
         info!("📡 Invalidation processor started");
 
@@ -121,19 +136,27 @@ impl WatchManager {
                     break;
                 }
                 Some(event) = invalidation_rx.recv() => {
-                    Self::handle_invalidation_event(&cache, event).await;
+                    Self::handle_invalidation_event(&cache, event, &stats).await;
                 }
             }
         }
     }
 
     /// Handle a single invalidation event
-    async fn handle_invalidation_event(cache: &Arc<K8sDataCache>, event: InvalidationEvent) {
+    async fn handle_invalidation_event(
+        cache: &Arc<K8sDataCache>, 
+        event: InvalidationEvent,
+        stats: &Arc<std::sync::RwLock<WatchStats>>
+    ) {
+        // Increment invalidation counter
+        if let Ok(mut stats) = stats.write() {
+            stats.total_invalidations += 1;
+        }
+        
         match event {
             InvalidationEvent::Pattern(pattern) => {
                 debug!("🔄 INVALIDATE PATTERN: {}", pattern);
-                // TODO: Implement pattern-based invalidation
-                // This would invalidate all cache keys matching the pattern
+                cache.invalidate_pattern(&pattern).await;
             }
             InvalidationEvent::Key(key) => {
                 debug!("🔄 INVALIDATE KEY: {}", key);
@@ -153,69 +176,114 @@ impl WatchManager {
     }
 
     /// Start watching Pod resources
-    fn start_pod_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) {
+    fn start_pod_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) -> tokio::task::JoinHandle<()> {
 
         tokio::spawn(async move {
             info!("🔍 Starting Pod watcher");
             
+            let mut backoff_seconds = 1;
+            let mut restart_count = 0;
+            const MAX_RESTARTS: u32 = 50;
+            const MAX_BACKOFF: u64 = 60;
+            
             loop {
+                if restart_count >= MAX_RESTARTS {
+                    error!("❌ Pod watcher exceeded maximum restart attempts ({}), stopping", MAX_RESTARTS);
+                    break;
+                }
+                
                 match Self::watch_pods(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                     Ok(()) => {
-                        info!("🔍 Pod watcher stream ended, restarting...");
+                        info!("🔍 Pod watcher stream ended normally, restarting...");
+                        backoff_seconds = 1; // Reset backoff on successful run
+                        restart_count = 0; // Reset restart count on successful run
                     }
                     Err(e) => {
-                        error!("❌ Pod watcher failed: {}, restarting in 5s", e);
-                        sleep(Duration::from_secs(5)).await;
+                        restart_count += 1;
+                        error!("❌ Pod watcher failed (attempt {}/{}): {}, restarting in {}s", 
+                               restart_count, MAX_RESTARTS, e, backoff_seconds);
+                        sleep(Duration::from_secs(backoff_seconds)).await;
+                        backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF); // Exponential backoff
                     }
                 }
                 
                 sleep(Duration::from_secs(1)).await; // Brief delay before restart
             }
-        });
+        })
     }
 
     /// Start watching `ReplicaSet` resources  
-    fn start_replicaset_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) {
+    fn start_replicaset_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) -> tokio::task::JoinHandle<()> {
 
         tokio::spawn(async move {
             info!("🔍 Starting ReplicaSet watcher");
             
+            let mut backoff_seconds = 1;
+            let mut restart_count = 0;
+            const MAX_RESTARTS: u32 = 50;
+            const MAX_BACKOFF: u64 = 60;
+            
             loop {
+                if restart_count >= MAX_RESTARTS {
+                    error!("❌ ReplicaSet watcher exceeded maximum restart attempts ({}), stopping", MAX_RESTARTS);
+                    break;
+                }
+                
                 match Self::watch_replicasets(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                     Ok(()) => {
-                        info!("🔍 ReplicaSet watcher stream ended, restarting...");
+                        info!("🔍 ReplicaSet watcher stream ended normally, restarting...");
+                        backoff_seconds = 1; // Reset backoff on successful run
+                        restart_count = 0; // Reset restart count on successful run
                     }
                     Err(e) => {
-                        error!("❌ ReplicaSet watcher failed: {}, restarting in 5s", e);
-                        sleep(Duration::from_secs(5)).await;
+                        restart_count += 1;
+                        error!("❌ ReplicaSet watcher failed (attempt {}/{}): {}, restarting in {}s", 
+                               restart_count, MAX_RESTARTS, e, backoff_seconds);
+                        sleep(Duration::from_secs(backoff_seconds)).await;
+                        backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF); // Exponential backoff
                     }
                 }
                 
                 sleep(Duration::from_secs(1)).await;
             }
-        });
+        })
     }
 
     /// Start watching Event resources
-    fn start_event_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) {
+    fn start_event_watcher(client: Client, invalidation_tx: mpsc::Sender<InvalidationEvent>, namespace: String) -> tokio::task::JoinHandle<()> {
 
         tokio::spawn(async move {
             info!("🔍 Starting Event watcher");
             
+            let mut backoff_seconds = 1;
+            let mut restart_count = 0;
+            const MAX_RESTARTS: u32 = 50;
+            const MAX_BACKOFF: u64 = 60;
+            
             loop {
+                if restart_count >= MAX_RESTARTS {
+                    error!("❌ Event watcher exceeded maximum restart attempts ({}), stopping", MAX_RESTARTS);
+                    break;
+                }
+                
                 match Self::watch_events(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                     Ok(()) => {
-                        info!("🔍 Event watcher stream ended, restarting...");
+                        info!("🔍 Event watcher stream ended normally, restarting...");
+                        backoff_seconds = 1; // Reset backoff on successful run
+                        restart_count = 0; // Reset restart count on successful run
                     }
                     Err(e) => {
-                        error!("❌ Event watcher failed: {}, restarting in 5s", e);
-                        sleep(Duration::from_secs(5)).await;
+                        restart_count += 1;
+                        error!("❌ Event watcher failed (attempt {}/{}): {}, restarting in {}s", 
+                               restart_count, MAX_RESTARTS, e, backoff_seconds);
+                        sleep(Duration::from_secs(backoff_seconds)).await;
+                        backoff_seconds = (backoff_seconds * 2).min(MAX_BACKOFF); // Exponential backoff
                     }
                 }
                 
                 sleep(Duration::from_secs(1)).await;
             }
-        });
+        })
     }
 
     /// Watch Pod resources and send invalidation events
@@ -354,12 +422,15 @@ impl WatchManager {
 
     /// Get statistics about active watch streams
     #[must_use]
-    pub const fn stats(&self) -> WatchStats {
-        WatchStats {
-            active_watchers: 3, // Pod, ReplicaSet, Event
-            total_invalidations: 0, // TODO: Track this
-            connection_status: WatchConnectionStatus::Connected,
-        }
+    pub fn stats(&self) -> WatchStats {
+        self.stats.read().map_or(
+            WatchStats {
+                active_watchers: 3,
+                total_invalidations: 0,
+                connection_status: WatchConnectionStatus::Disconnected,
+            },
+            |stats| stats.clone()
+        )
     }
 }
 
@@ -375,6 +446,20 @@ pub enum WatchConnectionStatus {
     Connected,
     Disconnected,
     Reconnecting,
+}
+
+/// Handle to manage watch manager tasks
+pub struct WatchManagerHandle {
+    task_handles: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl WatchManagerHandle {
+    /// Shutdown all watch manager tasks
+    pub fn shutdown(self) {
+        for handle in self.task_handles {
+            handle.abort();
+        }
+    }
 }
 
 #[cfg(test)]

@@ -5,10 +5,13 @@
 use navipod::{cache_manager, k8s::cache::{DataRequest, FetchResult}};
 use std::collections::BTreeMap;
 
+mod crypto_fixture;
+
 #[tokio::test]
 async fn test_cache_manager_initialization() {
+    crypto_fixture::fixture();
     // Initialize the cache
-    cache_manager::initialize_cache().await.unwrap();
+    cache_manager::initialize_cache("default".to_string()).await.unwrap();
     
     // Get cache instance
     let cache = cache_manager::get_cache().unwrap();

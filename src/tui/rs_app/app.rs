@@ -121,7 +121,7 @@ impl AppBehavior for App {
         tokio::spawn(async move {
             let cache = cache_manager::get_cache_or_default();
             let request = DataRequest::ReplicaSets {
-                namespace: None,
+                namespace: Some(cache_manager::get_current_namespace_or_default()),
                 labels: std::collections::BTreeMap::new(),
             };
 

@@ -30,25 +30,26 @@ fn get_pod_state(pod: &Pod) -> String {
     }
 
     // Then proceed to check the pod's status as before
-    if let Some(status) = &pod.status
-        && let Some(phase) = &status.phase {
-        return match phase.as_str() {
-            "Pending" => "Pending".to_string(),
-            "Running" => {
-                if status.conditions.as_ref().is_some_and(|conds| {
-                    conds
-                        .iter()
-                        .any(|c| c.type_ == "Ready" && c.status == "True")
-                }) {
-                    "Running".to_string()
-                } else {
-                    "Starting".to_string() // This might be a more accurate state for non-ready running pods
+    if let Some(status) = &pod.status {
+        if let Some(phase) = &status.phase {
+            return match phase.as_str() {
+                "Pending" => "Pending".to_string(),
+                "Running" => {
+                    if status.conditions.as_ref().is_some_and(|conds| {
+                        conds
+                            .iter()
+                            .any(|c| c.type_ == "Ready" && c.status == "True")
+                    }) {
+                        "Running".to_string()
+                    } else {
+                        "Starting".to_string() // This might be a more accurate state for non-ready running pods
+                    }
                 }
-            }
-            "Succeeded" => "Succeeded".to_string(),
-            "Failed" => "Failed".to_string(),
-            _ => "Unknown".to_string(),
-        };
+                "Succeeded" => "Succeeded".to_string(),
+                "Failed" => "Failed".to_string(),
+                _ => "Unknown".to_string(),
+            };
+        }
     }
 
     "Unknown".to_string()

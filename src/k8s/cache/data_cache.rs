@@ -77,8 +77,13 @@ impl K8sDataCache {
         let key = request.cache_key();
         let ttl = request.default_ttl();
         let size_bytes = self.estimate_size(&data);
-        
-        info!("💾 Cache STORE: {} ({}KB, TTL: {}s)", key, size_bytes / 1024, ttl.as_secs());
+
+        info!(
+            "💾 Cache STORE: {} ({}KB, TTL: {}s)",
+            key,
+            size_bytes / 1024,
+            ttl.as_secs()
+        );
 
         // Check memory limit
         let mut current_size = self.current_memory_bytes.write().await;
@@ -116,6 +121,66 @@ impl K8sDataCache {
 
         if let Some(entry) = cache.get_mut(&key) {
             entry.metadata.mark_stale();
+        }
+    }
+
+    /// Invalidate all cache entries matching a pattern
+    pub async fn invalidate_pattern(&self, pattern: &str) {
+        let mut cache = self.cache.write().await;
+
+        // Convert glob-style pattern to regex-like matching
+        let pattern_parts: Vec<&str> = pattern.split('*').collect();
+
+        #[allow(clippy::needless_collect)]
+        for key in cache.keys().cloned().collect::<Vec<_>>() {
+            let matches = if pattern_parts.len() == 1 {
+                // No wildcards, exact match
+                key == pattern
+            } else if pattern_parts.len() == 2 {
+                // One wildcard: prefix*suffix pattern
+                let prefix = pattern_parts[0];
+                let suffix = pattern_parts[1];
+                key.starts_with(prefix) && (suffix.is_empty() || key.ends_with(suffix))
+            } else {
+                // Multiple wildcards - more complex matching
+                let mut pos = 0;
+                let mut matches_all = true;
+                for (i, part) in pattern_parts.iter().enumerate() {
+                    if part.is_empty() {
+                        continue;
+                    }
+                    if i == 0 {
+                        // First part must match from start
+                        if !key[pos..].starts_with(part) {
+                            matches_all = false;
+                            break;
+                        }
+                        pos += part.len();
+                    } else if i == pattern_parts.len() - 1 {
+                        // Last part must match at end
+                        if !key[pos..].ends_with(part) {
+                            matches_all = false;
+                            break;
+                        }
+                    } else {
+                        // Middle parts can match anywhere after current position
+                        if let Some(found_pos) = key[pos..].find(part) {
+                            pos += found_pos + part.len();
+                        } else {
+                            matches_all = false;
+                            break;
+                        }
+                    }
+                }
+                matches_all
+            };
+
+            if matches {
+                if let Some(entry) = cache.get_mut(&key) {
+                    entry.metadata.mark_stale();
+                    debug!("🔄 Pattern invalidated: {}", key);
+                }
+            }
         }
     }
 

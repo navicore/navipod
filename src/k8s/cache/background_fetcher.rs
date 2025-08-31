@@ -203,22 +203,24 @@ impl BackgroundFetcher {
                                   prefetch_requests.len(), cache_key);
                             
                             // Batch the prefetch tasks instead of spawning individual tasks
-                            let mut queue = task_queue.write().await;
-                            
-                            // Check queue size limit before adding prefetch tasks
-                            if queue.len() + prefetch_requests.len() <= MAX_PREFETCH_QUEUE_SIZE {
-                                for prefetch_req in prefetch_requests {
-                                    let prefetch_task = FetchTask {
-                                        request: prefetch_req,
-                                        priority: FetchPriority::Low, // Prefetch at low priority
-                                        scheduled_at: Instant::now(),
-                                        retry_count: 0,
-                                    };
-                                    queue.push(prefetch_task);
+                            {
+                                let mut queue = task_queue.write().await;
+                                
+                                // Check queue size limit before adding prefetch tasks
+                                if queue.len() + prefetch_requests.len() <= MAX_PREFETCH_QUEUE_SIZE {
+                                    for prefetch_req in prefetch_requests {
+                                        let prefetch_task = FetchTask {
+                                            request: prefetch_req,
+                                            priority: FetchPriority::Low, // Prefetch at low priority
+                                            scheduled_at: Instant::now(),
+                                            retry_count: 0,
+                                        };
+                                        queue.push(prefetch_task);
+                                    }
+                                } else {
+                                    warn!("⚠️  Prefetch queue full, dropping {} requests", prefetch_requests.len());
                                 }
-                            } else {
-                                warn!("⚠️  Prefetch queue full, dropping {} requests", prefetch_requests.len());
-                            }
+                            } // Release lock early
                         }
                     }
                 }
@@ -335,30 +337,37 @@ impl BackgroundFetcher {
         queue.push(task);
     }
 
+    /// Schedule multiple fetch requests in batch
+    /// 
+    /// # Errors
+    /// 
+    /// Returns error if task scheduling fails or queue limits are exceeded
     pub async fn schedule_fetch_batch(&self, requests: Vec<DataRequest>) -> Result<()> {
         info!("📝 BATCH SCHEDULED: {} fetch tasks", requests.len());
-        let mut queue = self.task_queue.write().await;
+        {
+            let mut queue = self.task_queue.write().await;
 
-        // Check if queue is getting too large to prevent memory issues
-        if queue.len() + requests.len() > MAX_PREFETCH_QUEUE_SIZE {
-            warn!("⚠️  Prefetch queue approaching limit ({} + {} > {}), dropping batch",
-                  queue.len(), requests.len(), MAX_PREFETCH_QUEUE_SIZE);
-            return Ok(());
-        }
+            // Check if queue is getting too large to prevent memory issues
+            if queue.len() + requests.len() > MAX_PREFETCH_QUEUE_SIZE {
+                warn!("⚠️  Prefetch queue approaching limit ({} + {} > {}), dropping batch",
+                      queue.len(), requests.len(), MAX_PREFETCH_QUEUE_SIZE);
+                return Ok(());
+            }
 
-        for request in requests {
-            let cache_key = request.cache_key();
-            let priority = request.priority();
-            debug!("📝 BATCH ITEM: {} (priority: {:?})", cache_key, priority);
-            
-            let task = FetchTask {
-                priority,
-                request,
-                scheduled_at: Instant::now(),
-                retry_count: 0,
-            };
-            queue.push(task);
-        }
+            for request in requests {
+                let cache_key = request.cache_key();
+                let priority = request.priority();
+                debug!("📝 BATCH ITEM: {} (priority: {:?})", cache_key, priority);
+                
+                let task = FetchTask {
+                    priority,
+                    request,
+                    scheduled_at: Instant::now(),
+                    retry_count: 0,
+                };
+                queue.push(task);
+            }
+        } // Release lock early
         Ok(())
     }
 

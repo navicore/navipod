@@ -1,5 +1,6 @@
 use crate::cache_manager;
 use crate::k8s::cache::{DataRequest, FetchResult};
+use crate::k8s::cache::data_cache::MAX_PREFETCH_REPLICASETS;
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::pod_app;
@@ -23,9 +24,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
-const MAX_PREFETCH_REPLICASETS: usize = 10;
 
-/// Triggers prefetch of Pod data for the given ReplicaSets
+/// Triggers prefetch of Pod data for the given `ReplicaSets`
 async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
     use crate::k8s::cache::fetcher::PodSelector;
     

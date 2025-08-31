@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-const MAX_PREFETCH_REPLICASETS: usize = 10;
+pub const MAX_PREFETCH_REPLICASETS: usize = 10;
 
 #[derive(Debug)]
 pub struct K8sDataCache {

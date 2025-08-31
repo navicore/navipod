@@ -77,8 +77,13 @@ impl K8sDataCache {
         let key = request.cache_key();
         let ttl = request.default_ttl();
         let size_bytes = self.estimate_size(&data);
-        
-        info!("💾 Cache STORE: {} ({}KB, TTL: {}s)", key, size_bytes / 1024, ttl.as_secs());
+
+        info!(
+            "💾 Cache STORE: {} ({}KB, TTL: {}s)",
+            key,
+            size_bytes / 1024,
+            ttl.as_secs()
+        );
 
         // Check memory limit
         let mut current_size = self.current_memory_bytes.write().await;
@@ -122,10 +127,11 @@ impl K8sDataCache {
     /// Invalidate all cache entries matching a pattern
     pub async fn invalidate_pattern(&self, pattern: &str) {
         let mut cache = self.cache.write().await;
-        
+
         // Convert glob-style pattern to regex-like matching
         let pattern_parts: Vec<&str> = pattern.split('*').collect();
-        
+
+        #[allow(clippy::needless_collect)]
         for key in cache.keys().cloned().collect::<Vec<_>>() {
             let matches = if pattern_parts.len() == 1 {
                 // No wildcards, exact match
@@ -168,7 +174,7 @@ impl K8sDataCache {
                 }
                 matches_all
             };
-            
+
             if matches {
                 if let Some(entry) = cache.get_mut(&key) {
                     entry.metadata.mark_stale();

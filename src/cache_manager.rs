@@ -5,7 +5,9 @@ This module provides a singleton cache that can be accessed throughout the app.
 It initializes the cache and background fetcher at startup.
 */
 use crate::error::Result;
-use crate::k8s::cache::{BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager, WatchManagerHandle};
+use crate::k8s::cache::{
+    BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager, WatchManagerHandle,
+};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -32,7 +34,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     let fetcher = BackgroundFetcher::new(cache.clone(), 8); // 8 concurrent fetches
 
     let (_fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
-    
+
     // Initialize watch manager for real-time invalidation (namespace-scoped)
     let watch_manager = match WatchManager::new(cache.clone(), namespace.clone()).await {
         Ok(wm) => wm,
@@ -56,7 +58,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
             },
         )));
     }
-    
+
     if CACHE.set(cache.clone()).is_err() {
         error!("Cache already initialized");
         return Err(crate::error::Error::Kube(kube::Error::Api(
@@ -80,7 +82,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
             },
         )));
     }
-    
+
     if WATCHER_SHUTDOWN_TX.set(watcher_shutdown_tx).is_err() {
         error!("Watcher shutdown channel already initialized");
         return Err(crate::error::Error::Kube(kube::Error::Api(
@@ -92,7 +94,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
             },
         )));
     }
-    
+
     if WATCHER_HANDLE.set(watcher_handle).is_err() {
         error!("Watcher handle already initialized");
         return Err(crate::error::Error::Kube(kube::Error::Api(
@@ -112,7 +114,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         namespace: Some(namespace),
         labels: std::collections::BTreeMap::new(),
     };
-    
+
     // Fetch ReplicaSet data directly and populate cache immediately
     match crate::k8s::rs::list_replicas().await {
         Ok(rs_data) => {
@@ -170,22 +172,22 @@ pub fn get_current_namespace_or_default() -> String {
 /// Shutdown the cache system (background fetcher and watch manager)
 ///
 /// This should be called on application exit
+#[allow(clippy::cognitive_complexity)]
 pub async fn shutdown_cache() {
     if let Some(fetcher_shutdown_tx) = FETCHER_SHUTDOWN_TX.get() {
         let _ = fetcher_shutdown_tx.send(()).await;
         info!("Background fetcher shutdown requested");
     }
-    
+
     if let Some(watcher_shutdown_tx) = WATCHER_SHUTDOWN_TX.get() {
         let _ = watcher_shutdown_tx.send(()).await;
         info!("Watch manager shutdown requested");
     }
-    
+
     // Cleanup task handles to prevent resource leaks
-    if let Some(watcher_handle) = WATCHER_HANDLE.get() {
+    if let Some(_watcher_handle) = WATCHER_HANDLE.get() {
         // We can't take ownership from OnceLock, so we'll abort tasks via shutdown signal
         // The handles will be cleaned up when the shutdown signal is received
         info!("Watch manager tasks will be cleaned up via shutdown signal");
     }
 }
-

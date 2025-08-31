@@ -228,11 +228,11 @@ impl K8sDataCache {
             .min_by_key(|(_, entry)| entry.metadata.last_updated)
             .map(|(key, _)| key.clone());
 
-        if let Some(key) = oldest_key
-            && let Some(entry) = cache.remove(&key)
-        {
-            let mut current_size = self.current_memory_bytes.write().await;
-            *current_size = current_size.saturating_sub(entry.size_bytes);
+        if let Some(key) = oldest_key {
+            if let Some(entry) = cache.remove(&key) {
+                let mut current_size = self.current_memory_bytes.write().await;
+                *current_size = current_size.saturating_sub(entry.size_bytes);
+            }
         }
 
         Ok(())

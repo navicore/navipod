@@ -1,6 +1,6 @@
 use crate::cache_manager;
 use crate::k8s::cache::{DataRequest, FetchResult};
-use crate::k8s::cache::data_cache::MAX_PREFETCH_REPLICASETS;
+use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::pod_app;
@@ -26,6 +26,10 @@ use tracing::{debug, warn};
 const POLL_MS: u64 = 5000;
 
 /// Triggers prefetch of Pod data for the given `ReplicaSets`
+///
+/// This function generates prefetch requests for Pod data based on the selectors
+/// from the provided ReplicaSets. It respects the configured limits for the number
+/// of ReplicaSets to process to avoid overwhelming the system.
 async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
     use crate::k8s::cache::fetcher::PodSelector;
     
@@ -34,7 +38,7 @@ async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
         let mut prefetch_requests = Vec::new();
 
         // Generate Pod requests for each ReplicaSet
-        for rs in replicasets.iter().take(MAX_PREFETCH_REPLICASETS) {
+        for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
             if let Some(selectors) = &rs.selectors {
                 let pod_request = DataRequest::Pods {
                     namespace: namespace.clone(),

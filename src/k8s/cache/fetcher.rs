@@ -3,6 +3,10 @@ use crate::tui::data::{Container, Ingress, Rs, RsPod};
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::time::Duration;
+use super::config::{
+    DEFAULT_REPLICASET_TTL_SECS, DEFAULT_POD_TTL_SECS, DEFAULT_EVENT_TTL_SECS,
+    DEFAULT_CONTAINER_TTL_SECS, DEFAULT_INGRESS_TTL_SECS
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct FetchParams {
@@ -93,12 +97,13 @@ impl DataRequest {
     #[must_use]
     pub const fn default_ttl(&self) -> Duration {
         match self {
-            // Longer TTL for predictive cache - ReplicaSets change infrequently
-            Self::ReplicaSets { .. } | Self::Custom { .. } => Duration::from_secs(300), // 5 minutes
-            // Pods change more frequently but still want to avoid cache misses during navigation
-            Self::Pods { .. } | Self::Containers { .. } => Duration::from_secs(120), // 2 minutes
-            // Events and Ingresses can be cached longer since they're less critical for navigation
-            Self::Events { .. } | Self::Ingresses { .. } => Duration::from_secs(180), // 3 minutes
+            // Use configurable TTL values for predictive cache
+            Self::ReplicaSets { .. } => Duration::from_secs(DEFAULT_REPLICASET_TTL_SECS),
+            Self::Pods { .. } => Duration::from_secs(DEFAULT_POD_TTL_SECS),
+            Self::Containers { .. } => Duration::from_secs(DEFAULT_CONTAINER_TTL_SECS),
+            Self::Events { .. } => Duration::from_secs(DEFAULT_EVENT_TTL_SECS),
+            Self::Ingresses { .. } => Duration::from_secs(DEFAULT_INGRESS_TTL_SECS),
+            Self::Custom { .. } => Duration::from_secs(DEFAULT_REPLICASET_TTL_SECS),
         }
     }
 

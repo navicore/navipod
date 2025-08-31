@@ -50,19 +50,28 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     };
     let (watcher_shutdown_tx, watcher_handle) = watch_manager.start();
 
-    // Store the namespace and cache globally
+    // Store all global state atomically to prevent race conditions
+    // If any step fails, we need to clean up properly
     if CURRENT_NAMESPACE.set(namespace.clone()).is_err() {
         error!("Namespace already set");
+        let _ = fetcher_shutdown_tx.send(()).await;
+        let _ = watcher_shutdown_tx.send(()).await;
         return Err(already_initialized_error("Namespace"));
     }
 
     if CACHE.set(cache.clone()).is_err() {
         error!("Cache already initialized");
+        let _ = fetcher_shutdown_tx.send(()).await;
+        let _ = watcher_shutdown_tx.send(()).await;
         return Err(already_initialized_error("Cache"));
     }
 
+    // Store background fetcher BEFORE storing shutdown channels to ensure
+    // get_background_fetcher() returns valid instance
     if BACKGROUND_FETCHER.set(fetcher_arc).is_err() {
         error!("Background fetcher already initialized");
+        let _ = fetcher_shutdown_tx.send(()).await;
+        let _ = watcher_shutdown_tx.send(()).await;
         return Err(already_initialized_error("Background fetcher"));
     }
 

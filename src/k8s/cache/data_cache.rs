@@ -1,13 +1,12 @@
 use super::cached_data::{CachedData, FetchStatus};
 use super::fetcher::{DataRequest, FetchResult};
 use super::subscription::SubscriptionManager;
+use super::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-
-pub const MAX_PREFETCH_REPLICASETS: usize = 10;
 
 #[derive(Debug)]
 pub struct K8sDataCache {
@@ -307,7 +306,7 @@ impl K8sDataCache {
                 if let Some(super::fetcher::FetchResult::ReplicaSets(replicasets)) = self.get(request).await {
                     let mut prefetch_requests = Vec::new();
                     
-                    for rs in replicasets.iter().take(MAX_PREFETCH_REPLICASETS) { // Limit to avoid overwhelming
+                    for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) { // Limit to avoid overwhelming
                         if let Some(selectors) = &rs.selectors {
                             let pod_request = DataRequest::Pods {
                                 namespace: namespace.clone(),

@@ -132,14 +132,12 @@ impl AppBehavior for App {
                 .await;
 
             // Start with cached data if available
-            if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
-                if !cached_items.is_empty() && cached_items != initial_items {
-                    let sevent = Message::Rs(cached_items);
-                    if tx.send(sevent).await.is_err() {
-                        cache.subscription_manager.unsubscribe(&sub_id).await;
-                        return;
-                    }
-                }
+            if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await 
+                && !cached_items.is_empty() && cached_items != initial_items 
+                && tx.send(Message::Rs(cached_items)).await.is_err()
+            {
+                cache.subscription_manager.unsubscribe(&sub_id).await;
+                return;
             }
 
             // Listen for cache updates or fallback to direct polling
@@ -147,13 +145,11 @@ impl AppBehavior for App {
                 tokio::select! {
                     // Try to get updates from cache first
                     update = cache_rx.recv() => {
-                        if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update {
-                            if !new_items.is_empty() && new_items != initial_items {
-                                let sevent = Message::Rs(new_items);
-                                if tx.send(sevent).await.is_err() {
-                                    break;
-                                }
-                            }
+                        if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update 
+                            && !new_items.is_empty() && new_items != initial_items 
+                            && tx.send(Message::Rs(new_items)).await.is_err()
+                        {
+                            break;
                         }
                     }
                     // Fallback: check cache periodically and refresh if needed
@@ -162,11 +158,8 @@ impl AppBehavior for App {
 
                      if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
                          debug!("⚡ Using cached ReplicaSets data ({} items)", cached_items.len());
-                         if !cached_items.is_empty() && cached_items != initial_items {
-                             let sevent = Message::Rs(cached_items);
-                             if tx.send(sevent).await.is_err() {
-                                 break;
-                             }
+                         if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Rs(cached_items)).await.is_err() {
+                             break;
                          }
                      } else {
                          // Cache miss - fall back to direct API call
@@ -178,24 +171,19 @@ impl AppBehavior for App {
                                      let fetch_result = FetchResult::ReplicaSets(new_items.clone());
                                      let _ = cache.put(&request, fetch_result).await;
 
-                                     if new_items != initial_items {
-                                         let sevent = Message::Rs(new_items);
-                                         if tx.send(sevent).await.is_err() {
-                                             break;
-                                         }
+                                     if new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
+                                         break;
                                      }
                                  }
                              }
                              Err(_e) => {
 
                                  // Still try to use stale cache data
-                                 if let Some(FetchResult::ReplicaSets(stale_items)) = cache.get_or_mark_stale(&request).await {
-                                         if !stale_items.is_empty() && stale_items != initial_items {
-                                             let sevent = Message::Rs(stale_items);
-                                             if tx.send(sevent).await.is_err() {
-                                                 break;
-                                             }
-                                         }
+                                 if let Some(FetchResult::ReplicaSets(stale_items)) = cache.get_or_mark_stale(&request).await 
+                                     && !stale_items.is_empty() && stale_items != initial_items 
+                                     && tx.send(Message::Rs(stale_items)).await.is_err() 
+                                 {
+                                     break;
                                  }
                              }
                          }

@@ -38,16 +38,15 @@ async fn check_replica_set(client: &Client, pod: &Pod, namespace: &str) -> Resul
     drop(replica_sets);
 
     for rs in rs_list.iter() {
-        if let Some(rs_ref) = rs.spec.as_ref() {
-            if let Some(selector) = rs_ref.selector.match_labels.clone() {
-                if matches_pod_labels(pod, &selector) {
-                    if let Some(owners) = rs.metadata.owner_references.clone() {
-                        for owner in owners {
-                            let kind = owner.kind;
-                            let name = owner.name;
-                            println!("Belongs to {kind} {name}");
-                        }
-                    }
+        if let Some(rs_ref) = rs.spec.as_ref()
+            && let Some(selector) = rs_ref.selector.match_labels.clone()
+            && matches_pod_labels(pod, &selector)
+        {
+            if let Some(owners) = rs.metadata.owner_references.clone() {
+                for owner in owners {
+                    let kind = owner.kind;
+                    let name = owner.name;
+                    println!("Belongs to {kind} {name}");
                 }
             }
         }
@@ -63,12 +62,11 @@ async fn services_for_pod(client: &Client, pod: &Pod, namespace: &str) -> Result
     Ok(service_list
         .iter()
         .filter_map(|service| {
-            if let Some(svc_ref) = service.spec.as_ref() {
-                if let Some(selector) = svc_ref.selector.clone() {
-                    if matches_pod_labels(pod, &selector) {
-                        return service.metadata.name.clone();
-                    }
-                }
+            if let Some(svc_ref) = service.spec.as_ref()
+                && let Some(selector) = svc_ref.selector.clone()
+                && matches_pod_labels(pod, &selector)
+            {
+                return service.metadata.name.clone();
             }
             None
         })
@@ -137,10 +135,10 @@ fn handle_http_path(
     ingress: &Ingress,
     host: Option<&str>,
 ) {
-    if let Some(backend_service_name) = &path.backend.service {
-        if services.contains(&backend_service_name.name) {
-            print_ingress_info(ingress, host, path, backend_service_name);
-        }
+    if let Some(backend_service_name) = &path.backend.service
+        && services.contains(&backend_service_name.name)
+    {
+        print_ingress_info(ingress, host, path, backend_service_name);
     }
 }
 

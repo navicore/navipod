@@ -32,11 +32,8 @@ pub fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = Mess
         while !should_stop.load(Ordering::Relaxed) {
             match poll(Duration::from_millis(100)) {
                 Ok(true) => {
-                    if let Ok(event) = read() {
-                        let sevent = Message::Key(event);
-                        if tx.send(sevent).await.is_err() {
-                            break;
-                        }
+                    if let Ok(event) = read() && tx.send(Message::Key(event)).await.is_err() {
+                        break;
                     }
                 }
                 Ok(false) => {}

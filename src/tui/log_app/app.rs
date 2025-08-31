@@ -128,11 +128,8 @@ impl AppBehavior for log_app::app::App {
                 //get Vec and send
                 match logs(selector.clone(), pod_name.clone(), container_name.clone()).await {
                     Ok(d) => {
-                        if !d.is_empty() && d != initial_items {
-                            let sevent = Message::Log(d);
-                            if tx.send(sevent).await.is_err() {
-                                break;
-                            }
+                        if !d.is_empty() && d != initial_items && tx.send(Message::Log(d)).await.is_err() {
+                            break;
                         }
                         sleep(Duration::from_millis(POLL_MS)).await;
                     }

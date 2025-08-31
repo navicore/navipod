@@ -188,11 +188,8 @@ impl AppBehavior for pod_app::app::App {
                 //get Vec and send
                 match list_rspods(selector.clone()).await {
                     Ok(d) => {
-                        if !d.is_empty() && d != initial_items {
-                            let sevent = Message::Pod(d);
-                            if tx.send(sevent).await.is_err() {
-                                break;
-                            }
+                        if !d.is_empty() && d != initial_items && tx.send(Message::Pod(d)).await.is_err() {
+                            break;
                         }
                         sleep(Duration::from_millis(POLL_MS)).await;
                     }

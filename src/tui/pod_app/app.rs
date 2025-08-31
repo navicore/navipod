@@ -200,11 +200,9 @@ impl AppBehavior for pod_app::app::App {
 
             // Start with cached data if available
             if let Some(FetchResult::Pods(cached_items)) = cache.get(&request).await {
-                if !cached_items.is_empty() && cached_items != initial_items {
-                    if tx.send(Message::Pod(cached_items)).await.is_err() {
-                        cache.subscription_manager.unsubscribe(&sub_id).await;
-                        return;
-                    }
+                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Pod(cached_items)).await.is_err() {
+                    cache.subscription_manager.unsubscribe(&sub_id).await;
+                    return;
                 }
             }
 
@@ -214,10 +212,8 @@ impl AppBehavior for pod_app::app::App {
                     // Try to get updates from cache first
                     update = cache_rx.recv() => {
                         if let Some(crate::k8s::cache::DataUpdate::Pods(new_items)) = update {
-                            if !new_items.is_empty() && new_items != initial_items {
-                                if tx.send(Message::Pod(new_items)).await.is_err() {
-                                    break;
-                                }
+                            if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Pod(new_items)).await.is_err() {
+                                break;
                             }
                         }
                     }
@@ -228,10 +224,8 @@ impl AppBehavior for pod_app::app::App {
                         match cache.get(&request).await {
                             Some(FetchResult::Pods(cached_items)) => {
                                 debug!("⚡ Using cached Pods data ({} items)", cached_items.len());
-                                if !cached_items.is_empty() && cached_items != initial_items {
-                                    if tx.send(Message::Pod(cached_items)).await.is_err() {
-                                        break;
-                                    }
+                                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Pod(cached_items)).await.is_err() {
+                                    break;
                                 }
                             }
                             Some(_) => {
@@ -241,10 +235,8 @@ impl AppBehavior for pod_app::app::App {
                             None => {
                                 // Cache miss - try stale data while background fetcher works
                                 if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
-                                    if !stale_items.is_empty() && stale_items != initial_items {
-                                        if tx.send(Message::Pod(stale_items)).await.is_err() {
-                                            break;
-                                        }
+                                    if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Pod(stale_items)).await.is_err() {
+                                        break;
                                     }
                                 }
                             }

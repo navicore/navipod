@@ -1,4 +1,4 @@
-use crate::k8s::pods::list_rspods;
+use crate::{cache_manager, k8s::cache::{DataRequest, FetchResult, PodSelector}};
 use crate::tui::container_app;
 use crate::tui::data::{RsPod, pod_constraint_len_calculator};
 use crate::tui::ingress_app;
@@ -21,7 +21,7 @@ use tokio::time::sleep;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
 
-const POLL_MS: u64 = 5000;
+const POLL_MS: u64 = 1000;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -182,24 +182,70 @@ impl AppBehavior for pod_app::app::App {
     fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
         let (tx, rx) = mpsc::channel(100);
 
-        let initial_items = self.get_items().to_vec();
+        let initial_items = self.get_items().to_vec(); // Clone or get owned data from self
         let selector = self.selector.clone();
 
         tokio::spawn(async move {
-            while !should_stop.load(Ordering::Relaxed) {
-                //get Vec and send
-                match list_rspods(selector.clone()).await {
-                    Ok(d) => {
-                        if !d.is_empty() && d != initial_items && tx.send(Message::Pod(d)).await.is_err() {
-                            break;
-                        }
-                        sleep(Duration::from_millis(POLL_MS)).await;
-                    }
-                    Err(_e) => {
-                        break;
-                    }
+            let cache = cache_manager::get_cache_or_default();
+            let request = DataRequest::Pods {
+                namespace: cache_manager::get_current_namespace_or_default(),
+                selector: PodSelector::ByLabels(selector),
+            };
+
+            // Subscribe to cache updates
+            let (sub_id, mut cache_rx) = cache
+                .subscription_manager
+                .subscribe("pods:*".to_string())
+                .await;
+
+            // Start with cached data if available
+            if let Some(FetchResult::Pods(cached_items)) = cache.get(&request).await {
+                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Pod(cached_items)).await.is_err() {
+                    cache.subscription_manager.unsubscribe(&sub_id).await;
+                    return;
                 }
             }
+
+            // Listen for cache updates or fallback to direct polling
+            while !should_stop.load(Ordering::Relaxed) {
+                tokio::select! {
+                    // Try to get updates from cache first
+                    update = cache_rx.recv() => {
+                        if let Some(crate::k8s::cache::DataUpdate::Pods(new_items)) = update {
+                            if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Pod(new_items)).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    // Fallback: check cache periodically and refresh if needed
+                    () = sleep(Duration::from_millis(POLL_MS)) => {
+                        // Try cache first
+                        debug!("updating pod app data...");
+                        match cache.get(&request).await {
+                            Some(FetchResult::Pods(cached_items)) => {
+                                debug!("⚡ Using cached Pods data ({} items)", cached_items.len());
+                                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Pod(cached_items)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Some(_) => {
+                                // Wrong data type in cache - should not happen
+                                debug!("⚠️ Unexpected data type in cache for Pod request");
+                            }
+                            None => {
+                                // Cache miss - try stale data while background fetcher works
+                                if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
+                                    if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Pod(stale_items)).await.is_err() {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                   }
+            }
+
+            cache.subscription_manager.unsubscribe(&sub_id).await;
         });
 
         ReceiverStream::new(rx)

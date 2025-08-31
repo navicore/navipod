@@ -53,6 +53,7 @@ pub enum ResourceRef {
     ReplicaSet(String),
     Deployment(String),
     Service(String),
+    All, // For fetching all events cluster-wide
 }
 
 impl DataRequest {

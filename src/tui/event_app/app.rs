@@ -1,4 +1,4 @@
-use crate::k8s::events::list_all;
+use crate::{cache_manager, k8s::cache::{DataRequest, FetchResult, ResourceRef}};
 use crate::tui::data::{ResourceEvent, event_constraint_len_calculator};
 use crate::tui::event_app;
 use crate::tui::stream::Message;
@@ -18,7 +18,7 @@ use tokio::time::sleep;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
 
-const POLL_MS: u64 = 5000;
+const POLL_MS: u64 = 1000;
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -116,21 +116,66 @@ impl AppBehavior for event_app::app::App {
         let initial_items = self.get_items().to_vec();
 
         tokio::spawn(async move {
-            while !should_stop.load(Ordering::Relaxed) {
-                //get Vec and send
-                match list_all().await {
-                    Ok(d) => {
-                        if !d.is_empty() && d != initial_items && tx.send(Message::Event(d)).await.is_err() {
-                            break;
-                        }
-                        sleep(Duration::from_millis(POLL_MS)).await;
-                    }
-                    Err(_e) => {
-                        break;
-                    }
+            let cache = cache_manager::get_cache_or_default();
+            let request = DataRequest::Events {
+                resource: ResourceRef::All,
+                limit: 100, // Reasonable limit for all events
+            };
+
+            // Subscribe to cache updates
+            let (sub_id, mut cache_rx) = cache
+                .subscription_manager
+                .subscribe("events:*".to_string())
+                .await;
+
+            // Start with cached data if available
+            if let Some(FetchResult::Events(cached_items)) = cache.get(&request).await {
+                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Event(cached_items)).await.is_err() {
+                    cache.subscription_manager.unsubscribe(&sub_id).await;
+                    return;
                 }
-                sleep(Duration::from_millis(POLL_MS)).await;
             }
+
+            // Listen for cache updates or fallback to direct polling
+            while !should_stop.load(Ordering::Relaxed) {
+                tokio::select! {
+                    // Try to get updates from cache first
+                    update = cache_rx.recv() => {
+                        if let Some(crate::k8s::cache::DataUpdate::Events(new_items)) = update {
+                            if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Event(new_items)).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    // Fallback: check cache periodically and refresh if needed
+                    () = sleep(Duration::from_millis(POLL_MS)) => {
+                        // Try cache first
+                        debug!("updating event app data...");
+                        match cache.get(&request).await {
+                            Some(FetchResult::Events(cached_items)) => {
+                                debug!("⚡ Using cached Events data ({} items)", cached_items.len());
+                                if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Event(cached_items)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Some(_) => {
+                                // Wrong data type in cache - should not happen
+                                debug!("⚠️ Unexpected data type in cache for Event request");
+                            }
+                            None => {
+                                // Cache miss - try stale data while background fetcher works
+                                if let Some(FetchResult::Events(stale_items)) = cache.get_or_mark_stale(&request).await {
+                                    if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Event(stale_items)).await.is_err() {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                   }
+            }
+
+            cache.subscription_manager.unsubscribe(&sub_id).await;
         });
 
         ReceiverStream::new(rx)

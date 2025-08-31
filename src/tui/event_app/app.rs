@@ -120,11 +120,8 @@ impl AppBehavior for event_app::app::App {
                 //get Vec and send
                 match list_all().await {
                     Ok(d) => {
-                        if !d.is_empty() && d != initial_items {
-                            let sevent = Message::Event(d);
-                            if tx.send(sevent).await.is_err() {
-                                break;
-                            }
+                        if !d.is_empty() && d != initial_items && tx.send(Message::Event(d)).await.is_err() {
+                            break;
                         }
                         sleep(Duration::from_millis(POLL_MS)).await;
                     }

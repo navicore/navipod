@@ -50,9 +50,10 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
             .and_then(|status| status.container_statuses.clone())
             .unwrap_or_default();
 
-        if let Some(name) = pod.metadata.name {
+        if let Some(name) = pod.metadata.name
+            && name == pod_name.clone()
+        {
             let container_selectors = pod.metadata.labels;
-            if name == pod_name.clone() {
                 if let Some(spec) = pod.spec {
                     for container in spec.containers {
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());

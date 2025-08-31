@@ -5,9 +5,8 @@
  * Provides surgical cache updates based on K8s resource events.
  */
 use super::config::{
-    DEFAULT_CACHE_SIZE_MB, DEFAULT_CONCURRENT_FETCHERS, INITIAL_BACKOFF_SECONDS,
-    INVALIDATION_CHANNEL_CAPACITY, MAX_BACKOFF_SECONDS, MAX_WATCH_RESTARTS,
-    RESTART_DELAY_SECONDS, WATCH_TIMEOUT_SECONDS,
+    INITIAL_BACKOFF_SECONDS, INVALIDATION_CHANNEL_CAPACITY, MAX_BACKOFF_SECONDS,
+    MAX_WATCH_RESTARTS, RESTART_DELAY_SECONDS, WATCH_TIMEOUT_SECONDS,
 };
 use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
@@ -198,14 +197,8 @@ impl WatchManager {
         namespace: String,
     ) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            Self::run_resource_watcher(
-                "Pod",
-                client,
-                invalidation_tx,
-                namespace,
-                Self::watch_pods,
-            )
-            .await;
+            Self::run_resource_watcher("Pod", client, invalidation_tx, namespace, Self::watch_pods)
+                .await;
         })
     }
 
@@ -252,13 +245,12 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
         watcher_fn: F,
-    )
-    where
+    ) where
         F: Fn(Client, mpsc::Sender<InvalidationEvent>, String) -> Fut,
         Fut: std::future::Future<Output = Result<()>>,
     {
         info!("🔍 Starting {} watcher", resource_type);
-        
+
         let mut backoff_seconds = INITIAL_BACKOFF_SECONDS;
         let mut restart_count = 0;
 
@@ -269,7 +261,11 @@ impl WatchManager {
 
             match watcher_fn(client.clone(), invalidation_tx.clone(), namespace.clone()).await {
                 Ok(()) => {
-                    Self::handle_watcher_success(resource_type, &mut backoff_seconds, &mut restart_count);
+                    Self::handle_watcher_success(
+                        resource_type,
+                        &mut backoff_seconds,
+                        &mut restart_count,
+                    );
                 }
                 Err(e) => {
                     Self::handle_watcher_error(
@@ -277,7 +273,8 @@ impl WatchManager {
                         e,
                         &mut restart_count,
                         &mut backoff_seconds,
-                    ).await;
+                    )
+                    .await;
                 }
             }
 
@@ -304,7 +301,10 @@ impl WatchManager {
         backoff_seconds: &mut u64,
         restart_count: &mut u32,
     ) {
-        info!("🔍 {} watcher stream ended normally, restarting...", resource_type);
+        info!(
+            "🔍 {} watcher stream ended normally, restarting...",
+            resource_type
+        );
         *backoff_seconds = INITIAL_BACKOFF_SECONDS; // Reset backoff on successful run
         *restart_count = 0; // Reset restart count on successful run
     }
@@ -509,7 +509,10 @@ pub struct WatchManagerHandle {
 impl WatchManagerHandle {
     /// Shutdown all watch manager tasks
     pub fn shutdown(self) {
-        info!("🛑 Shutting down {} watch manager tasks", self.task_handles.len());
+        info!(
+            "🛑 Shutting down {} watch manager tasks",
+            self.task_handles.len()
+        );
         for (i, handle) in self.task_handles.into_iter().enumerate() {
             if !handle.is_finished() {
                 debug!("Aborting watch task {}", i);
@@ -526,9 +529,11 @@ impl WatchManagerHandle {
     }
 
     /// Check if all tasks are finished
-    #[must_use] 
+    #[must_use]
     pub fn all_finished(&self) -> bool {
-        self.task_handles.iter().all(tokio::task::JoinHandle::is_finished)
+        self.task_handles
+            .iter()
+            .all(tokio::task::JoinHandle::is_finished)
     }
 }
 

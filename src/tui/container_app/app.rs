@@ -116,9 +116,8 @@ impl AppBehavior for container_app::app::App {
                             self.page_backward();
                         }
                         Enter => {
-                            if let Some(selection) = self.get_selected_item()
-                                && let Some(selectors) = selection.selectors.clone()
-                            {
+                            if let Some(selection) = self.get_selected_item() {
+                                if let Some(selectors) = selection.selectors.clone() {
                                 let new_app_holder = Apps::Log {
                                     app: log_app::app::App::new(
                                         selectors,
@@ -127,6 +126,7 @@ impl AppBehavior for container_app::app::App {
                                     ),
                                 };
                                 app_holder = Some(new_app_holder);
+                                }
                             }
                         }
 

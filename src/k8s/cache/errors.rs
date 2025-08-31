@@ -4,7 +4,7 @@
 use crate::error::Error;
 use kube::error::ErrorResponse;
 
-/// Create an "AlreadyInitialized" error for cache `component`s
+/// Create an `AlreadyInitialized` error for cache `component`s
 #[must_use]
 pub fn already_initialized_error(component: &str) -> Error {
     Error::Kube(kube::Error::Api(ErrorResponse {

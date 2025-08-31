@@ -6,8 +6,6 @@ It initializes the cache and background fetcher at startup.
 */
 use crate::error::Result;
 use crate::k8s::cache::{
-    config::{DEFAULT_CACHE_SIZE_MB, DEFAULT_CONCURRENT_FETCHERS},
-    errors::already_initialized_error,
     BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager, WatchManagerHandle,
 };
 use std::sync::{Arc, OnceLock};
@@ -32,8 +30,8 @@ static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
 /// Returns an error if cache is already initialized or if initialization fails
 #[allow(clippy::cognitive_complexity)]
 pub async fn initialize_cache(namespace: String) -> Result<()> {
-    let cache = Arc::new(K8sDataCache::new(DEFAULT_CACHE_SIZE_MB));
-    let fetcher = BackgroundFetcher::new(cache.clone(), DEFAULT_CONCURRENT_FETCHERS);
+    let cache = Arc::new(K8sDataCache::new(100)); // 100MB cache
+    let fetcher = BackgroundFetcher::new(cache.clone(), 8); // 8 concurrent fetches
 
     let (_fetcher_arc, fetcher_shutdown_tx) = fetcher.start();
 
@@ -51,33 +49,65 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     // Store the namespace and cache globally
     if CURRENT_NAMESPACE.set(namespace.clone()).is_err() {
         error!("Namespace already set");
-        return Err(already_initialized_error("Namespace"));
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Namespace already set".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
     }
 
     if CACHE.set(cache.clone()).is_err() {
         error!("Cache already initialized");
-        return Err(already_initialized_error("Cache"));
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Cache already initialized".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
     }
 
     if FETCHER_SHUTDOWN_TX.set(fetcher_shutdown_tx).is_err() {
         error!("Fetcher shutdown channel already initialized");
-        return Err(already_initialized_error("Fetcher shutdown channel"));
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Fetcher shutdown channel already initialized".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
     }
 
     if WATCHER_SHUTDOWN_TX.set(watcher_shutdown_tx).is_err() {
         error!("Watcher shutdown channel already initialized");
-        return Err(already_initialized_error("Watcher shutdown channel"));
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Watcher shutdown channel already initialized".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
     }
 
     if WATCHER_HANDLE.set(watcher_handle).is_err() {
         error!("Watcher handle already initialized");
-        return Err(already_initialized_error("Watcher handle"));
+        return Err(crate::error::Error::Kube(kube::Error::Api(
+            kube::error::ErrorResponse {
+                status: "AlreadyExists".to_string(),
+                message: "Watcher handle already initialized".to_string(),
+                reason: "AlreadyInitialized".to_string(),
+                code: 409,
+            },
+        )));
     }
 
-    info!(
-        "Cache initialized with {}MB limit, {} concurrent fetchers, and K8s watch streams",
-        DEFAULT_CACHE_SIZE_MB, DEFAULT_CONCURRENT_FETCHERS
-    );
+    info!("Cache initialized with 100MB limit, 8 concurrent fetchers, and K8s watch streams");
 
     // Direct fetch essential data for immediate UI responsiveness
     let essential_request = DataRequest::ReplicaSets {
@@ -154,10 +184,10 @@ pub async fn shutdown_cache() {
         info!("Watch manager shutdown requested");
     }
 
-    // Note: Task handles are owned by WatchManagerHandle and cannot be directly
-    // accessed from OnceLock. They will be cleaned up when shutdown signals are received.
-    if let Some(watcher_handle) = WATCHER_HANDLE.get() {
-        info!("Watch manager has {} active tasks that will be cleaned up via shutdown signal", 
-              watcher_handle.task_count());
+    // Cleanup task handles to prevent resource leaks
+    if let Some(_watcher_handle) = WATCHER_HANDLE.get() {
+        // We can't take ownership from OnceLock, so we'll abort tasks via shutdown signal
+        // The handles will be cleaned up when the shutdown signal is received
+        info!("Watch manager tasks will be cleaned up via shutdown signal");
     }
 }

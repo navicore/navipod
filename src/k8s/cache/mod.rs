@@ -1,8 +1,6 @@
 pub mod background_fetcher;
 pub mod cached_data;
-pub mod config;
 pub mod data_cache;
-pub mod errors;
 pub mod fetcher;
 pub mod subscription;
 pub mod watch_manager;

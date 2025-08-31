@@ -46,7 +46,16 @@ struct Args {
 }
 
 async fn process_command() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    // Initialize tracing - for TUI mode, log to file to avoid disrupting the interface
+    let log_file = std::fs::File::create("/tmp/navipod.log")?;
+    tracing_subscriber::fmt()
+        .with_writer(log_file)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("navipod=debug".parse()?)
+                .add_directive("navipod::k8s::cache=info".parse()?)
+        )
+        .init();
     let _ =
         rustls::crypto::CryptoProvider::install_default(rustls::crypto::ring::default_provider());
     let args = Args::parse();
@@ -63,7 +72,11 @@ async fn process_command() -> Result<(), Box<dyn std::error::Error>> {
 
     match command {
         Command::Tui => {
+            // Initialize cache before starting UI
+            navipod::cache_manager::initialize_cache().await?;
             tui::ui_loop::run().await?;
+            // Shutdown cache on exit
+            navipod::cache_manager::shutdown_cache().await;
         }
         Command::GenerateCompletion { shell } => {
             let app = Args::command();

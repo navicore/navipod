@@ -26,6 +26,7 @@ impl From<FetchResult> for DataUpdate {
     }
 }
 
+#[derive(Debug)]
 pub struct Subscription {
     pub id: String,
     pub pattern: String,
@@ -49,6 +50,7 @@ impl Subscription {
     }
 }
 
+#[derive(Debug)]
 pub struct SubscriptionManager {
     subscriptions: Arc<RwLock<HashMap<String, Vec<Subscription>>>>,
 }

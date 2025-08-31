@@ -133,6 +133,7 @@ pub trait DataFetcher: Send + Sync {
     }
 }
 
+#[derive(Debug)]
 pub enum FetchResult {
     ReplicaSets(Vec<Rs>),
     Pods(Vec<RsPod>),

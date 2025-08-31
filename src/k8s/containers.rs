@@ -54,7 +54,7 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
             && name == pod_name.clone()
         {
             let container_selectors = pod.metadata.labels;
-                if let Some(spec) = pod.spec {
+            if let Some(spec) = pod.spec {
                     for container in spec.containers {
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
@@ -142,7 +142,6 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                         }
                     }
                 }
-            }
         }
     }
 

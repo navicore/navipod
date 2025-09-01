@@ -2,7 +2,7 @@ use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchPriority, FetchResult};
 use super::config::{DEFAULT_MAX_PREFETCH_QUEUE_SIZE, PredictiveCacheConfig};
 use crate::error::Result;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
@@ -464,7 +464,7 @@ impl BackgroundFetcher {
 
         for request in unique_requests {
             let cache_key = request.cache_key();
-            let priority = request.priority();
+            let priority = FetchPriority::Low; // All prefetch requests are low priority
             debug!("📝 BATCH ITEM: {} (priority: {:?})", cache_key, priority);
             
             let task = FetchTask {
@@ -538,8 +538,8 @@ impl BackgroundFetcher {
         if total == 0 {
             0.0
         } else {
-            // Use f64::from() for safer casting, handle potential precision loss
-            f64::from(metrics.successful_prefetches as u32) / f64::from(total as u32)
+            // Safe casting to f64 for calculation
+            metrics.successful_prefetches as f64 / total as f64
         }
     }
 }

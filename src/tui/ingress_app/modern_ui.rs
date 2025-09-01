@@ -8,7 +8,7 @@ use ratatui::widgets::{
 };
 
 /// Modern card-based UI for Ingress view with network routing focus
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
     
     // Set the main background to ensure consistent theming
@@ -51,11 +51,11 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let routes = app.get_items();
     let total_count = routes.len();
     let unique_hosts = routes.iter()
-        .map(|r| r.host())
+        .map(super::super::data::Ingress::host)
         .collect::<std::collections::HashSet<_>>()
         .len();
     let unique_backends = routes.iter()
-        .map(|r| r.backend_svc())
+        .map(super::super::data::Ingress::backend_svc)
         .collect::<std::collections::HashSet<_>>()
         .len();
     
@@ -83,7 +83,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(divider, area);
 }
 
-fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
+fn render_content(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     render_ingress_list(f, app, area, theme);
 }
 
@@ -94,10 +94,10 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
     let filter = app.get_filter();
-    let title = if !filter.is_empty() {
-        format!("Network Routes (filtered: {filter})")
-    } else {
+    let title = if filter.is_empty() {
         "Network Routes".to_string()
+    } else {
+        format!("Network Routes (filtered: {filter})")
     };
     
     // Render container block
@@ -163,10 +163,10 @@ fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area:
     // Create routing flow visualization
     let host = truncate_text(ingress.host(), 20);
     let backend = truncate_text(ingress.backend_svc(), 15);
-    let port_suffix = if !ingress.port().is_empty() { 
-        format!(":{}", ingress.port()) 
-    } else { 
+    let port_suffix = if ingress.port().is_empty() { 
         String::new() 
+    } else { 
+        format!(":{}", ingress.port()) 
     };
     let routing_flow = format!("{host} {} {backend} {port_suffix}", Symbols::ARROW_RIGHT);
     

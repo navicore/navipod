@@ -7,6 +7,8 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
+const POD_CARD_HEIGHT: u16 = 4;
+
 /// Modern card-based UI for Pod view with container health focus
 pub fn ui(f: &mut Frame, app: &mut App) {
     let theme = NaviTheme::default();
@@ -280,9 +282,8 @@ fn render_events_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    const CARD_HEIGHT: u16 = 4;
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
-    let visible_cards = content_area.height / CARD_HEIGHT;
+    let visible_cards = content_area.height / POD_CARD_HEIGHT;
     
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {
@@ -382,15 +383,15 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 
 /// Parse container status string (e.g., "2/2" -> (2, 2))
 fn parse_container_count(containers_str: &str) -> (usize, usize) {
-    if let Some(slash_pos) = containers_str.find('/') {
-        let ready = containers_str[..slash_pos].parse().unwrap_or(0);
-        let total = containers_str[slash_pos + 1..].parse().unwrap_or(0);
-        (ready, total)
-    } else {
+    containers_str.find('/').map_or_else(|| {
         // Handle cases like "1" (assume 1/1)
         let count = containers_str.parse().unwrap_or(0);
         (count, count)
-    }
+    }, |slash_pos| {
+        let ready = containers_str[..slash_pos].parse().unwrap_or(0);
+        let total = containers_str[slash_pos + 1..].parse().unwrap_or(0);
+        (ready, total)
+    })
 }
 
 /// Determine pod status based on Kubernetes pod phase and container readiness
@@ -406,7 +407,6 @@ fn determine_pod_status(status: &str, ready_containers: usize, total_containers:
         "Pending" | "ContainerCreating" | "PodInitializing" => ResourceStatus::Pending,
         "Succeeded" | "Completed" => ResourceStatus::Ready,
         "Failed" | "Error" | "CrashLoopBackOff" | "ImagePullBackOff" => ResourceStatus::Failed,
-        "Terminating" | "Unknown" => ResourceStatus::Unknown,
         _ => ResourceStatus::Unknown,
     }
 }
@@ -414,10 +414,9 @@ fn determine_pod_status(status: &str, ready_containers: usize, total_containers:
 /// Get appropriate text style for pod status
 fn get_status_style(status: &str, theme: &NaviTheme) -> Style {
     match status {
-        "Running" => theme.text_style(TextType::Success),
         "Pending" | "ContainerCreating" | "PodInitializing" => theme.text_style(TextType::Warning),
         "Failed" | "Error" | "CrashLoopBackOff" | "ImagePullBackOff" => theme.text_style(TextType::Error),
-        "Succeeded" | "Completed" => theme.text_style(TextType::Success),
+        "Running" | "Succeeded" | "Completed" => theme.text_style(TextType::Success),
         _ => theme.text_style(TextType::Caption),
     }
 }

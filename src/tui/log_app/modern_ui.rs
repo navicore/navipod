@@ -7,8 +7,10 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
+const LOG_HEIGHT: u16 = 2; // 2 lines per log entry for readability
+
 /// Modern streaming log viewer UI with syntax highlighting and log-level awareness
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
     
     // Set the main background to ensure consistent theming
@@ -117,7 +119,6 @@ fn render_log_stream(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     
     // Calculate scroll offset to keep selected item visible
     // For logs, we want to show latest entries at the bottom (typical log viewer behavior)
-    const LOG_HEIGHT: u16 = 2; // 2 lines per log entry for readability
     let visible_logs = content_area.height / LOG_HEIGHT;
     
     // Auto-scroll to bottom for new logs unless user is actively browsing
@@ -194,7 +195,6 @@ fn render_log_entry(f: &mut Frame, log: &crate::tui::data::LogRec, area: Rect, i
 
 fn render_log_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    const LOG_HEIGHT: u16 = 2;
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     let visible_logs = content_area.height / LOG_HEIGHT;
     
@@ -320,6 +320,7 @@ fn get_log_level_style(level: &str, theme: &NaviTheme) -> Style {
 }
 
 /// Extract time portion from datetime string
+#[allow(clippy::option_if_let_else)] // Complex nested logic is more readable with if/let
 fn extract_time(datetime: &str) -> String {
     // Handle various datetime formats
     if let Some(space_pos) = datetime.find(' ') {

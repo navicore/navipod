@@ -8,7 +8,7 @@ use ratatui::widgets::{
 };
 
 /// Modern card-based UI for Certificate view with security and SSL focus
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
     
     // Set the main background to ensure consistent theming
@@ -87,7 +87,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(divider, area);
 }
 
-fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
+fn render_content(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     render_cert_list(f, app, area, theme);
 }
 

@@ -7,7 +7,7 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
-/// Modern card-based UI for ReplicaSet view
+/// Modern card-based UI for `ReplicaSet` view
 pub fn ui(f: &mut Frame, app: &mut App) {
     let theme = NaviTheme::default();
     
@@ -208,7 +208,7 @@ fn render_labels_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
         .iter()
         .map(|(key, value, _)| {
             let content = Line::from(vec![
-                Span::styled(format!("{}: ", key), theme.text_style(TextType::Body)),
+                Span::styled(format!("{key}: "), theme.text_style(TextType::Body)),
                 Span::styled(value, theme.text_style(TextType::Caption)),
             ]);
             ListItem::new(content)
@@ -358,13 +358,11 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 // Helper functions
 
 fn parse_replica_count(pods_str: &str) -> (usize, usize) {
-    if let Some(slash_pos) = pods_str.find('/') {
+    pods_str.find('/').map_or((0, 0), |slash_pos| {
         let current = pods_str[..slash_pos].parse().unwrap_or(0);
         let desired = pods_str[slash_pos + 1..].parse().unwrap_or(0);
         (current, desired)
-    } else {
-        (0, 0)
-    }
+    })
 }
 
 fn truncate_text(text: &str, max_len: usize) -> String {

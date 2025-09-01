@@ -7,6 +7,8 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
+const CONTAINER_CARD_HEIGHT: u16 = 5;
+
 /// Modern card-based UI for Container view with container runtime focus
 pub fn ui(f: &mut Frame, app: &mut App) {
     let theme = NaviTheme::default();
@@ -285,9 +287,8 @@ fn render_env_vars_section(f: &mut Frame, app: &mut App, area: Rect, theme: &Nav
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    const CARD_HEIGHT: u16 = 5;
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
-    let visible_cards = content_area.height / CARD_HEIGHT;
+    let visible_cards = content_area.height / CONTAINER_CARD_HEIGHT;
     
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {

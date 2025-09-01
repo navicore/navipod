@@ -1,6 +1,6 @@
 use crate::tui::cert_app::app::App;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiHelpers};
+use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, Borders, Clear, Paragraph, Scrollbar, 
@@ -18,9 +18,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     
     // Main layout: header, content, footer
     let main_chunks = Layout::vertical([
-        Constraint::Length(3),  // Header
+        Constraint::Length(UiConstants::HEADER_HEIGHT),  // Header
         Constraint::Min(0),     // Content (flexible)
-        Constraint::Length(2),  // Footer
+        Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
     ]).split(f.area());
     
     render_header(f, app, main_chunks[0], &theme);
@@ -35,9 +35,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let header_chunks = Layout::horizontal([
-        Constraint::Length(20),  // Icon + Title
+        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
         Constraint::Min(0),      // Context info (flexible)
-        Constraint::Length(30),  // Actions
+        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH),  // Actions
     ]).split(area);
     
     // Title with security icon
@@ -113,10 +113,9 @@ fn render_cert_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(block, area);
     
     // Calculate scroll offset to keep selected item visible
-    const CARD_HEIGHT: u16 = 4; // 4 lines per certificate card
-    let visible_cards = content_area.height / CARD_HEIGHT;
-    let scroll_offset = if selected_index as u16 >= visible_cards {
-        selected_index as u16 - visible_cards + 1
+    let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
+    let scroll_offset = if UiHelpers::safe_cast_u16(selected_index, "cert scroll offset") >= visible_cards {
+        UiHelpers::safe_cast_u16(selected_index, "cert scroll offset") - visible_cards + 1
     } else {
         0
     };
@@ -124,7 +123,7 @@ fn render_cert_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     // Render individual certificate cards with scroll offset
     let mut y_offset = 0;
     for (index, cert) in items.iter().enumerate().skip(scroll_offset as usize) {
-        if y_offset + CARD_HEIGHT > content_area.height {
+        if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
         
@@ -133,11 +132,11 @@ fn render_cert_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
             x: content_area.x,
             y: content_area.y + y_offset,
             width: content_area.width,
-            height: CARD_HEIGHT.min(content_area.height - y_offset),
+            height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
         
         render_cert_card(f, cert, card_area, is_selected, theme);
-        y_offset += CARD_HEIGHT;
+        y_offset += UiConstants::CARD_HEIGHT;
     }
     
     // Render scrollbar
@@ -205,9 +204,8 @@ fn render_cert_card(f: &mut Frame, cert: &crate::tui::data::Cert, area: Rect, is
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    const CARD_HEIGHT: u16 = 4;
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
-    let visible_cards = content_area.height / CARD_HEIGHT;
+    let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
     
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {
@@ -279,9 +277,8 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
     f.render_widget(filter_input, modal_area);
     
     // Set cursor position
-    #[allow(clippy::cast_possible_truncation)]
     let cursor_pos = Position {
-        x: modal_area.x + app.get_cursor_pos() as u16 + 1,
+        x: modal_area.x + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "cert cursor position") + 1,
         y: modal_area.y + 1,
     };
     f.set_cursor_position(cursor_pos);

@@ -306,14 +306,11 @@ impl UiHelpers {
     
     /// Safely parse a numeric string value with logging for debugging
     pub fn safe_parse_i32(value: &str, _context: &str) -> i32 {
-        match value.parse::<i32>() {
-            Ok(parsed) => parsed,
-            Err(_) => {
-                // In a production environment, you might want to log this
-                // tracing::debug!("Failed to parse {} as i32 in context: {}", value, context);
-                0
-            }
-        }
+        value.parse::<i32>().unwrap_or({
+            // In a production environment, you might want to log this
+            // tracing::debug!("Failed to parse {} as i32 in context: {}", value, context);
+            0
+        })
     }
     
     /// Safely cast usize to u16 with bounds checking

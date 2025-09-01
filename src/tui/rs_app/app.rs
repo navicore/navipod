@@ -118,7 +118,6 @@ impl TuiTableState for App {
         self.edit_filter_cursor_position = cursor_pos;
     }
 
-    #[allow(clippy::missing_const_for_fn)]
     fn get_cursor_pos(&self) -> usize {
         self.edit_filter_cursor_position
     }
@@ -127,7 +126,6 @@ impl TuiTableState for App {
         self.show_filter_edit = show_filter_edit;
     }
 
-    #[allow(clippy::missing_const_for_fn)]
     fn get_show_filter_edit(&self) -> bool {
         self.show_filter_edit
     }
@@ -396,16 +394,14 @@ impl App {
     pub const fn set_cursor_pos(&mut self, cursor_pos: usize) {
         self.edit_filter_cursor_position = cursor_pos;
     }
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn get_cursor_pos(&self) -> usize {
+    pub const fn get_cursor_pos(&self) -> usize {
         self.edit_filter_cursor_position
     }
 
     pub const fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
         self.show_filter_edit = show_filter_edit;
     }
-    #[allow(clippy::missing_const_for_fn)]
-    pub fn get_show_filter_edit(&self) -> bool {
+    pub const fn get_show_filter_edit(&self) -> bool {
         self.show_filter_edit
     }
 

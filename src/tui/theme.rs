@@ -44,6 +44,7 @@ impl Default for NaviTheme {
 
 impl NaviTheme {
     /// Kubernetes-inspired blue theme (primary) - optimized for readability
+    #[allow(clippy::unreadable_literal)]  // Color codes are more readable as hex without underscores
     pub fn kubernetes_blue() -> Self {
         Self {
             // Kubernetes blue palette - slightly more muted for better readability
@@ -81,6 +82,7 @@ impl NaviTheme {
     }
     
     /// Alternative green theme
+    #[allow(clippy::unreadable_literal)]  // Color codes are more readable as hex without underscores
     pub fn kubernetes_green() -> Self {
         let mut theme = Self::kubernetes_blue();
         theme.primary = Color::from_u32(0x00D4AA);   // Kubernetes teal
@@ -255,6 +257,7 @@ impl UiHelpers {
         let health_ratio = current as f32 / total as f32;
         
         // Health-based color gradient: green (100%) -> yellow (75%) -> orange (50%) -> red (0%)
+        #[allow(clippy::unreadable_literal)]  // Color codes are more readable as hex without underscores
         let color = if health_ratio >= 1.0 {
             theme.success // Perfect health: emerald green
         } else if health_ratio >= 0.75 {
@@ -267,11 +270,9 @@ impl UiHelpers {
             theme.error // Red - critical/failing
         };
         
-        let bar = format!(
-            "{}{}",
-            Symbols::PROGRESS_FILL.repeat(filled),
-            Symbols::PROGRESS_EMPTY.repeat(empty)
-        );
+        let filled_bar = Symbols::PROGRESS_FILL.repeat(filled);
+        let empty_bar = Symbols::PROGRESS_EMPTY.repeat(empty);
+        let bar = format!("{filled_bar}{empty_bar}");
         
         (bar, color)
     }
@@ -285,11 +286,9 @@ impl UiHelpers {
         let filled = (current * width) / total;
         let empty = width - filled;
         
-        format!(
-            "{}{}",
-            Symbols::PROGRESS_FILL.repeat(filled),
-            Symbols::PROGRESS_EMPTY.repeat(empty)
-        )
+        let filled_bar = Symbols::PROGRESS_FILL.repeat(filled);
+        let empty_bar = Symbols::PROGRESS_EMPTY.repeat(empty);
+        format!("{filled_bar}{empty_bar}")
     }
     
     /// Create a resource type indicator

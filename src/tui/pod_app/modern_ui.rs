@@ -51,7 +51,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let pods = app.get_items();
     let running_count = pods.iter().filter(|p| p.status() == "Running").count();
     let total_count = pods.len();
-    let context_text = format!("namespace: default • {}/{} running", running_count, total_count);
+    let context_text = format!("namespace: default • {running_count}/{total_count} running");
     let context = Paragraph::new(context_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
@@ -90,10 +90,11 @@ fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
-    let title = if !app.get_filter().is_empty() {
-        format!("Pods (filtered: {})", app.get_filter())
-    } else {
+    let filter = app.get_filter();
+    let title = if filter.is_empty() {
         "Pods".to_string()
+    } else {
+        format!("Pods (filtered: {filter})")
     };
     
     // Render container block
@@ -170,7 +171,7 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
             Span::raw("    Status: "),
             Span::styled(&pod.status, get_status_style(&pod.status, theme)),
             Span::raw("  Containers: "),
-            Span::styled(format!("{}/{} ", ready_containers, total_containers), 
+            Span::styled(format!("{ready_containers}/{total_containers} "), 
                         theme.text_style(TextType::Body)),
             Span::styled(container_bar, Style::default().fg(container_color)),
         ]),
@@ -215,7 +216,7 @@ fn render_labels_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
         .iter()
         .map(|(key, value, _)| {
             let content = Line::from(vec![
-                Span::styled(format!("{}: ", key), theme.text_style(TextType::Body)),
+                Span::styled(format!("{key}: "), theme.text_style(TextType::Body)),
                 Span::styled(value, theme.text_style(TextType::Caption)),
             ]);
             ListItem::new(content)

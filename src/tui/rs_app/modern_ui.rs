@@ -89,10 +89,11 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
     let mut y_offset = 1; // Start after border
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
-    let title = if !app.get_filter().is_empty() {
-        format!("ReplicaSets (filtered: {})", app.get_filter())
-    } else {
+    let filter = app.get_filter();
+    let title = if filter.is_empty() {
         "ReplicaSets".to_string()
+    } else {
+        format!("ReplicaSets (filtered: {filter})")
     };
     
     // Render container block
@@ -166,7 +167,7 @@ fn render_replicaset_card(f: &mut Frame, rs: &crate::tui::data::Rs, area: Rect, 
         ]),
         Line::from(vec![
             Span::raw("    Replicas: "),
-            Span::styled(format!("{}/{} ", current_replicas, desired_replicas), 
+            Span::styled(format!("{current_replicas}/{desired_replicas} "), 
                         theme.text_style(TextType::Body)),
             Span::styled(progress_bar, Style::default().fg(progress_color)),
         ]),

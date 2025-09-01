@@ -9,5 +9,6 @@ mod rs_app;
 mod stream;
 mod style;
 mod table_ui;
+pub mod theme;
 pub mod ui_loop;
 mod utils;

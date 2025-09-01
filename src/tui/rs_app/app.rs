@@ -4,7 +4,7 @@ use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::pod_app;
-use crate::tui::rs_app::ui;
+// use crate::tui::rs_app::ui; // Unused while testing modern UI
 use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
@@ -144,7 +144,7 @@ impl AppBehavior for App {
     }
 
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
-        terminal.draw(|f| ui::ui(f, self))?; // Pass self directly if mutable access is not required
+        terminal.draw(|f| super::modern_ui::ui(f, self))?; // Use modern UI
         Ok(())
     }
 

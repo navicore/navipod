@@ -126,7 +126,7 @@ fn render_container_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
     // Render individual container cards with scroll offset
     let mut y_offset = 0;
     for (index, container) in items.iter().enumerate().skip(scroll_offset as usize) {
-        if y_offset + CARD_HEIGHT > content_area.height {
+        if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
         
@@ -135,11 +135,11 @@ fn render_container_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
             x: content_area.x,
             y: content_area.y + y_offset,
             width: content_area.width,
-            height: CARD_HEIGHT.min(content_area.height - y_offset),
+            height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
         
         render_container_card(f, container, card_area, is_selected, theme);
-        y_offset += CARD_HEIGHT;
+        y_offset += UiConstants::CARD_HEIGHT;
     }
     
     // Render scrollbar

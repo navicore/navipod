@@ -305,7 +305,7 @@ impl UiHelpers {
     }
     
     /// Safely parse a numeric string value with logging for debugging
-    pub fn safe_parse_i32(value: &str, context: &str) -> i32 {
+    pub fn safe_parse_i32(value: &str, _context: &str) -> i32 {
         match value.parse::<i32>() {
             Ok(parsed) => parsed,
             Err(_) => {
@@ -317,7 +317,7 @@ impl UiHelpers {
     }
     
     /// Safely cast usize to u16 with bounds checking
-    pub fn safe_cast_u16(value: usize, context: &str) -> u16 {
+    pub fn safe_cast_u16(value: usize, _context: &str) -> u16 {
         if value > u16::MAX as usize {
             // tracing::warn!("Value {} exceeds u16::MAX in context: {}, clamping to u16::MAX", value, context);
             u16::MAX

@@ -117,7 +117,7 @@ fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     // Render individual pod cards with scroll offset
     let mut y_offset = 0;
     for (index, pod) in items.iter().enumerate().skip(scroll_offset as usize) {
-        if y_offset + CARD_HEIGHT > content_area.height {
+        if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
         
@@ -126,11 +126,11 @@ fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
             x: content_area.x,
             y: content_area.y + y_offset,
             width: content_area.width,
-            height: CARD_HEIGHT.min(content_area.height - y_offset),
+            height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
         
         render_pod_card(f, pod, card_area, is_selected, theme);
-        y_offset += CARD_HEIGHT;
+        y_offset += UiConstants::CARD_HEIGHT;
     }
     
     // Render scrollbar

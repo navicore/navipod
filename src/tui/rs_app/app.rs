@@ -1,5 +1,6 @@
 use crate::cache_manager;
 use crate::k8s::cache::{DataRequest, FetchResult};
+use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::{rs_constraint_len_calculator, Rs};
 use crate::tui::pod_app;
@@ -23,6 +24,39 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
+
+/// Triggers prefetch of `Pod` data for the given `ReplicaSets`
+///
+/// This function generates prefetch requests for `Pod` data based on the selectors
+/// from the provided `ReplicaSets`. It respects the configured limits for the number
+/// of `ReplicaSets` to process to avoid overwhelming the system.
+async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
+    use crate::k8s::cache::fetcher::PodSelector;
+    
+    if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
+        let namespace = cache_manager::get_current_namespace_or_default();
+        let mut prefetch_requests = Vec::new();
+
+        // Generate Pod requests for each ReplicaSet
+        for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
+            if let Some(selectors) = &rs.selectors {
+                let pod_request = DataRequest::Pods {
+                    namespace: namespace.clone(),
+                    selector: PodSelector::ByLabels(selectors.clone()),
+                };
+                prefetch_requests.push(pod_request);
+            }
+        }
+
+        if !prefetch_requests.is_empty() {
+            debug!("🚀 {} PREFETCH: Scheduling {} Pod requests for {} ReplicaSets",
+                   context, prefetch_requests.len(), replicasets.len());
+            if let Err(e) = bg_fetcher.schedule_fetch_batch(prefetch_requests).await {
+                warn!("Failed to schedule {} prefetch: {}", context, e);
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -114,6 +148,7 @@ impl AppBehavior for App {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
         let (tx, rx) = mpsc::channel(1);
         let initial_items = self.get_items().to_vec(); // Clone or get owned data from self
@@ -148,6 +183,9 @@ impl AppBehavior for App {
                     // Try to get updates from cache first
                     update = cache_rx.recv() => {
                         if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update {
+                            // IMMEDIATE PREFETCH: Trigger Pod fetching for subscription updates too
+                            trigger_replicaset_pod_prefetch(&new_items, "UPDATE").await;
+
                             if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
                                 break;
                             }
@@ -159,6 +197,9 @@ impl AppBehavior for App {
 
                      if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
                          debug!("⚡ Using cached ReplicaSets data ({} items)", cached_items.len());
+                         // IMMEDIATE PREFETCH: Trigger Pod fetching for cached ReplicaSets too
+                         trigger_replicaset_pod_prefetch(&cached_items, "CACHED").await;
+
                          if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Rs(cached_items)).await.is_err() {
                              break;
                          }
@@ -171,6 +212,9 @@ impl AppBehavior for App {
                                      // Store in cache for next time
                                      let fetch_result = FetchResult::ReplicaSets(new_items.clone());
                                      let _ = cache.put(&request, fetch_result).await;
+
+                                     // IMMEDIATE PREFETCH: Trigger Pod fetching for visible ReplicaSets
+                                     trigger_replicaset_pod_prefetch(&new_items, "IMMEDIATE").await;
 
                                      if new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
                                          break;

@@ -103,7 +103,7 @@ impl DataRequest {
             Self::Containers { .. } => Duration::from_secs(DEFAULT_CONTAINER_TTL_SECS),
             Self::Events { .. } => Duration::from_secs(DEFAULT_EVENT_TTL_SECS),
             Self::Ingresses { .. } => Duration::from_secs(DEFAULT_INGRESS_TTL_SECS),
-            Self::Custom { .. } => Duration::from_secs(DEFAULT_REPLICASET_TTL_SECS),
+            Self::Custom { .. } => Duration::from_secs(60), // 1 minute for custom resources
         }
     }
 

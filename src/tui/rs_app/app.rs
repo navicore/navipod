@@ -25,11 +25,11 @@ use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
 
-/// Triggers prefetch of Pod data for the given `ReplicaSets`
+/// Triggers prefetch of `Pod` data for the given `ReplicaSets`
 ///
-/// This function generates prefetch requests for Pod data based on the selectors
-/// from the provided ReplicaSets. It respects the configured limits for the number
-/// of ReplicaSets to process to avoid overwhelming the system.
+/// This function generates prefetch requests for `Pod` data based on the selectors
+/// from the provided `ReplicaSets`. It respects the configured limits for the number
+/// of `ReplicaSets` to process to avoid overwhelming the system.
 async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
     use crate::k8s::cache::fetcher::PodSelector;
     

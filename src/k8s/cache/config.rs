@@ -29,7 +29,7 @@ pub const RESTART_DELAY_SECONDS: u64 = 1;
 /// Maximum number of prefetch requests in queue to prevent memory exhaustion
 pub const DEFAULT_MAX_PREFETCH_QUEUE_SIZE: usize = 100;
 
-/// Maximum number of ReplicaSets to consider for Pod prefetching
+/// Maximum number of `ReplicaSets` to consider for `Pod` prefetching
 pub const DEFAULT_MAX_PREFETCH_REPLICASETS: usize = 10;
 
 /// Default TTL values for different resource types (in seconds)
@@ -46,7 +46,7 @@ pub struct PredictiveCacheConfig {
     pub enabled: bool,
     /// Maximum number of prefetch requests in queue
     pub max_prefetch_queue_size: usize,
-    /// Maximum number of ReplicaSets to consider for prefetching
+    /// Maximum number of `ReplicaSets` to consider for prefetching
     pub max_prefetch_replicasets: usize,
     /// TTL values for different resource types
     pub replicaset_ttl_secs: u64,

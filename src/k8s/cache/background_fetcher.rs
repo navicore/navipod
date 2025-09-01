@@ -2,7 +2,7 @@ use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchPriority, FetchResult};
 use super::config::{DEFAULT_MAX_PREFETCH_QUEUE_SIZE, PredictiveCacheConfig};
 use crate::error::Result;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock};
@@ -57,7 +57,7 @@ pub struct BackgroundFetcher {
     shutdown_tx: Option<mpsc::Sender<()>>,
     config: PredictiveCacheConfig,
     // Deduplication: Track recently submitted requests to avoid duplicates
-    recent_requests: Arc<RwLock<HashSet<String>>>,
+    recent_requests: Arc<RwLock<HashMap<String, Instant>>>,
     // Metrics for monitoring prefetch effectiveness
     prefetch_metrics: Arc<RwLock<PrefetchMetrics>>,
 }
@@ -86,7 +86,7 @@ impl BackgroundFetcher {
             max_concurrent_fetches: max_concurrent,
             shutdown_tx: None,
             config,
-            recent_requests: Arc::new(RwLock::new(HashSet::new())),
+            recent_requests: Arc::new(RwLock::new(HashMap::new())),
             prefetch_metrics: Arc::new(RwLock::new(PrefetchMetrics::default())),
         }
     }
@@ -228,6 +228,7 @@ impl BackgroundFetcher {
                         if priority == FetchPriority::Low {
                             let mut metrics = prefetch_metrics.write().await;
                             metrics.successful_prefetches += 1;
+                            drop(metrics); // Release metrics lock early
                         }
                         
                         // PREDICTIVE PREFETCH: After successful cache storage, prefetch related data
@@ -266,6 +267,7 @@ impl BackgroundFetcher {
                     if priority == FetchPriority::Low {
                         let mut metrics = prefetch_metrics.write().await;
                         metrics.failed_prefetches += 1;
+                        drop(metrics); // Release metrics lock early
                     }
 
                     // Retry logic
@@ -393,73 +395,86 @@ impl BackgroundFetcher {
 
         info!("📝 BATCH SCHEDULED: {} fetch tasks", requests.len());
         
-        // Deduplication: filter out requests we've recently seen
-        let mut unique_requests = Vec::new();
-        let mut dedup_count = 0;
+        let (unique_requests, dedup_count) = self.deduplicate_requests(requests).await;
         
-        {
-            let mut recent = self.recent_requests.write().await;
-            let cutoff_time = Instant::now() - Duration::from_secs(60); // 1 minute dedup window
-            
-            // Clean up old entries first
-            recent.retain(|key| {
-                // This is a simplified cleanup - in reality we'd need to track timestamps
-                // For now, just periodically clear the set
-                true
-            });
-            
-            for request in requests {
-                let cache_key = request.cache_key();
-                if !recent.contains(&cache_key) {
-                    recent.insert(cache_key.clone());
-                    unique_requests.push(request);
-                } else {
-                    dedup_count += 1;
-                    debug!("🔄 DEDUP: Skipping recent request for {}", cache_key);
-                }
-            }
-        }
-        
-        // Update metrics
-        {
-            let mut metrics = self.prefetch_metrics.write().await;
-            metrics.total_prefetch_requests += unique_requests.len() as u64;
-            metrics.deduplicated_requests += dedup_count;
-        }
+        self.update_prefetch_metrics(unique_requests.len(), dedup_count).await;
 
         if unique_requests.is_empty() {
             debug!("📝 BATCH: All requests were duplicates, nothing to schedule");
             return Ok(());
         }
 
-        {
-            let mut queue = self.task_queue.write().await;
+        self.queue_unique_requests(unique_requests).await
+    }
 
-            // Check if queue is getting too large to prevent memory issues
-            if queue.len() + unique_requests.len() > self.config.max_prefetch_queue_size {
-                warn!("⚠️  Prefetch queue approaching limit ({} + {} > {}), dropping batch",
-                      queue.len(), unique_requests.len(), self.config.max_prefetch_queue_size);
-                
-                // Update overflow metrics
+    /// Deduplicate requests based on recent request history
+    async fn deduplicate_requests(&self, requests: Vec<DataRequest>) -> (Vec<DataRequest>, u64) {
+        let mut unique_requests = Vec::new();
+        let mut dedup_count = 0;
+        
+        {
+            let mut recent = self.recent_requests.write().await;
+            let now = Instant::now();
+            let cutoff_time = now - Duration::from_secs(60); // 1 minute dedup window
+            
+            // Clean up old entries first - remove entries older than cutoff_time
+            recent.retain(|_key, timestamp| *timestamp > cutoff_time);
+            
+            for request in requests {
+                let cache_key = request.cache_key();
+                if let Some(last_seen) = recent.get(&cache_key) {
+                    if *last_seen > cutoff_time {
+                        dedup_count += 1;
+                        debug!("🔄 DEDUP: Skipping recent request for {}", cache_key);
+                        continue;
+                    }
+                }
+                recent.insert(cache_key.clone(), now);
+                unique_requests.push(request);
+            }
+        }
+        
+        (unique_requests, dedup_count)
+    }
+
+    /// Update prefetch metrics with request counts
+    async fn update_prefetch_metrics(&self, unique_count: usize, dedup_count: u64) {
+        let mut metrics = self.prefetch_metrics.write().await;
+        metrics.total_prefetch_requests += unique_count as u64;
+        metrics.deduplicated_requests += dedup_count;
+    }
+
+    /// Queue unique requests, checking for capacity limits
+    async fn queue_unique_requests(&self, unique_requests: Vec<DataRequest>) -> Result<()> {
+        let mut queue = self.task_queue.write().await;
+
+        // Check if queue is getting too large to prevent memory issues
+        if queue.len() + unique_requests.len() > self.config.max_prefetch_queue_size {
+            warn!("⚠️  Prefetch queue approaching limit ({} + {} > {}), dropping batch",
+                  queue.len(), unique_requests.len(), self.config.max_prefetch_queue_size);
+            
+            // Update overflow metrics (release queue lock first)
+            drop(queue);
+            {
                 let mut metrics = self.prefetch_metrics.write().await;
                 metrics.queue_overflows += 1;
-                return Ok(());
             }
+            return Ok(());
+        }
 
-            for request in unique_requests {
-                let cache_key = request.cache_key();
-                let priority = request.priority();
-                debug!("📝 BATCH ITEM: {} (priority: {:?})", cache_key, priority);
-                
-                let task = FetchTask {
-                    priority,
-                    request,
-                    scheduled_at: Instant::now(),
-                    retry_count: 0,
-                };
-                queue.push(task);
-            }
-        } // Release lock early
+        for request in unique_requests {
+            let cache_key = request.cache_key();
+            let priority = request.priority();
+            debug!("📝 BATCH ITEM: {} (priority: {:?})", cache_key, priority);
+            
+            let task = FetchTask {
+                priority,
+                request,
+                scheduled_at: Instant::now(),
+                retry_count: 0,
+            };
+            queue.push(task);
+        }
         Ok(())
     }
 
@@ -523,7 +538,8 @@ impl BackgroundFetcher {
         if total == 0 {
             0.0
         } else {
-            metrics.successful_prefetches as f64 / total as f64
+            // Use f64::from() for safer casting, handle potential precision loss
+            f64::from(metrics.successful_prefetches as u32) / f64::from(total as u32)
         }
     }
 }

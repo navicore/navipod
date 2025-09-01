@@ -1,6 +1,6 @@
 use crate::tui::rs_app::app::App;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiHelpers};
+use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, 
@@ -18,9 +18,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     
     // Main layout: header, content, footer
     let main_chunks = Layout::vertical([
-        Constraint::Length(3),  // Header
+        Constraint::Length(UiConstants::HEADER_HEIGHT),  // Header
         Constraint::Min(0),     // Content (flexible)
-        Constraint::Length(2),  // Footer
+        Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
     ]).split(f.area());
     
     render_header(f, app, main_chunks[0], &theme);
@@ -35,9 +35,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let header_chunks = Layout::horizontal([
-        Constraint::Length(20),  // Icon + Title
+        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
         Constraint::Min(0),      // Namespace info (flexible)
-        Constraint::Length(25),  // Status/Actions
+        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH),  // Status/Actions
     ]).split(area);
     
     // Title with icon
@@ -74,7 +74,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
 fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let content_chunks = Layout::horizontal([
         Constraint::Min(60),    // Main list (flexible, minimum 60 cols)
-        Constraint::Length(40), // Details panel (fixed 40 cols)
+        Constraint::Length(UiConstants::DETAILS_PANEL_WIDTH), // Details panel
     ]).split(area);
     
     render_replicaset_list(f, app, content_chunks[0], theme);
@@ -331,9 +331,8 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
     f.render_widget(filter_input, modal_area);
     
     // Set cursor position
-    #[allow(clippy::cast_possible_truncation)]
     let cursor_pos = Position {
-        x: modal_area.x + app.get_cursor_pos() as u16 + 1,
+        x: modal_area.x + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "rs cursor position") + 1,
         y: modal_area.y + 1,
     };
     f.set_cursor_position(cursor_pos);

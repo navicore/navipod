@@ -191,6 +191,35 @@ impl Symbols {
     pub const BORDER_VERTICAL: &'static str = "│";
 }
 
+/// UI constants for consistent sizing across all modules
+pub struct UiConstants;
+
+impl UiConstants {
+    /// Standard card height for list items
+    pub const CARD_HEIGHT: u16 = 4;
+    
+    /// Standard header height
+    pub const HEADER_HEIGHT: u16 = 3;
+    
+    /// Standard footer height  
+    pub const FOOTER_HEIGHT: u16 = 2;
+    
+    /// Standard progress bar width for health indicators
+    pub const PROGRESS_BAR_WIDTH: usize = 8;
+    
+    /// Standard details panel width
+    pub const DETAILS_PANEL_WIDTH: u16 = 40;
+    
+    /// Standard minimum list width
+    pub const MIN_LIST_WIDTH: u16 = 65;
+    
+    /// Standard icon column width
+    pub const ICON_COLUMN_WIDTH: u16 = 20;
+    
+    /// Standard actions column width
+    pub const ACTIONS_COLUMN_WIDTH: u16 = 30;
+}
+
 /// Helper functions for common UI patterns
 pub struct UiHelpers;
 
@@ -272,6 +301,28 @@ impl UiHelpers {
             "service" => Symbols::SERVICE,
             "ingress" => Symbols::INGRESS,
             _ => Symbols::BULLET,
+        }
+    }
+    
+    /// Safely parse a numeric string value with logging for debugging
+    pub fn safe_parse_i32(value: &str, _context: &str) -> i32 {
+        match value.parse::<i32>() {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                // In a production environment, you might want to log this
+                // tracing::debug!("Failed to parse {} as i32 in context: {}", value, context);
+                0
+            }
+        }
+    }
+    
+    /// Safely cast usize to u16 with bounds checking
+    pub fn safe_cast_u16(value: usize, _context: &str) -> u16 {
+        if value > u16::MAX as usize {
+            // tracing::warn!("Value {} exceeds u16::MAX in context: {}, clamping to u16::MAX", value, context);
+            u16::MAX
+        } else {
+            value as u16
         }
     }
 }

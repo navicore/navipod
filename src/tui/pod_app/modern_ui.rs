@@ -1,6 +1,6 @@
 use crate::tui::pod_app::app::App;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiHelpers};
+use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, 
@@ -18,9 +18,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     
     // Main layout: header, content, footer
     let main_chunks = Layout::vertical([
-        Constraint::Length(3),  // Header
+        Constraint::Length(UiConstants::HEADER_HEIGHT),  // Header
         Constraint::Min(0),     // Content (flexible)
-        Constraint::Length(2),  // Footer
+        Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
     ]).split(f.area());
     
     render_header(f, app, main_chunks[0], &theme);
@@ -37,7 +37,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let header_chunks = Layout::horizontal([
         Constraint::Length(15),  // Icon + Title
         Constraint::Min(0),      // Context info (flexible)
-        Constraint::Length(30),  // Actions
+        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH),  // Actions
     ]).split(area);
     
     // Title with icon
@@ -77,7 +77,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
 fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let content_chunks = Layout::horizontal([
         Constraint::Min(65),    // Main list (flexible, minimum 65 cols)
-        Constraint::Length(40), // Details panel (fixed 40 cols)
+        Constraint::Length(UiConstants::DETAILS_PANEL_WIDTH), // Details panel (fixed cols)
     ]).split(area);
     
     render_pod_list(f, app, content_chunks[0], theme);
@@ -106,10 +106,10 @@ fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(block, area);
     
     // Calculate scroll offset to keep selected item visible
-    const CARD_HEIGHT: u16 = 4;
-    let visible_cards = content_area.height / CARD_HEIGHT;
-    let scroll_offset = if selected_index as u16 >= visible_cards {
-        selected_index as u16 - visible_cards + 1
+    let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
+    let selected_index_u16 = UiHelpers::safe_cast_u16(selected_index, "pod_scroll_offset");
+    let scroll_offset = if selected_index_u16 >= visible_cards {
+        selected_index_u16 - visible_cards + 1
     } else {
         0
     };
@@ -117,7 +117,7 @@ fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     // Render individual pod cards with scroll offset
     let mut y_offset = 0;
     for (index, pod) in items.iter().enumerate().skip(scroll_offset as usize) {
-        if y_offset + CARD_HEIGHT > content_area.height {
+        if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
         
@@ -126,11 +126,11 @@ fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
             x: content_area.x,
             y: content_area.y + y_offset,
             width: content_area.width,
-            height: CARD_HEIGHT.min(content_area.height - y_offset),
+            height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
         
         render_pod_card(f, pod, card_area, is_selected, theme);
-        y_offset += CARD_HEIGHT;
+        y_offset += UiConstants::CARD_HEIGHT;
     }
     
     // Render scrollbar
@@ -353,9 +353,9 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
     f.render_widget(filter_input, modal_area);
     
     // Set cursor position
-    #[allow(clippy::cast_possible_truncation)]
+    let cursor_x = UiHelpers::safe_cast_u16(app.get_cursor_pos(), "pod_filter_cursor_position");
     let cursor_pos = Position {
-        x: modal_area.x + app.get_cursor_pos() as u16 + 1,
+        x: modal_area.x + cursor_x + 1,
         y: modal_area.y + 1,
     };
     f.set_cursor_position(cursor_pos);

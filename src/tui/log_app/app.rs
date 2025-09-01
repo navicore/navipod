@@ -110,7 +110,7 @@ impl AppBehavior for log_app::app::App {
     }
 
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
-        terminal.draw(|f| log_app::ui::ui(f, &mut self.clone()))?;
+        terminal.draw(|f| super::modern_ui::ui(f, self))?; // Use modern UI
         Ok(())
     }
 

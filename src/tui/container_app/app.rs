@@ -1,5 +1,5 @@
 use crate::tui::container_app;
-use crate::tui::data::{Container, container_constraint_len_calculator};
+use crate::tui::data::Container;
 use crate::tui::log_app;
 use crate::tui::stream::Message;
 use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
@@ -17,7 +17,6 @@ use std::sync::atomic::AtomicBool;
 pub struct App {
     pub(crate) state: TableState,
     pub(crate) items: Vec<Container>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     color_index: usize,
@@ -138,7 +137,6 @@ impl AppBehavior for container_app::app::App {
             }
             Message::Container(data_vec) => {
                 let new_app = Self {
-                    longest_item_lens: container_constraint_len_calculator(data_vec),
                     scroll_state: ScrollbarState::new(
                         data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
                     ),
@@ -166,7 +164,6 @@ impl App {
     pub fn new(data_vec: Vec<Container>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
-            longest_item_lens: container_constraint_len_calculator(&data_vec),
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 2,

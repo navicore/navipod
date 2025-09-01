@@ -41,7 +41,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     ]).split(area);
     
     // Title with security icon
-    let title_text = format!("🔒 SSL Certificates");
+    let title_text = "🔒 SSL Certificates".to_string();
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));

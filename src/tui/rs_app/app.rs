@@ -2,7 +2,7 @@ use crate::cache_manager;
 use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::rs::list_replicas;
-use crate::tui::data::{rs_constraint_len_calculator, Rs};
+use crate::tui::data::Rs;
 use crate::tui::pod_app;
 // use crate::tui::rs_app::ui; // Unused while testing modern UI
 use crate::tui::stream::Message;
@@ -62,7 +62,6 @@ async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
 pub struct App {
     pub(crate) state: TableState,
     pub(crate) items: Vec<Rs>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     pub(crate) color_index: usize,
@@ -248,7 +247,6 @@ impl App {
     pub fn new(data_vec: Vec<Rs>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
-            longest_item_lens: rs_constraint_len_calculator(&data_vec),
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 0,
@@ -294,7 +292,6 @@ impl App {
             Message::Rs(data_vec) => {
                 debug!("updating rs app data...");
                 let new_app = Self {
-                    longest_item_lens: rs_constraint_len_calculator(data_vec),
                     scroll_state: ScrollbarState::new(
                         data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
                     ),
@@ -382,7 +379,6 @@ impl App {
             Message::Rs(data_vec) => {
                 debug!("updating rs app data...");
                 let new_app = Self {
-                    longest_item_lens: rs_constraint_len_calculator(data_vec),
                     scroll_state: ScrollbarState::new(
                         data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
                     ),

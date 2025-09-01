@@ -186,7 +186,7 @@ fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area:
             Span::raw("    Path: "),
             Span::styled(format!("{} ", ingress.path()), theme.text_style(TextType::Caption)),
             Span::raw(" Backend: "),
-            Span::styled(format!("{}", ingress.backend_svc()), theme.text_style(TextType::Body)),
+            Span::styled(ingress.backend_svc().to_string(), theme.text_style(TextType::Body)),
         ]),
         Line::from(vec![
             // Add spacing line for card separation

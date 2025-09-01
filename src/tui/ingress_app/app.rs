@@ -1,5 +1,5 @@
 use crate::tui::cert_app;
-use crate::tui::data::{Ingress, ingress_constraint_len_calculator};
+use crate::tui::data::Ingress;
 use crate::tui::ingress_app;
 use crate::tui::stream::Message;
 use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
@@ -18,7 +18,6 @@ use tracing::debug;
 pub struct App {
     pub(crate) state: TableState,
     pub(crate) items: Vec<Ingress>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     color_index: usize,
@@ -142,7 +141,6 @@ impl AppBehavior for ingress_app::app::App {
             }
             Message::Ingress(data_vec) => {
                 let new_app = Self {
-                    longest_item_lens: ingress_constraint_len_calculator(data_vec),
                     scroll_state: ScrollbarState::new(
                         data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
                     ),
@@ -170,7 +168,6 @@ impl App {
     pub fn new(data_vec: Vec<Ingress>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
-            longest_item_lens: ingress_constraint_len_calculator(&data_vec),
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 3,

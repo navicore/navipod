@@ -6,6 +6,7 @@ use regex::Regex;
 use std::rc::Rc;
 use tracing::debug;
 
+#[allow(dead_code)]
 pub fn draw_timeseries_name_value_paragraphs(
     f: &mut Frame,
     background_color: Color,
@@ -45,6 +46,7 @@ pub fn draw_timeseries_name_value_paragraphs(
     f.render_widget(name_value_paragraph, layout[2]);
 }
 
+#[allow(dead_code)]
 pub fn draw_name_value_paragraphs(
     f: &mut Frame,
     background_color: Color,
@@ -216,6 +218,7 @@ where
     fn get_show_filter_edit(&self) -> bool;
 }
 
+#[allow(dead_code)]
 pub fn render_detail_section(
     f: &mut Frame,
     foreground_color: Color,
@@ -236,6 +239,7 @@ pub fn render_detail_section(
     );
 }
 
+#[allow(dead_code)]
 fn get_chunks_from_area(area: Rect, sz: usize) -> Rc<[Rect]> {
     let constraints = std::iter::repeat_n(Constraint::Length(1), sz).collect::<Vec<Constraint>>();
 
@@ -246,6 +250,7 @@ fn get_chunks_from_area(area: Rect, sz: usize) -> Rc<[Rect]> {
         .split(area)
 }
 
+#[allow(dead_code)]
 fn create_block(title: String, foreground_color: &Color) -> Block<'_> {
     Block::default()
         .borders(Borders::ALL)
@@ -256,6 +261,7 @@ fn create_block(title: String, foreground_color: &Color) -> Block<'_> {
         ))
 }
 
+#[allow(dead_code)]
 fn render_block_with_title_and_details(
     f: &mut Frame,
     foreground_color: Color,

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::shared_ui::{SharedComponents, UiCache};
+    use crate::tui::shared_ui::{SharedComponents, UiCache};
     use crate::tui::theme::{NaviTheme, ResourceStatus};
     
     #[test]

@@ -44,10 +44,20 @@ pub fn ui(f: &mut Frame, app: &mut App) {
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
+    let header_chunks = Layout::horizontal([
+        Constraint::Length(20),  // Icon + Title
+        Constraint::Min(0),      // Context info (flexible)
+        Constraint::Length(30),  // Actions
+    ]).split(area);
+    
     let validator = CertificateValidator::default();
     
     // Title with security icon
     let title_text = "🔒 SSL Certificates";
+    let title = Paragraph::new(title_text)
+        .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
+        .block(Block::default().borders(Borders::NONE));
+    f.render_widget(title, header_chunks[0]);
     
     // Context info (certificate status analysis using improved validation)
     let certs = app.get_items();

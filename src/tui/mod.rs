@@ -1,5 +1,4 @@
 mod cert_app;
-pub mod cert_validation;
 mod container_app;
 pub mod data;
 mod event_app;
@@ -7,7 +6,6 @@ mod ingress_app;
 mod log_app;
 mod pod_app;
 mod rs_app;
-pub mod shared_ui;
 mod stream;
 mod style;
 mod table_ui;

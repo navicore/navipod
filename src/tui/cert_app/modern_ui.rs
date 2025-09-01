@@ -1,6 +1,4 @@
 use crate::tui::cert_app::app::App;
-use crate::tui::cert_validation::CertificateValidator;
-use crate::tui::shared_ui::{SharedComponents, UiCache};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiHelpers};
 use ratatui::prelude::*;
@@ -10,7 +8,6 @@ use ratatui::widgets::{
 };
 
 /// Modern card-based UI for Certificate view with security and SSL focus
-/// Uses shared components and improved certificate validation
 pub fn ui(f: &mut Frame, app: &mut App) {
     let theme = NaviTheme::default();
     
@@ -28,14 +25,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     
     render_header(f, app, main_chunks[0], &theme);
     render_content(f, app, main_chunks[1], &theme);
-    
-    // Use shared footer component
-    SharedComponents::render_standard_footer(
-        f,
-        main_chunks[2],
-        "↑/k up • ↓/j down • / filter • c colors • q quit",
-        &theme,
-    );
+    render_footer(f, main_chunks[2], &theme);
     
     // Handle overlays
     if app.get_show_filter_edit() {
@@ -50,20 +40,18 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
         Constraint::Length(30),  // Actions
     ]).split(area);
     
-    let validator = CertificateValidator::default();
-    
     // Title with security icon
-    let title_text = "🔒 SSL Certificates";
+    let title_text = format!("🔒 SSL Certificates");
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(title, header_chunks[0]);
     
-    // Context info (certificate status analysis using improved validation)
+    // Context info (certificate status analysis)
     let certs = app.get_items();
     let total_count = certs.len();
     let valid_count = certs.iter().filter(|c| c.is_valid() == "true" || c.is_valid().to_lowercase() == "valid").count();
-    let expired_count = certs.iter().filter(|c| validator.is_expiring_soon(c.expires())).count();
+    let expired_count = certs.iter().filter(|c| is_expired_soon(c.expires())).count();
     
     let context_text = if expired_count > 0 {
         format!("{} certs • {} valid • {} expiring soon ⚠️", total_count, valid_count, expired_count)
@@ -163,8 +151,7 @@ fn render_cert_card(f: &mut Frame, cert: &crate::tui::data::Cert, area: Rect, is
     
     // Analyze certificate security
     let is_valid = cert.is_valid() == "true" || cert.is_valid().to_lowercase() == "valid";
-    let validator = CertificateValidator::default();
-    let is_expiring_soon = validator.is_expiring_soon(cert.expires());
+    let is_expiring_soon = is_expired_soon(cert.expires());
     let security_indicator = get_security_indicator(is_valid, is_expiring_soon);
     let security_style = get_security_style(is_valid, is_expiring_soon, theme);
     
@@ -321,8 +308,7 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 /// Determine certificate status based on validity and expiration
 fn determine_cert_status(cert: &crate::tui::data::Cert) -> ResourceStatus {
     let is_valid = cert.is_valid() == "true" || cert.is_valid().to_lowercase() == "valid";
-    let validator = CertificateValidator::default();
-    let is_expiring_soon = validator.is_expiring_soon(cert.expires());
+    let is_expiring_soon = is_expired_soon(cert.expires());
     
     if !is_valid {
         ResourceStatus::Failed // Invalid certificate
@@ -333,7 +319,21 @@ fn determine_cert_status(cert: &crate::tui::data::Cert) -> ResourceStatus {
     }
 }
 
-// Removed is_expired_soon function - now using CertificateValidator
+/// Check if certificate expires within 30 days (or is already expired)
+fn is_expired_soon(expires: &str) -> bool {
+    // Simple heuristic - look for common expiration indicators
+    let expires_lower = expires.to_lowercase();
+    expires_lower.contains("expired") || 
+    expires_lower.contains("invalid") ||
+    expires_lower.contains("days") && (
+        expires_lower.contains("0 ") || 
+        expires_lower.contains("1 ") ||
+        expires_lower.contains("2 ") ||
+        expires_lower.contains(" 0") ||
+        expires_lower.contains(" 1") ||
+        expires_lower.contains(" 2")
+    )
+}
 
 /// Get security indicator emoji and text
 fn get_security_indicator(is_valid: bool, is_expiring_soon: bool) -> &'static str {
@@ -361,7 +361,7 @@ fn get_security_style(is_valid: bool, is_expiring_soon: bool, theme: &NaviTheme)
 fn format_expiration_date(expires: &str) -> String {
     if expires.is_empty() || expires == "-" {
         "Unknown".to_string()
-    } else if CertificateValidator::default().is_expiring_soon(expires) {
+    } else if is_expired_soon(expires) {
         format!("{} ⚠️", expires)
     } else {
         expires.to_string()

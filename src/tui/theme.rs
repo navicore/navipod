@@ -174,6 +174,8 @@ impl Symbols {
     pub const CHEVRON_DOWN: &'static str = "‹";
     pub const BULLET: &'static str = "•";
     pub const DOT: &'static str = "·";
+    pub const FOLDER: &'static str = "📁";
+    pub const SETTINGS: &'static str = "⚙";
     
     // Progress and loading
     pub const SPINNER: [&'static str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];

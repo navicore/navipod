@@ -22,6 +22,8 @@ pub struct App {
     pub(crate) colors: TableColors,
     color_index: usize,
     pub(crate) filter: String,
+    pub(crate) show_filter_edit: bool,
+    pub(crate) edit_filter_cursor_position: usize,
 }
 
 impl TuiTableState for App {
@@ -68,20 +70,20 @@ impl TuiTableState for App {
         self.filter = filter;
     }
 
-    fn set_cursor_pos(&mut self, _cursor_pos: usize) {
-        todo!()
+    fn set_cursor_pos(&mut self, cursor_pos: usize) {
+        self.edit_filter_cursor_position = cursor_pos;
     }
 
     fn get_cursor_pos(&self) -> usize {
-        todo!()
+        self.edit_filter_cursor_position
     }
 
-    fn set_show_filter_edit(&mut self, _show_filter_edit: bool) {
-        todo!()
+    fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
+        self.show_filter_edit = show_filter_edit;
     }
 
     fn get_show_filter_edit(&self) -> bool {
-        todo!()
+        self.show_filter_edit
     }
 }
 
@@ -151,7 +153,7 @@ impl AppBehavior for container_app::app::App {
         Ok(app_holder)
     }
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
-        terminal.draw(|f| container_app::ui::ui(f, &mut self.clone()))?;
+        terminal.draw(|f| super::modern_ui::ui(f, self))?; // Use modern UI
         Ok(())
     }
 
@@ -170,6 +172,8 @@ impl App {
             color_index: 2,
             items: data_vec,
             filter: String::new(),
+            show_filter_edit: false,
+            edit_filter_cursor_position: 0,
         }
     }
 

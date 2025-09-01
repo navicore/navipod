@@ -8,7 +8,7 @@ use ratatui::widgets::{
 };
 
 /// Modern card-based UI for Certificate view with security and SSL focus
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
     
     // Set the main background to ensure consistent theming
@@ -41,7 +41,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     ]).split(area);
     
     // Title with security icon
-    let title_text = format!("🔒 SSL Certificates");
+    let title_text = "🔒 SSL Certificates".to_string();
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));
@@ -54,9 +54,9 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let expired_count = certs.iter().filter(|c| is_expired_soon(c.expires())).count();
     
     let context_text = if expired_count > 0 {
-        format!("{} certs • {} valid • {} expiring soon ⚠️", total_count, valid_count, expired_count)
+        format!("{total_count} certs • {valid_count} valid • {expired_count} expiring soon ⚠️")
     } else {
-        format!("{} certificates • {} valid", total_count, valid_count)
+        format!("{total_count} certificates • {valid_count} valid")
     };
     
     let context_style = if expired_count > 0 {
@@ -87,7 +87,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(divider, area);
 }
 
-fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
+fn render_content(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     render_cert_list(f, app, area, theme);
 }
 
@@ -97,10 +97,11 @@ fn render_cert_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
-    let title = if !app.get_filter().is_empty() {
-        format!("SSL Certificates (filtered: {})", app.get_filter())
-    } else {
+    let filter = app.get_filter();
+    let title = if filter.is_empty() {
         "SSL Certificates".to_string()
+    } else {
+        format!("SSL Certificates (filtered: {filter})")
     };
     
     // Render container block
@@ -333,7 +334,7 @@ fn is_expired_soon(expires: &str) -> bool {
 }
 
 /// Get security indicator emoji and text
-fn get_security_indicator(is_valid: bool, is_expiring_soon: bool) -> &'static str {
+const fn get_security_indicator(is_valid: bool, is_expiring_soon: bool) -> &'static str {
     if !is_valid {
         "🔓 INVALID"
     } else if is_expiring_soon {
@@ -359,7 +360,7 @@ fn format_expiration_date(expires: &str) -> String {
     if expires.is_empty() || expires == "-" {
         "Unknown".to_string()
     } else if is_expired_soon(expires) {
-        format!("{} ⚠️", expires)
+        format!("{expires} ⚠️")
     } else {
         expires.to_string()
     }
@@ -369,7 +370,8 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
         text.to_string()
     } else {
-        format!("{}…", &text[..max_len.saturating_sub(1)])
+        let truncated = &text[..max_len.saturating_sub(1)];
+        format!("{truncated}…")
     }
 }
 

@@ -1,6 +1,6 @@
 use ratatui::prelude::*;
 
-/// Modern theme system for NaviPod inspired by Kubernetes and modern TUI apps
+/// Modern theme system for `NaviPod` inspired by Kubernetes and modern TUI apps
 #[derive(Clone, Debug)]
 pub struct NaviTheme {
     // Core colors
@@ -44,7 +44,9 @@ impl Default for NaviTheme {
 
 impl NaviTheme {
     /// Kubernetes-inspired blue theme (primary) - optimized for readability
-    pub fn kubernetes_blue() -> Self {
+    #[allow(clippy::unreadable_literal)]  // Color codes are more readable as hex without underscores
+    #[must_use]
+    pub const fn kubernetes_blue() -> Self {
         Self {
             // Kubernetes blue palette - slightly more muted for better readability
             primary: Color::from_u32(0x2563EB),      // More readable blue
@@ -81,7 +83,9 @@ impl NaviTheme {
     }
     
     /// Alternative green theme
-    pub fn kubernetes_green() -> Self {
+    #[allow(clippy::unreadable_literal)]  // Color codes are more readable as hex without underscores
+    #[must_use]
+    pub const fn kubernetes_green() -> Self {
         let mut theme = Self::kubernetes_blue();
         theme.primary = Color::from_u32(0x00D4AA);   // Kubernetes teal
         theme.secondary = Color::from_u32(0x26A69A); // Teal 600
@@ -91,7 +95,8 @@ impl NaviTheme {
     }
     
     /// Get color for Kubernetes resource status
-    pub fn status_color(&self, status: ResourceStatus) -> Color {
+    #[must_use]
+    pub const fn status_color(&self, status: ResourceStatus) -> Color {
         match status {
             ResourceStatus::Running | ResourceStatus::Ready => self.success,
             ResourceStatus::Pending | ResourceStatus::Updating => self.warning,
@@ -101,6 +106,7 @@ impl NaviTheme {
     }
     
     /// Get appropriate text style for content type
+    #[must_use]
     pub fn text_style(&self, content_type: TextType) -> Style {
         match content_type {
             TextType::Title => Style::default()
@@ -225,6 +231,7 @@ pub struct UiHelpers;
 
 impl UiHelpers {
     /// Create a status indicator with symbol and color
+    #[must_use]
     pub fn status_indicator(status: ResourceStatus, theme: &NaviTheme) -> (String, Style) {
         let (symbol, color) = match status {
             ResourceStatus::Running | ResourceStatus::Ready => {
@@ -245,6 +252,8 @@ impl UiHelpers {
     }
     
     /// Create a health-based progress bar with color gradient
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // Intentional for health ratio calculation
     pub fn health_progress_bar(current: usize, total: usize, width: usize, theme: &NaviTheme) -> (String, Color) {
         if total == 0 {
             return (Symbols::PROGRESS_EMPTY.repeat(width), theme.text_muted);
@@ -255,6 +264,7 @@ impl UiHelpers {
         let health_ratio = current as f32 / total as f32;
         
         // Health-based color gradient: green (100%) -> yellow (75%) -> orange (50%) -> red (0%)
+        #[allow(clippy::unreadable_literal)]  // Color codes are more readable as hex without underscores
         let color = if health_ratio >= 1.0 {
             theme.success // Perfect health: emerald green
         } else if health_ratio >= 0.75 {
@@ -267,16 +277,15 @@ impl UiHelpers {
             theme.error // Red - critical/failing
         };
         
-        let bar = format!(
-            "{}{}",
-            Symbols::PROGRESS_FILL.repeat(filled),
-            Symbols::PROGRESS_EMPTY.repeat(empty)
-        );
+        let filled_bar = Symbols::PROGRESS_FILL.repeat(filled);
+        let empty_bar = Symbols::PROGRESS_EMPTY.repeat(empty);
+        let bar = format!("{filled_bar}{empty_bar}");
         
         (bar, color)
     }
     
     /// Create a simple progress bar (for non-health metrics)
+    #[must_use]
     pub fn progress_bar(current: usize, total: usize, width: usize) -> String {
         if total == 0 {
             return Symbols::PROGRESS_EMPTY.repeat(width);
@@ -285,14 +294,13 @@ impl UiHelpers {
         let filled = (current * width) / total;
         let empty = width - filled;
         
-        format!(
-            "{}{}",
-            Symbols::PROGRESS_FILL.repeat(filled),
-            Symbols::PROGRESS_EMPTY.repeat(empty)
-        )
+        let filled_bar = Symbols::PROGRESS_FILL.repeat(filled);
+        let empty_bar = Symbols::PROGRESS_EMPTY.repeat(empty);
+        format!("{filled_bar}{empty_bar}")
     }
     
     /// Create a resource type indicator
+    #[must_use]
     pub fn resource_icon(resource_type: &str) -> &'static str {
         match resource_type.to_lowercase().as_str() {
             "replicaset" => Symbols::REPLICASET,
@@ -305,19 +313,19 @@ impl UiHelpers {
     }
     
     /// Safely parse a numeric string value with logging for debugging
+    #[must_use]
     pub fn safe_parse_i32(value: &str, _context: &str) -> i32 {
-        match value.parse::<i32>() {
-            Ok(parsed) => parsed,
-            Err(_) => {
-                // In a production environment, you might want to log this
-                // tracing::debug!("Failed to parse {} as i32 in context: {}", value, context);
-                0
-            }
-        }
+        value.parse::<i32>().unwrap_or({
+            // In a production environment, you might want to log this
+            // tracing::debug!("Failed to parse {} as i32 in context: {}", value, context);
+            0
+        })
     }
     
     /// Safely cast usize to u16 with bounds checking
-    pub fn safe_cast_u16(value: usize, _context: &str) -> u16 {
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)] // Intentional with bounds checking
+    pub const fn safe_cast_u16(value: usize, _context: &str) -> u16 {
         if value > u16::MAX as usize {
             // tracing::warn!("Value {} exceeds u16::MAX in context: {}, clamping to u16::MAX", value, context);
             u16::MAX

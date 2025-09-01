@@ -1,0 +1,54 @@
+cargo test --lib
+
+running 21 tests
+test k8s::cache::cached_data::tests::test_cached_data_update ... ok
+test k8s::cache::cached_data::tests::test_fetch_status_transitions ... ok
+test k8s::cache::background_fetcher::tests::test_task_priority_ordering ... ok
+test k8s::scan::metrics::tests::test_parse_help_type_invalid_format - should panic ... ok
+test k8s::scan::metrics::tests::test_parse_help_type_invalid_first_word - should panic ... ok
+test k8s::scan::metrics::tests::test_parse_help_type_valid ... ok
+test k8s::cache::subscription::tests::test_subscription_pattern_matching ... ok
+test k8s::cache::data_cache::tests::test_cache_expiry ... ok
+test k8s::cache::subscription::tests::test_subscribe_unsubscribe ... ok
+test k8s::cache::subscription::tests::test_notification ... ok
+test k8s::cache::data_cache::tests::test_cache_basic_operations ... ok
+test k8s::scan::metrics::tests::test_parse_metric_without_labels ... ok
+test k8s::scan::triples::test_format ... ok
+test tui::data::tests::test_container_constraint_len_calculator ... ok
+test tui::data::tests::test_pod_constraint_len_calculator ... ok
+test tui::data::tests::test_rs_constraint_len_calculator ... ok
+test k8s::scan::db::tests::test_init_db ... ok
+test k8s::cache::watch_manager::tests::test_cache_key_parsing ... ok
+test k8s::scan::db::tests::test_create_table ... ok
+test k8s::scan::metrics::tests::test_parse_metric_with_labels ... ok
+test k8s::cache::cached_data::tests::test_cached_data_expiry ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+cargo test --test cache_integration_test
+
+running 9 tests
+test test_cache_key_generation ... ok
+test test_cache_basic_operations ... ok
+test test_pattern_matching_subscriptions ... ok
+test test_prefetch_suggestions ... ok
+test test_background_fetcher_queue ... ok
+test test_cache_ttl_expiration ... ok
+test test_subscription_system ... ok
+test test_concurrent_access ... ok
+test test_memory_limit_and_eviction ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+cargo test --test k8s_cache_integration
+
+running 4 tests
+test test_cache_with_real_k8s ... ok
+test test_cache_invalidation_and_refresh ... ok
+test test_concurrent_k8s_operations ... ok
+test test_background_fetcher_with_k8s ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.01s
+
+cargo clippy -- -W clippy::pedantic -W clippy::nursery -W clippy::unwrap_used -W clippy::expect_used
+cargo build --release

@@ -7,8 +7,10 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
+const LOG_HEIGHT: u16 = 2; // 2 lines per log entry for readability
+
 /// Modern streaming log viewer UI with syntax highlighting and log-level awareness
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
     
     // Set the main background to ensure consistent theming
@@ -60,11 +62,11 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let warn_count = logs.iter().filter(|l| l.level.to_lowercase().contains("warn")).count();
     
     let context_text = if error_count > 0 {
-        format!("{} logs • {} errors • {} warnings • LIVE", total_count, error_count, warn_count)
+        format!("{total_count} logs • {error_count} errors • {warn_count} warnings • LIVE")
     } else if warn_count > 0 {
-        format!("{} logs • {} warnings • LIVE", total_count, warn_count)
+        format!("{total_count} logs • {warn_count} warnings • LIVE")
     } else {
-        format!("{} logs • LIVE", total_count)
+        format!("{total_count} logs • LIVE")
     };
     
     let context = Paragraph::new(context_text)
@@ -99,10 +101,11 @@ fn render_log_stream(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
-    let title = if !app.get_filter().is_empty() {
-        format!("Log Stream (filtered: {})", app.get_filter())
-    } else {
+    let filter = app.get_filter();
+    let title = if filter.is_empty() {
         "Log Stream".to_string()
+    } else {
+        format!("Log Stream (filtered: {filter})")
     };
     
     // Render container block
@@ -116,7 +119,6 @@ fn render_log_stream(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     
     // Calculate scroll offset to keep selected item visible
     // For logs, we want to show latest entries at the bottom (typical log viewer behavior)
-    const LOG_HEIGHT: u16 = 2; // 2 lines per log entry for readability
     let visible_logs = content_area.height / LOG_HEIGHT;
     
     // Auto-scroll to bottom for new logs unless user is actively browsing
@@ -125,7 +127,7 @@ fn render_log_stream(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
         items.len().saturating_sub(visible_logs as usize)
     } else {
         // User is browsing older logs, maintain their position
-        if selected_index as u16 >= visible_logs {
+        if UiHelpers::safe_cast_u16(selected_index, "log scroll offset") >= visible_logs {
             selected_index.saturating_sub(visible_logs as usize / 2)
         } else {
             0
@@ -193,7 +195,6 @@ fn render_log_entry(f: &mut Frame, log: &crate::tui::data::LogRec, area: Rect, i
 
 fn render_log_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    const LOG_HEIGHT: u16 = 2;
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     let visible_logs = content_area.height / LOG_HEIGHT;
     
@@ -319,6 +320,7 @@ fn get_log_level_style(level: &str, theme: &NaviTheme) -> Style {
 }
 
 /// Extract time portion from datetime string
+#[allow(clippy::option_if_let_else)] // Complex nested logic is more readable with if/let
 fn extract_time(datetime: &str) -> String {
     // Handle various datetime formats
     if let Some(space_pos) = datetime.find(' ') {

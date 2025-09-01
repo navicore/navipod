@@ -1,6 +1,6 @@
 use crate::{cache_manager, k8s::{cache::{DataRequest, FetchResult, PodSelector}, pods::list_rspods}};
 use crate::tui::container_app;
-use crate::tui::data::{RsPod, pod_constraint_len_calculator};
+use crate::tui::data::RsPod;
 use crate::tui::ingress_app;
 use crate::tui::pod_app;
 use crate::tui::stream::Message;
@@ -27,7 +27,6 @@ const POLL_MS: u64 = 1000;
 pub struct App {
     pub(crate) state: TableState,
     pub(crate) items: Vec<RsPod>,
-    pub(crate) longest_item_lens: (u16, u16, u16, u16, u16),
     pub(crate) scroll_state: ScrollbarState,
     pub(crate) colors: TableColors,
     pub(crate) color_index: usize,
@@ -162,7 +161,6 @@ impl AppBehavior for pod_app::app::App {
             Message::Pod(data_vec) => {
                 debug!("updating pod app data...");
                 let new_app = Self {
-                    longest_item_lens: pod_constraint_len_calculator(data_vec),
                     items: data_vec.clone(),
                     scroll_state: ScrollbarState::new(
                         data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
@@ -277,7 +275,6 @@ impl App {
     pub fn new(selector: BTreeMap<String, String>, data_vec: Vec<RsPod>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
-            longest_item_lens: pod_constraint_len_calculator(&data_vec),
             scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
             colors: TableColors::new(&PALETTES[0]),
             color_index: 1,

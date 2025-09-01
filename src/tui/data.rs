@@ -16,6 +16,8 @@ pub struct ResourceEvent {
 }
 
 impl ResourceEvent {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
             &self.object,
@@ -151,6 +153,8 @@ impl Filterable for ResourceEvent {
 }
 
 impl Cert {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 4] {
         [&self.host, &self.is_valid, &self.expires, &self.issued_by]
     }
@@ -192,6 +196,8 @@ impl Filterable for Container {
 }
 
 impl Container {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
             &self.name,
@@ -241,6 +247,7 @@ impl Filterable for RsPod {
 }
 
 impl RsPod {
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
             &self.name,
@@ -290,6 +297,7 @@ impl Filterable for Rs {
 }
 
 impl Rs {
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
             &self.name,
@@ -335,6 +343,7 @@ impl Filterable for LogRec {
 }
 
 impl LogRec {
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 3] {
         [&self.datetime, &self.level, &self.message]
     }
@@ -368,6 +377,7 @@ impl Filterable for Ingress {
 }
 
 impl Ingress {
+    #[allow(dead_code)]
     pub(crate) const fn ref_array(&self) -> [&String; 5] {
         [
             &self.name,

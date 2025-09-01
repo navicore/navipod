@@ -7,6 +7,8 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
+const CONTAINER_CARD_HEIGHT: u16 = 5;
+
 /// Modern card-based UI for Container view with container runtime focus
 pub fn ui(f: &mut Frame, app: &mut App) {
     let theme = NaviTheme::default();
@@ -55,9 +57,9 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     }).count();
     
     let context_text = if restart_count > 0 {
-        format!("{} containers • {} with restarts", total_count, restart_count)
+        format!("{total_count} containers • {restart_count} with restarts")
     } else {
-        format!("{} containers", total_count)
+        format!("{total_count} containers")
     };
     
     let context = Paragraph::new(context_text)
@@ -98,10 +100,11 @@ fn render_container_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
     
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
-    let title = if !app.get_filter().is_empty() {
-        format!("Containers (filtered: {})", app.get_filter())
-    } else {
+    let filter = app.get_filter();
+    let title = if filter.is_empty() {
         "Containers".to_string()
+    } else {
+        format!("Containers (filtered: {filter})")
     };
     
     // Render container block
@@ -156,6 +159,7 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
     let (restart_bar, restart_color) = if restart_count > 0 {
         let health_ratio = if restart_count <= 2 { 0.75 } else if restart_count <= 5 { 0.5 } else if restart_count <= 10 { 0.25 } else { 0.0 };
         UiHelpers::health_progress_bar(
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Intentional for progress bar display
             if health_ratio > 0.0 { (health_ratio * 8.0) as usize } else { 0 },
             8,
             8,
@@ -190,7 +194,7 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
             Span::raw("    Ports: "),
             Span::styled(container.ports(), theme.text_style(TextType::Body)),
             Span::raw("  Restarts: "),
-            Span::styled(format!("{} ", restart_count), get_restart_style(restart_count, theme)),
+            Span::styled(format!("{restart_count} "), get_restart_style(restart_count, theme)),
             Span::styled(restart_bar, Style::default().fg(restart_color)),
         ]),
         Line::from(vec![
@@ -234,7 +238,7 @@ fn render_mounts_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
         .iter()
         .map(|(name, path, _)| {
             let content = Line::from(vec![
-                Span::styled(format!("{}: ", name), theme.text_style(TextType::Body)),
+                Span::styled(format!("{name}: "), theme.text_style(TextType::Body)),
                 Span::styled(path, theme.text_style(TextType::Caption)),
             ]);
             ListItem::new(content)
@@ -261,7 +265,7 @@ fn render_env_vars_section(f: &mut Frame, app: &mut App, area: Rect, theme: &Nav
         .iter()
         .map(|(key, value, _)| {
             let content = Line::from(vec![
-                Span::styled(format!("{}: ", key), theme.text_style(TextType::Body)),
+                Span::styled(format!("{key}: "), theme.text_style(TextType::Body)),
                 Span::styled(truncate_text(value, 25), theme.text_style(TextType::Caption)),
             ]);
             ListItem::new(content)
@@ -283,9 +287,8 @@ fn render_env_vars_section(f: &mut Frame, app: &mut App, area: Rect, theme: &Nav
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    const CARD_HEIGHT: u16 = 5;
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
-    let visible_cards = content_area.height / CARD_HEIGHT;
+    let visible_cards = content_area.height / CONTAINER_CARD_HEIGHT;
     
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {
@@ -384,7 +387,7 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 // Helper functions
 
 /// Determine container status based on restart count
-fn determine_container_status(restart_count: i32) -> ResourceStatus {
+const fn determine_container_status(restart_count: i32) -> ResourceStatus {
     match restart_count {
         0 => ResourceStatus::Running,           // Perfect - no restarts
         1..=2 => ResourceStatus::Ready,        // Acceptable - minimal restarts

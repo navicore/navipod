@@ -8,7 +8,7 @@ use ratatui::widgets::{
 };
 
 /// Modern card-based UI for Ingress view with network routing focus
-pub fn ui(f: &mut Frame, app: &mut App) {
+pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
     
     // Set the main background to ensure consistent theming
@@ -51,16 +51,15 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let routes = app.get_items();
     let total_count = routes.len();
     let unique_hosts = routes.iter()
-        .map(|r| r.host())
+        .map(super::super::data::Ingress::host)
         .collect::<std::collections::HashSet<_>>()
         .len();
     let unique_backends = routes.iter()
-        .map(|r| r.backend_svc())
+        .map(super::super::data::Ingress::backend_svc)
         .collect::<std::collections::HashSet<_>>()
         .len();
     
-    let context_text = format!("{} routes • {} hosts • {} backends", 
-        total_count, unique_hosts, unique_backends);
+    let context_text = format!("{total_count} routes • {unique_hosts} hosts • {unique_backends} backends");
     
     let context = Paragraph::new(context_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
@@ -84,7 +83,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(divider, area);
 }
 
-fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
+fn render_content(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     render_ingress_list(f, app, area, theme);
 }
 
@@ -94,10 +93,11 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
     
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
-    let title = if !app.get_filter().is_empty() {
-        format!("Network Routes (filtered: {})", app.get_filter())
-    } else {
+    let filter = app.get_filter();
+    let title = if filter.is_empty() {
         "Network Routes".to_string()
+    } else {
+        format!("Network Routes (filtered: {filter})")
     };
     
     // Render container block
@@ -161,12 +161,14 @@ fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area:
     let selection_indicator = if is_selected { "▶ " } else { "  " };
     
     // Create routing flow visualization
-    let routing_flow = format!("{} {} {} {}", 
-        truncate_text(ingress.host(), 20),
-        Symbols::ARROW_RIGHT,
-        truncate_text(ingress.backend_svc(), 15),
-        if !ingress.port().is_empty() { format!(":{}", ingress.port()) } else { String::new() }
-    );
+    let host = truncate_text(ingress.host(), 20);
+    let backend = truncate_text(ingress.backend_svc(), 15);
+    let port_suffix = if ingress.port().is_empty() { 
+        String::new() 
+    } else { 
+        format!(":{}", ingress.port()) 
+    };
+    let routing_flow = format!("{host} {} {backend} {port_suffix}", Symbols::ARROW_RIGHT);
     
     // Create card content as multi-line text
     let content = vec![
@@ -186,7 +188,7 @@ fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area:
             Span::raw("    Path: "),
             Span::styled(format!("{} ", ingress.path()), theme.text_style(TextType::Caption)),
             Span::raw(" Backend: "),
-            Span::styled(format!("{}", ingress.backend_svc()), theme.text_style(TextType::Body)),
+            Span::styled(ingress.backend_svc(), theme.text_style(TextType::Body)),
         ]),
         Line::from(vec![
             // Add spacing line for card separation
@@ -326,7 +328,8 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
         text.to_string()
     } else {
-        format!("{}…", &text[..max_len.saturating_sub(1)])
+        let truncated = &text[..max_len.saturating_sub(1)];
+        format!("{truncated}…")
     }
 }
 

@@ -252,6 +252,7 @@ impl BackgroundFetcher {
                                         };
                                         queue.push(prefetch_task);
                                     }
+                                    drop(queue);
                                 } else {
                                     warn!("⚠️  Prefetch queue full, dropping {} requests", prefetch_requests.len());
                                 }
@@ -415,7 +416,7 @@ impl BackgroundFetcher {
         {
             let mut recent = self.recent_requests.write().await;
             let now = Instant::now();
-            let cutoff_time = now - Duration::from_secs(60); // 1 minute dedup window
+            let cutoff_time = now.checked_sub(Duration::from_secs(60)).unwrap_or(now); // 1 minute dedup window
             
             // Clean up old entries first - remove entries older than cutoff_time
             recent.retain(|_key, timestamp| *timestamp > cutoff_time);
@@ -432,6 +433,7 @@ impl BackgroundFetcher {
                 recent.insert(cache_key.clone(), now);
                 unique_requests.push(request);
             }
+            drop(recent);
         }
         
         (unique_requests, dedup_count)
@@ -475,6 +477,7 @@ impl BackgroundFetcher {
             };
             queue.push(task);
         }
+        drop(queue);
         Ok(())
     }
 
@@ -538,8 +541,11 @@ impl BackgroundFetcher {
         if total == 0 {
             0.0
         } else {
-            // Safe casting to f64 for calculation
-            metrics.successful_prefetches as f64 / total as f64
+            #[allow(clippy::cast_precision_loss)]
+            {
+                // Allow precision loss for metrics calculation - acceptable for monitoring
+                metrics.successful_prefetches as f64 / total as f64
+            }
         }
     }
 }

@@ -206,7 +206,8 @@ async fn test_prefetch_suggestions() {
     // Now it should suggest prefetch since ReplicaSets are cached
     let suggestions_with_cache = cache.prefetch_related(&request).await;
     // Even with cached empty ReplicaSets, it should return some prefetch suggestions
-    assert!(suggestions_with_cache.len() >= 0); // Allow for empty case with no selectors
+    // Length can be 0 for empty ReplicaSets with no selectors
+    assert!(suggestions_with_cache.is_empty()); // Empty ReplicaSets should return no suggestions
 }
 
 #[tokio::test]

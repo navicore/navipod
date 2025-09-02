@@ -1,10 +1,11 @@
-use crate::tui::cert_app;
+use crate::{cache_manager, tui::cert_app};
 use crate::tui::data::Ingress;
 use crate::tui::ingress_app;
 use crate::tui::stream::Message;
 use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps, create_cert_data_vec};
+use crate::tui::yaml_editor::YamlEditor;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::{Stream, stream};
 use ratatui::prelude::*;
@@ -24,6 +25,7 @@ pub struct App {
     pub(crate) filter: String,
     pub(crate) show_filter_edit: bool,
     pub(crate) edit_filter_cursor_position: usize,
+    pub yaml_editor: YamlEditor,
 }
 
 impl TuiTableState for App {
@@ -94,6 +96,39 @@ impl AppBehavior for ingress_app::app::App {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
                     use KeyCode::{Char, Down, Enter, Esc, Up};
+                    
+                    // Handle YAML editor events first if active
+                    if self.yaml_editor.is_active {
+                        match key.code {
+                            Char('q') | Esc => {
+                                self.yaml_editor.close();
+                            }
+                            Char('r' | 'R') => {
+                                // Refresh YAML content
+                                self.yaml_editor.fetch_yaml()?;
+                            }
+                            Up | Char('k') => {
+                                // Scroll up (vim-like navigation)
+                                self.yaml_editor.scroll_up(3);
+                            }
+                            Down | Char('j') => {
+                                // Scroll down (vim-like navigation) 
+                                self.yaml_editor.scroll_down(3, 20); // Approximate max height
+                            }
+                            Char('G') => {
+                                // Jump to bottom (vim motion)
+                                self.yaml_editor.jump_to_bottom(20); // Approximate max height
+                            }
+                            Char('g') => {
+                                // Jump to top (vim motion)
+                                self.yaml_editor.jump_to_top();
+                            }
+                            _k => {}
+                        }
+                        app_holder = Some(Apps::Ingress { app: self.clone() });
+                        return Ok(app_holder);
+                    }
+                    
                     match key.code {
                         Char('q') | Esc => {
                             app_holder = None;
@@ -133,6 +168,30 @@ impl AppBehavior for ingress_app::app::App {
                                     }
                                 }
                             }
+                        }
+                        Char('y' | 'Y') => {
+                            // View YAML
+                            if let Some(selection) = self.get_selected_item() {
+                                self.yaml_editor = YamlEditor::new(
+                                    "ingress".to_string(), 
+                                    selection.name.clone(),
+                                    Some(cache_manager::get_current_namespace_or_default())
+                                );
+                                if let Err(e) = self.yaml_editor.fetch_yaml() {
+                                    debug!("Error fetching YAML: {}", e);
+                                }
+                            }
+                            app_holder = Some(Apps::Ingress { app: self.clone() });
+                        }
+                        Char('G') => {
+                            // Jump to bottom (vim motion)
+                            self.jump_to_bottom();
+                            app_holder = Some(Apps::Ingress { app: self.clone() });
+                        }
+                        Char('g') => {
+                            // Jump to top (vim motion)
+                            self.jump_to_top();
+                            app_holder = Some(Apps::Ingress { app: self.clone() });
                         }
 
                         _k => {}
@@ -175,6 +234,7 @@ impl App {
             filter: String::new(),
             show_filter_edit: false,
             edit_filter_cursor_position: 0,
+            yaml_editor: YamlEditor::default(),
         }
     }
 }

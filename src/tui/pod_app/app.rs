@@ -7,6 +7,7 @@ use crate::tui::stream::Message;
 use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps, create_container_data_vec, create_ingress_data_vec};
+use crate::tui::yaml_editor::YamlEditor;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::Stream;
 use ratatui::prelude::*;
@@ -34,6 +35,7 @@ pub struct App {
     pub(crate) filter: String,
     pub(crate) show_filter_edit: bool,
     pub(crate) edit_filter_cursor_position: usize,
+    pub yaml_editor: YamlEditor,
 }
 
 impl TuiTableState for App {
@@ -98,12 +100,47 @@ impl TuiTableState for App {
 }
 
 impl AppBehavior for pod_app::app::App {
+    #[allow(clippy::too_many_lines)]
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         let mut app_holder = Some(Apps::Pod { app: self.clone() });
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
                     use KeyCode::{Char, Down, Enter, Esc, Up};
+                    
+                    // Handle YAML editor events first if active
+                    if self.yaml_editor.is_active {
+                        match key.code {
+                            Char('q') | Esc => {
+                                self.yaml_editor.close();
+                            }
+                            Char('r' | 'R') => {
+                                // Refresh YAML content
+                                self.yaml_editor.fetch_yaml()?;
+                            }
+                            // Removed mode switching - now read-only viewer only
+                            Up | Char('k') => {
+                                // Scroll up (vim-like navigation)
+                                self.yaml_editor.scroll_up(3);
+                            }
+                            Down | Char('j') => {
+                                // Scroll down (vim-like navigation) 
+                                self.yaml_editor.scroll_down(3, 20); // Approximate max height
+                            }
+                            Char('G') => {
+                                // Jump to bottom (vim motion)
+                                self.yaml_editor.jump_to_bottom(20); // Approximate max height
+                            }
+                            Char('g') => {
+                                // Jump to top (vim motion)
+                                self.yaml_editor.jump_to_top();
+                            }
+                            _k => {}
+                        }
+                        app_holder = Some(Apps::Pod { app: self.clone() });
+                        return Ok(app_holder);
+                    }
+                    
                     match key.code {
                         Char('q') | Esc => {
                             app_holder = None;
@@ -153,6 +190,30 @@ impl AppBehavior for pod_app::app::App {
                                 app_holder = Some(new_app_holder);
                                 }
                             }
+                        }
+                        Char('y' | 'Y') => {
+                            // View YAML
+                            if let Some(selection) = self.get_selected_item() {
+                                self.yaml_editor = YamlEditor::new(
+                                    "pod".to_string(), 
+                                    selection.name.clone(),
+                                    Some(cache_manager::get_current_namespace_or_default())
+                                );
+                                if let Err(e) = self.yaml_editor.fetch_yaml() {
+                                    debug!("Error fetching YAML: {}", e);
+                                }
+                            }
+                            app_holder = Some(Apps::Pod { app: self.clone() });
+                        }
+                        Char('G') => {
+                            // Jump to bottom (vim motion)
+                            self.jump_to_bottom();
+                            app_holder = Some(Apps::Pod { app: self.clone() });
+                        }
+                        Char('g') => {
+                            // Jump to top (vim motion)
+                            self.jump_to_top();
+                            app_holder = Some(Apps::Pod { app: self.clone() });
                         }
                         _k => {}
                     }
@@ -283,6 +344,7 @@ impl App {
             filter: String::new(),
             show_filter_edit: false,
             edit_filter_cursor_position: 0,
+            yaml_editor: YamlEditor::default(),
         }
     }
 

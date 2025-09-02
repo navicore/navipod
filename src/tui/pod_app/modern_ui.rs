@@ -1,6 +1,7 @@
 use crate::tui::pod_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
+use crate::tui::yaml_editor;
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, 
@@ -28,6 +29,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     render_header(f, app, main_chunks[0], &theme);
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
+    
+    // Render YAML editor overlay if active
+    yaml_editor::render_yaml_editor(f, &app.yaml_editor);
     
     // Handle overlays
     if app.get_show_filter_edit() {
@@ -61,7 +65,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(context, header_chunks[1]);
     
     // Actions/shortcuts
-    let actions_text = "f: filter • Enter: containers • c: colors • q: quit";
+    let actions_text = "f: filter • y: yaml • Enter: containers • c: colors • q: quit";
     let actions = Paragraph::new(actions_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Right)
@@ -308,7 +312,7 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
 }
 
 fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
-    let footer_text = "Enter: Containers • e: Events • ↑↓: Navigate • Ctrl+F: Page Down • Ctrl+B: Page Up";
+    let footer_text = "Enter: Containers • e: Events • ↑↓: Navigate • G: Bottom • g: Top • Ctrl+F/B: Page Up/Down";
     let footer = Paragraph::new(footer_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)

@@ -204,29 +204,12 @@ fn render_editor_content(f: &mut Frame, editor: &YamlEditor, area: Rect, theme: 
     
     let mut content_lines = Vec::new();
     for line in &lines[start_line..end_line] {
-        // Simple syntax highlighting for YAML
-        let line_style = if line.trim_start().starts_with('#') {
-            // Comments
-            theme.text_style(TextType::Caption)
-        } else if line.trim_end().ends_with(':') && !line.trim_start().starts_with('-') {
-            // Keys
-            theme.text_style(TextType::Subtitle)
-        } else if line.trim_start().starts_with("- ") {
-            // List items
-            theme.text_style(TextType::Body)
-        } else {
-            // Values
-            theme.text_style(TextType::Body)
-        };
-        
-        // Simple display without line numbers
-        let display_line = (*line).to_string();
-        
-        content_lines.push(Line::styled(display_line, line_style));
+        // Parse line into styled segments for proper YAML highlighting
+        let styled_line = parse_yaml_line(line, theme);
+        content_lines.push(styled_line);
     }
     
     let content_paragraph = Paragraph::new(content_lines)
-        .style(Style::default().bg(theme.bg_tertiary))
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -270,6 +253,168 @@ fn render_editor_footer(f: &mut Frame, _editor: &YamlEditor, area: Rect, theme: 
         );
         
     f.render_widget(footer, area);
+}
+
+/// Parse a YAML line into styled segments for proper syntax highlighting
+/// 
+/// Color scheme (muted):
+/// - Keys: Subtitle (blue, no bold) - e.g., `name:`  
+/// - List markers: Caption (muted) - e.g., `- `
+/// - Quoted strings: Warning (yellow, no bold) - e.g., `"value"`
+/// - Unquoted values: Body (default text) - e.g., `my-value`
+/// - Numbers: Subtitle (blue) - e.g., `123`
+/// - Booleans: Warning (yellow) - e.g., `true`, `false`
+/// - Null: Caption (muted) - e.g., `null`
+/// - Comments: Caption (muted) - e.g., `# comment`
+/// - YAML separators: Caption (muted) - e.g., `---`
+fn parse_yaml_line(line: &str, theme: &NaviTheme) -> Line<'static> {
+    let mut spans = Vec::new();
+    
+    // Handle leading whitespace (indentation)
+    let leading_spaces = line.len() - line.trim_start().len();
+    if leading_spaces > 0 {
+        spans.push(Span::styled(
+            " ".repeat(leading_spaces),
+            Style::default().bg(theme.bg_tertiary)
+        ));
+    }
+    
+    let trimmed = line.trim_start();
+    
+    // Handle empty lines
+    if trimmed.is_empty() {
+        spans.push(Span::styled("", Style::default().bg(theme.bg_tertiary)));
+        return Line::from(spans);
+    }
+    
+    // Handle full-line comments
+    if trimmed.starts_with('#') {
+        spans.push(Span::styled(
+            trimmed.to_string(),
+            theme.text_style(TextType::Caption).bg(theme.bg_tertiary)
+        ));
+        return Line::from(spans);
+    }
+    
+    // Handle document separators
+    if trimmed == "---" || trimmed == "..." {
+        spans.push(Span::styled(
+            trimmed.to_string(),
+            theme.text_style(TextType::Caption).bg(theme.bg_tertiary)
+        ));
+        return Line::from(spans);
+    }
+    
+    // Handle list items
+    if let Some(rest) = trimmed.strip_prefix("- ") {
+        spans.push(Span::styled(
+            "- ",
+            theme.text_style(TextType::Caption).bg(theme.bg_tertiary)
+        ));
+        
+        // Parse the rest of the line after the list marker
+        spans.extend(parse_yaml_value(rest, theme));
+        return Line::from(spans);
+    }
+    
+    // Handle key-value pairs
+    if let Some(colon_pos) = trimmed.find(':') {
+        let key = &trimmed[..colon_pos];
+        let rest = &trimmed[colon_pos..];
+        
+        // Key part (muted blue)
+        spans.push(Span::styled(
+            key.to_string(),
+            Style::default().fg(theme.text_secondary).bg(theme.bg_tertiary) // Subtitle without bold
+        ));
+        
+        // Colon
+        spans.push(Span::styled(
+            ":",
+            Style::default().fg(theme.text_secondary).bg(theme.bg_tertiary)
+        ));
+        
+        // Value part (after colon)
+        if rest.len() > 1 {
+            let value_part = &rest[1..]; // Skip the colon
+            spans.extend(parse_yaml_value(value_part, theme));
+        }
+        
+        return Line::from(spans);
+    }
+    
+    // Default: treat as value
+    spans.extend(parse_yaml_value(trimmed, theme));
+    Line::from(spans)
+}
+
+/// Parse a YAML value part, handling comments, strings, and special values
+fn parse_yaml_value(value: &str, theme: &NaviTheme) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    
+    // Check for inline comments
+    if let Some(comment_pos) = value.find(" #") {
+        let value_part = &value[..comment_pos];
+        let comment_part = &value[comment_pos..];
+        
+        // Add value part
+        if !value_part.trim().is_empty() {
+            spans.extend(parse_value_tokens(value_part, theme));
+        }
+        
+        // Add comment part
+        spans.push(Span::styled(
+            comment_part.to_string(),
+            theme.text_style(TextType::Caption).bg(theme.bg_tertiary)
+        ));
+    } else {
+        // No comment, parse the whole value
+        spans.extend(parse_value_tokens(value, theme));
+    }
+    
+    spans
+}
+
+/// Parse value tokens (strings, numbers, booleans, null)
+fn parse_value_tokens(value: &str, theme: &NaviTheme) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let trimmed = value.trim();
+    
+    if trimmed.is_empty() {
+        spans.push(Span::styled(
+            value.to_string(),
+            Style::default().bg(theme.bg_tertiary)
+        ));
+        return spans;
+    }
+    
+    // Handle special YAML values - distinct but muted colors
+    let style = match trimmed {
+        "null" | "~" => theme.text_style(TextType::Caption).bg(theme.bg_tertiary),
+        "true" | "false" => {
+            // Booleans - soft orange/amber without bold
+            Style::default().fg(Color::from_u32(0xD97706)).bg(theme.bg_tertiary)
+        },
+        _ if trimmed.starts_with('"') && trimmed.ends_with('"') => {
+            // Quoted strings - soft yellow without bold
+            Style::default().fg(Color::from_u32(0xCA8A04)).bg(theme.bg_tertiary)
+        },
+        _ if trimmed.starts_with('\'') && trimmed.ends_with('\'') => {
+            // Single quoted strings - soft yellow without bold
+            Style::default().fg(Color::from_u32(0xCA8A04)).bg(theme.bg_tertiary)
+        },
+        _ if trimmed.chars().all(|c| c.is_ascii_digit() || c == '.' || c == '-') => {
+            // Numbers - soft blue without bold
+            Style::default().fg(Color::from_u32(0x3B82F6)).bg(theme.bg_tertiary)
+        },
+        _ => {
+            // Regular unquoted values - blood red for distinction
+            Style::default().fg(Color::from_u32(0xDC2626)).bg(theme.bg_tertiary)
+        }
+    };
+    
+    spans.push(Span::styled(value.to_string(), style));
+    spans
 }
 
 /// Helper function to create centered rectangle

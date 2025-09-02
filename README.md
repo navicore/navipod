@@ -1,7 +1,7 @@
 A TUI and CLI for Inspecting Containers in Kubernetes
 ============
 
-![an image showing navipod inspecting replicas and pod and ingress](docs/demo077.gif)
+![an image showing navipod inspecting replicas and pod and ingress](docs/demo.png)
 
 Alpha - Under constant development as I practice Rust programming and discover
 needs not met by other tools.

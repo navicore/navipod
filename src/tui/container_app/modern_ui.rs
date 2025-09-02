@@ -407,17 +407,15 @@ fn get_restart_style(restart_count: i32, theme: &NaviTheme) -> Style {
     }
 }
 
-/// Extract short image name from full image path
+/// Extract image name with tag from full image path (removes registry/namespace)
 fn extract_image_name(full_image: &str) -> String {
     // Handle registry.io/namespace/image:tag format
     let parts: Vec<&str> = full_image.split('/').collect();
     let image_with_tag = parts.last().unwrap_or(&full_image);
     
-    // Remove tag if present
-    let image_name = image_with_tag.split(':').next().unwrap_or(image_with_tag);
-    
-    // Truncate if still too long
-    truncate_text(image_name, 25)
+    // Keep the image name WITH tag (this is the change - don't split on ':')
+    // Truncate if still too long (increased length to accommodate tags)
+    truncate_text(image_with_tag, 35)
 }
 
 fn truncate_text(text: &str, max_len: usize) -> String {

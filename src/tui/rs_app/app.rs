@@ -1,6 +1,6 @@
 use crate::cache_manager;
-use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
+use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::Rs;
 use crate::tui::pod_app;
@@ -33,7 +33,7 @@ const POLL_MS: u64 = 5000;
 /// of `ReplicaSets` to process to avoid overwhelming the system.
 async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
     use crate::k8s::cache::fetcher::PodSelector;
-    
+
     if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
         let namespace = cache_manager::get_current_namespace_or_default();
         let mut prefetch_requests = Vec::new();
@@ -50,8 +50,12 @@ async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
         }
 
         if !prefetch_requests.is_empty() {
-            debug!("🚀 {} PREFETCH: Scheduling {} Pod requests for {} ReplicaSets",
-                   context, prefetch_requests.len(), replicasets.len());
+            debug!(
+                "🚀 {} PREFETCH: Scheduling {} Pod requests for {} ReplicaSets",
+                context,
+                prefetch_requests.len(),
+                replicasets.len()
+            );
             if let Err(e) = bg_fetcher.schedule_fetch_batch(prefetch_requests).await {
                 warn!("Failed to schedule {} prefetch: {}", context, e);
             }
@@ -139,7 +143,7 @@ impl AppBehavior for App {
         if self.yaml_editor.is_active {
             return self.handle_yaml_editor_event(event);
         }
-        
+
         if self.get_show_filter_edit() {
             Ok(self.handle_filter_edit_event(event))
         } else {
@@ -312,6 +316,7 @@ impl App {
         app_holder
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_table_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         let mut app_holder = Some(Apps::Rs { app: self.clone() });
         match event {
@@ -382,9 +387,9 @@ impl App {
                             // View YAML
                             if let Some(selection) = self.get_selected_item() {
                                 self.yaml_editor = YamlEditor::new(
-                                    "replicaset".to_string(), 
+                                    "replicaset".to_string(),
                                     selection.name.clone(),
-                                    Some(cache_manager::get_current_namespace_or_default())
+                                    Some(cache_manager::get_current_namespace_or_default()),
                                 );
                                 if let Err(e) = self.yaml_editor.fetch_yaml() {
                                     debug!("Error fetching YAML: {}", e);
@@ -464,13 +469,13 @@ impl App {
             })
         })
     }
-    
+
     /// Handle YAML editor events
     fn handle_yaml_editor_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         if let Message::Key(Event::Key(key)) = event {
             if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Up, Esc};
-                
+                use KeyCode::{Char, Down, Esc, Up};
+
                 match key.code {
                     Char('q') | Esc => {
                         // Close YAML editor
@@ -501,7 +506,7 @@ impl App {
                 }
             }
         }
-        
+
         Ok(Some(Apps::Rs { app: self.clone() }))
     }
 }

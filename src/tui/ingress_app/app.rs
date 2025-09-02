@@ -1,18 +1,18 @@
-use crate::{cache_manager, tui::cert_app};
 use crate::tui::data::Ingress;
 use crate::tui::ingress_app;
 use crate::tui::stream::Message;
-use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
+use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{AppBehavior, Apps, create_cert_data_vec};
+use crate::tui::ui_loop::{create_cert_data_vec, AppBehavior, Apps};
 use crate::tui::yaml_editor::YamlEditor;
+use crate::{cache_manager, tui::cert_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
-use futures::{Stream, stream};
+use futures::{stream, Stream};
 use ratatui::prelude::*;
 use ratatui::widgets::{ScrollbarState, TableState};
 use std::io;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tracing::debug;
 
 #[derive(Clone, Debug)]
@@ -90,13 +90,14 @@ impl TuiTableState for App {
 }
 
 impl AppBehavior for ingress_app::app::App {
+    #[allow(clippy::too_many_lines)]
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         let mut app_holder = Some(Apps::Ingress { app: self.clone() });
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
                     use KeyCode::{Char, Down, Enter, Esc, Up};
-                    
+
                     // Handle YAML editor events first if active
                     if self.yaml_editor.is_active {
                         match key.code {
@@ -112,7 +113,7 @@ impl AppBehavior for ingress_app::app::App {
                                 self.yaml_editor.scroll_up(3);
                             }
                             Down | Char('j') => {
-                                // Scroll down (vim-like navigation) 
+                                // Scroll down (vim-like navigation)
                                 self.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
                             }
                             Char('G') => {
@@ -128,7 +129,7 @@ impl AppBehavior for ingress_app::app::App {
                         app_holder = Some(Apps::Ingress { app: self.clone() });
                         return Ok(app_holder);
                     }
-                    
+
                     match key.code {
                         Char('q') | Esc => {
                             app_holder = None;
@@ -173,9 +174,9 @@ impl AppBehavior for ingress_app::app::App {
                             // View YAML
                             if let Some(selection) = self.get_selected_item() {
                                 self.yaml_editor = YamlEditor::new(
-                                    "ingress".to_string(), 
+                                    "ingress".to_string(),
                                     selection.name.clone(),
-                                    Some(cache_manager::get_current_namespace_or_default())
+                                    Some(cache_manager::get_current_namespace_or_default()),
                                 );
                                 if let Err(e) = self.yaml_editor.fetch_yaml() {
                                     debug!("Error fetching YAML: {}", e);

@@ -487,11 +487,11 @@ impl App {
                     }
                     Down | Char('j') => {
                         // Scroll down (vim-like navigation)
-                        self.yaml_editor.scroll_down(3, 50); // Approximate content height
+                        self.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
                     }
                     Char('G') => {
                         // Jump to bottom (vim motion)
-                        self.yaml_editor.jump_to_bottom(50); // Approximate content height
+                        self.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
                     }
                     Char('g') => {
                         // Jump to top (vim motion)

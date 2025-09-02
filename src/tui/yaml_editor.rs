@@ -61,13 +61,30 @@ impl YamlEditor {
         }
     }
     
-    /// Fetch YAML content using kubectl
     /// Fetches YAML content using kubectl
     /// 
     /// # Errors
     /// Returns `io::Error` if kubectl command fails or produces invalid output
     pub fn fetch_yaml(&mut self) -> io::Result<()> {
         self.error_message = None;
+        
+        // Validate inputs to prevent command injection
+        if !Self::is_safe_kubectl_arg(&self.resource_type) {
+            self.error_message = Some("Invalid resource type: contains unsafe characters".to_string());
+            return Ok(());
+        }
+        
+        if !Self::is_safe_kubectl_arg(&self.resource_name) {
+            self.error_message = Some("Invalid resource name: contains unsafe characters".to_string());
+            return Ok(());
+        }
+        
+        if let Some(namespace) = &self.namespace {
+            if !Self::is_safe_kubectl_arg(namespace) {
+                self.error_message = Some("Invalid namespace: contains unsafe characters".to_string());
+                return Ok(());
+            }
+        }
         
         let mut cmd = Command::new("kubectl");
         cmd.args(["get", &self.resource_type, &self.resource_name, "-o", "yaml"]);
@@ -79,7 +96,7 @@ impl YamlEditor {
         match cmd.output() {
             Ok(output) => {
                 if output.status.success() {
-                    self.content = String::from_utf8_lossy(&output.stdout).to_string();
+                    self.content = String::from_utf8_lossy(&output.stdout).into_owned();
                 } else {
                     let error = String::from_utf8_lossy(&output.stderr);
                     self.error_message = Some(format!("kubectl error: {error}"));
@@ -87,7 +104,8 @@ impl YamlEditor {
                 }
             }
             Err(e) => {
-                self.error_message = Some(format!("Failed to run kubectl: {e}"));
+                let cmd_str = format!("kubectl get {} {} -o yaml", self.resource_type, self.resource_name);
+                self.error_message = Some(format!("Failed to run kubectl command '{}': {}", cmd_str, e));
                 self.content = format!("Error: kubectl command failed\n{e}");
             }
         }
@@ -96,15 +114,31 @@ impl YamlEditor {
     }
     
     
+    /// Validates that a string is safe for use as a kubectl argument
+    /// Returns false if the string contains potentially unsafe characters
+    fn is_safe_kubectl_arg(arg: &str) -> bool {
+        // Allow alphanumeric characters, hyphens, underscores, dots, and colons
+        // This covers most valid Kubernetes resource names and namespaces
+        arg.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ':'))
+            && !arg.is_empty()
+            && !arg.starts_with('-') // Avoid flag injection
+    }
+    
     /// Scroll content up
-    pub const fn scroll_up(&mut self, amount: u16) {
+    pub fn scroll_up(&mut self, amount: u16) {
         self.scroll_offset = self.scroll_offset.saturating_sub(amount);
     }
     
-    /// Scroll content down
-    pub fn scroll_down(&mut self, amount: u16, max_height: u16) {
+    /// Scroll content down with dynamic height calculation
+    pub fn scroll_down(&mut self, amount: u16, viewport_height: Option<u16>) {
         let content_lines = u16::try_from(self.content.lines().count()).unwrap_or(u16::MAX);
-        let max_scroll = content_lines.saturating_sub(max_height);
+        // Use provided viewport height or default to reasonable content area size
+        let effective_height = viewport_height.unwrap_or_else(|| {
+            // Calculate a reasonable default based on typical terminal size
+            // Subtract space for header (3), footer (2), borders, and margins
+            std::cmp::max(10, 24_u16.saturating_sub(7))  
+        });
+        let max_scroll = content_lines.saturating_sub(effective_height);
         self.scroll_offset = (self.scroll_offset + amount).min(max_scroll);
     }
     
@@ -114,9 +148,15 @@ impl YamlEditor {
     }
     
     /// Jump to bottom of content (vim 'G' motion)
-    pub fn jump_to_bottom(&mut self, max_height: u16) {
+    pub fn jump_to_bottom(&mut self, viewport_height: Option<u16>) {
         let content_lines = u16::try_from(self.content.lines().count()).unwrap_or(u16::MAX);
-        let max_scroll = content_lines.saturating_sub(max_height);
+        // Use provided viewport height or default to reasonable content area size
+        let effective_height = viewport_height.unwrap_or_else(|| {
+            // Calculate a reasonable default based on typical terminal size
+            // Subtract space for header (3), footer (2), borders, and margins
+            std::cmp::max(10, 24_u16.saturating_sub(7))  
+        });
+        let max_scroll = content_lines.saturating_sub(effective_height);
         self.scroll_offset = max_scroll;
     }
     

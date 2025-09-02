@@ -114,13 +114,51 @@ where
         }
     }
 
-    fn page_forward(&mut self) {}
+    fn page_forward(&mut self) {
+        let pos = self.get_state().selected().unwrap_or(0);
+        let len = self.get_filtered_items().len();
+        let page_size = 10; // or some configurable page size
+        
+        if len > 0 {
+            let new_pos = (pos + page_size).min(len - 1);
+            self.get_state().select(Some(new_pos));
+            let new_scroll_state = self.get_scroll_state().position(new_pos * ITEM_HEIGHT);
+            self.set_scroll_state(new_scroll_state);
+        }
+    }
 
-    fn page_backward(&mut self) {}
+    fn page_backward(&mut self) {
+        let pos = self.get_state().selected().unwrap_or(0);
+        let page_size = 10; // or some configurable page size
+        
+        let new_pos = pos.saturating_sub(page_size);
+        self.get_state().select(Some(new_pos));
+        let new_scroll_state = self.get_scroll_state().position(new_pos * ITEM_HEIGHT);
+        self.set_scroll_state(new_scroll_state);
+    }
 
     fn next_color(&mut self) {
         let new_color_index = (self.get_color_index() + 1) % PALETTES.len();
         self.set_color_index(new_color_index);
+    }
+    
+    /// Jump to top (vim 'g' for beginning)
+    fn jump_to_top(&mut self) {
+        if !self.get_filtered_items().is_empty() {
+            self.get_state().select(Some(0));
+            self.set_scroll_state(self.get_scroll_state().position(0));
+        }
+    }
+    
+    /// Jump to bottom (vim 'G')
+    fn jump_to_bottom(&mut self) {
+        let len = self.get_filtered_items().len();
+        if len > 0 {
+            let last_index = len - 1;
+            self.get_state().select(Some(last_index));
+            let new_scroll_state = self.get_scroll_state().position(last_index * ITEM_HEIGHT);
+            self.set_scroll_state(new_scroll_state);
+        }
     }
 
     fn set_colors(&mut self) {

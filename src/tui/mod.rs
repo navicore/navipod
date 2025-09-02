@@ -12,3 +12,4 @@ mod table_ui;
 pub mod theme;
 pub mod ui_loop;
 mod utils;
+pub mod yaml_editor;

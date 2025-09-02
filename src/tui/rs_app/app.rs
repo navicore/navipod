@@ -4,6 +4,7 @@ use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::rs::list_replicas;
 use crate::tui::data::Rs;
 use crate::tui::pod_app;
+use crate::tui::yaml_editor::YamlEditor;
 // use crate::tui::rs_app::ui; // Unused while testing modern UI
 use crate::tui::stream::Message;
 use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
@@ -68,6 +69,7 @@ pub struct App {
     pub(crate) filter: String,
     pub(crate) show_filter_edit: bool,
     pub(crate) edit_filter_cursor_position: usize,
+    pub(crate) yaml_editor: YamlEditor,
 }
 
 impl TuiTableState for App {
@@ -133,6 +135,11 @@ impl TuiTableState for App {
 
 impl AppBehavior for App {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        // Handle YAML editor events first if editor is active
+        if self.yaml_editor.is_active {
+            return self.handle_yaml_editor_event(event);
+        }
+        
         if self.get_show_filter_edit() {
             Ok(self.handle_filter_edit_event(event))
         } else {
@@ -252,6 +259,7 @@ impl App {
             filter: String::new(),
             show_filter_edit: false,
             edit_filter_cursor_position: 0,
+            yaml_editor: YamlEditor::default(),
         }
     }
 
@@ -328,7 +336,7 @@ impl App {
                             self.next_color();
                             app_holder = Some(Apps::Rs { app: self.clone() });
                         }
-                        Char('e' | 'E') => {
+                        Char('e') => {
                             let new_app_holder = Apps::Event {
                                 app: event_app::app::App::new(),
                             };
@@ -370,6 +378,31 @@ impl App {
                             self.set_show_filter_edit(true);
                             app_holder = Some(Apps::Rs { app: self.clone() });
                         }
+                        Char('y' | 'Y') => {
+                            // View YAML
+                            if let Some(selection) = self.get_selected_item() {
+                                self.yaml_editor = YamlEditor::new(
+                                    "replicaset".to_string(), 
+                                    selection.name.clone(),
+                                    Some(cache_manager::get_current_namespace_or_default())
+                                );
+                                if let Err(e) = self.yaml_editor.fetch_yaml() {
+                                    debug!("Error fetching YAML: {}", e);
+                                }
+                            }
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('G') => {
+                            // Jump to bottom (vim motion)
+                            self.jump_to_bottom();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        Char('g') => {
+                            // Jump to top (vim motion)
+                            self.jump_to_top();
+                            app_holder = Some(Apps::Rs { app: self.clone() });
+                        }
+                        // Removed 'E' key binding - now only 'y' for read-only YAML view
                         _k => {}
                     }
                 }
@@ -430,5 +463,45 @@ impl App {
                 r
             })
         })
+    }
+    
+    /// Handle YAML editor events
+    fn handle_yaml_editor_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        if let Message::Key(Event::Key(key)) = event {
+            if key.kind == KeyEventKind::Press {
+                use KeyCode::{Char, Down, Up, Esc};
+                
+                match key.code {
+                    Char('q') | Esc => {
+                        // Close YAML editor
+                        self.yaml_editor.close();
+                    }
+                    Char('r' | 'R') => {
+                        // Refresh YAML content
+                        self.yaml_editor.fetch_yaml()?;
+                    }
+                    // Removed mode switching - now read-only viewer only
+                    Up | Char('k') => {
+                        // Scroll up (vim-like navigation)
+                        self.yaml_editor.scroll_up(3);
+                    }
+                    Down | Char('j') => {
+                        // Scroll down (vim-like navigation)
+                        self.yaml_editor.scroll_down(3, 50); // Approximate content height
+                    }
+                    Char('G') => {
+                        // Jump to bottom (vim motion)
+                        self.yaml_editor.jump_to_bottom(50); // Approximate content height
+                    }
+                    Char('g') => {
+                        // Jump to top (vim motion)
+                        self.yaml_editor.jump_to_top();
+                    }
+                    _ => {}
+                }
+            }
+        }
+        
+        Ok(Some(Apps::Rs { app: self.clone() }))
     }
 }

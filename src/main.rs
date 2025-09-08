@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
-use clap_complete::{Shell, generate};
-use kube::{Config, config::KubeConfigOptions};
+use clap_complete::{generate, Shell};
+use kube::{config::KubeConfigOptions, Config};
 
 use navipod::k8s::pod_ingress;
 use navipod::k8s::scan::db;
@@ -53,7 +53,7 @@ async fn process_command() -> Result<(), Box<dyn std::error::Error>> {
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
                 .add_directive("navipod=debug".parse()?)
-                .add_directive("navipod::k8s::cache=info".parse()?)
+                .add_directive("navipod::k8s::cache=info".parse()?),
         )
         .init();
     let _ =

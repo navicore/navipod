@@ -403,8 +403,8 @@ impl App {
                         self.base.yaml_editor.close();
                     }
                     Char('r' | 'R') => {
-                        // Refresh YAML content
-                        self.base.yaml_editor.fetch_yaml()?;
+                        // Force refresh YAML content (clears cache)
+                        self.base.yaml_editor.force_refresh()?;
                     }
                     // Removed mode switching - now read-only viewer only
                     Up | Char('k') => {

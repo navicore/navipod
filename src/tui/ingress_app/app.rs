@@ -40,8 +40,8 @@ impl AppBehavior for ingress_app::app::App {
                                 self.base.yaml_editor.close();
                             }
                             Char('r' | 'R') => {
-                                // Refresh YAML content
-                                self.base.yaml_editor.fetch_yaml()?;
+                                // Force refresh YAML content (clears cache)
+                                self.base.yaml_editor.force_refresh()?;
                             }
                             Up | Char('k') => {
                                 // Scroll up (vim-like navigation)

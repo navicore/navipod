@@ -1,8 +1,35 @@
 use crate::tui::theme::{NaviTheme, Symbols, TextType};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap};
+use std::collections::HashMap;
 use std::io;
 use std::process::Command;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
+/// Cached kubectl command result
+#[derive(Debug, Clone)]
+struct CachedResult {
+    content: String,
+    timestamp: Instant,
+    error: Option<String>,
+}
+
+impl CachedResult {
+    /// Check if cache entry is expired (5 minute TTL)
+    fn is_expired(&self) -> bool {
+        self.timestamp.elapsed() > Duration::from_secs(300)
+    }
+}
+
+/// Global kubectl result cache to prevent repeated AWS credential lookups
+type KubectlCache = Arc<Mutex<HashMap<String, CachedResult>>>;
+
+static KUBECTL_CACHE: OnceLock<KubectlCache> = OnceLock::new();
+
+fn get_kubectl_cache() -> &'static KubectlCache {
+    KUBECTL_CACHE.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+}
 
 /// YAML viewer state (simplified - single read-only mode)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,7 +88,7 @@ impl YamlEditor {
         }
     }
 
-    /// Fetches YAML content using kubectl
+    /// Fetches YAML content using kubectl with caching to prevent repeated AWS credential lookups
     ///
     /// # Errors
     /// Returns `io::Error` if kubectl command fails or produces invalid output
@@ -89,6 +116,30 @@ impl YamlEditor {
             }
         }
 
+        // Create cache key
+        let cache_key = format!(
+            "{}:{}:{}",
+            self.resource_type,
+            self.resource_name,
+            self.namespace.as_deref().unwrap_or("default")
+        );
+
+        // Check cache first
+        if let Ok(mut cache) = get_kubectl_cache().lock() {
+            if let Some(cached) = cache.get(&cache_key) {
+                if !cached.is_expired() {
+                    // Use cached result
+                    self.content = cached.content.clone();
+                    self.error_message = cached.error.clone();
+                    return Ok(());
+                } else {
+                    // Remove expired entry
+                    cache.remove(&cache_key);
+                }
+            }
+        }
+
+        // Execute kubectl command
         let mut cmd = Command::new("kubectl");
         cmd.args([
             "get",
@@ -102,14 +153,15 @@ impl YamlEditor {
             cmd.args(["-n", namespace]);
         }
 
-        match cmd.output() {
+        let (content, error) = match cmd.output() {
             Ok(output) => {
                 if output.status.success() {
-                    self.content = String::from_utf8_lossy(&output.stdout).into_owned();
+                    (String::from_utf8_lossy(&output.stdout).into_owned(), None)
                 } else {
-                    let error = String::from_utf8_lossy(&output.stderr);
-                    self.error_message = Some(format!("kubectl error: {error}"));
-                    self.content = format!("Error fetching YAML:\n{error}");
+                    let error_msg = String::from_utf8_lossy(&output.stderr).into_owned();
+                    let error_display = format!("kubectl error: {error_msg}");
+                    let content_display = format!("Error fetching YAML:\n{error_msg}");
+                    (content_display, Some(error_display))
                 }
             }
             Err(e) => {
@@ -117,13 +169,50 @@ impl YamlEditor {
                     "kubectl get {} {} -o yaml",
                     self.resource_type, self.resource_name
                 );
-                self.error_message =
-                    Some(format!("Failed to run kubectl command '{cmd_str}': {e}"));
-                self.content = format!("Error: kubectl command failed\n{e}");
+                let error_msg = format!("Failed to run kubectl command '{cmd_str}': {e}");
+                let content_display = format!("Error: kubectl command failed\n{e}");
+                (content_display, Some(error_msg))
             }
+        };
+
+        // Cache the result
+        if let Ok(mut cache) = get_kubectl_cache().lock() {
+            cache.insert(
+                cache_key,
+                CachedResult {
+                    content: content.clone(),
+                    timestamp: Instant::now(),
+                    error: error.clone(),
+                },
+            );
         }
 
+        // Update editor state
+        self.content = content;
+        self.error_message = error;
+
         Ok(())
+    }
+
+    /// Forces a refresh by clearing the cache and fetching fresh data
+    ///
+    /// # Errors
+    /// Returns `io::Error` if kubectl command fails or produces invalid output
+    pub fn force_refresh(&mut self) -> io::Result<()> {
+        // Create cache key and clear it
+        let cache_key = format!(
+            "{}:{}:{}",
+            self.resource_type,
+            self.resource_name,
+            self.namespace.as_deref().unwrap_or("default")
+        );
+
+        if let Ok(mut cache) = get_kubectl_cache().lock() {
+            cache.remove(&cache_key);
+        }
+
+        // Fetch fresh data
+        self.fetch_yaml()
     }
 
     /// Validates that a string is safe for use as a kubectl argument

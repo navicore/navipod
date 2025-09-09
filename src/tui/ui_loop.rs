@@ -126,6 +126,48 @@ pub async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Err
     }
 }
 
+async fn run_generic_app_loop<B, A>(
+    terminal: &mut Terminal<B>,
+    app: A,
+    should_stop: Arc<AtomicBool>,
+    key_events: impl Stream<Item = Message> + Unpin,
+    app_updater: impl Fn(&Option<Apps>) -> Option<A>,
+) -> Result<(Option<Apps>, Option<Apps>), io::Error>
+where
+    B: Backend + Send,
+    A: AppBehavior + Clone,
+{
+    use futures::pin_mut;
+    
+    let data_init_clone = app.clone();
+    let data_events = data_init_clone.stream(should_stop.clone());
+    let events = futures::stream::select(data_events, key_events);
+    pin_mut!(events);
+    let mut current_app = app.clone();
+    
+    #[allow(unused_assignments)]
+    let mut old_app_holder = None;
+    #[allow(unused_assignments)]
+    let mut new_app_holder = None;
+    
+    loop {
+        _ = current_app.draw_ui(terminal);
+        if let Some(event) = events.next().await {
+            let app_holder = current_app.handle_event(&event).await?;
+            
+            if let Some(updated_app) = app_updater(&app_holder) {
+                current_app = updated_app;
+                old_app_holder = app_holder;
+            } else {
+                new_app_holder = app_holder;
+                break;
+            }
+        }
+    }
+    
+    Ok((old_app_holder, new_app_holder))
+}
+
 #[allow(clippy::too_many_lines)]
 async fn run_app<B>(
     terminal: &mut Terminal<B>,
@@ -137,150 +179,116 @@ where
     let should_stop = Arc::new(AtomicBool::new(false));
     let key_events = async_key_events(should_stop.clone());
 
-    #[allow(unused_assignments)] // we might quit or ESC
-    let mut old_app_holder = Some(apps_app.clone());
-    #[allow(unused_assignments)] // we might quit or ESC
-    let mut new_app_holder = None;
-    match apps_app {
+    let result = match apps_app {
         Apps::Rs { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Rs { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Rs { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
         Apps::Pod { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Pod { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Pod { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
         Apps::Container { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Container { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Container { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
         Apps::Cert { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Cert { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Cert { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
         Apps::Ingress { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Ingress { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Ingress { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
-
         Apps::Log { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Log { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Log { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
-
         Apps::Event { app } => {
-            let data_init_clone = app.clone();
-            let data_events = data_init_clone.stream(should_stop.clone());
-            let mut events = futures::stream::select(data_events, key_events);
-            let mut current_app = app.clone();
-            loop {
-                _ = current_app.draw_ui(terminal);
-                if let Some(event) = events.next().await {
-                    let app_holder = current_app.handle_event(&event).await?;
-                    if let Some(Apps::Event { app }) = &app_holder {
-                        current_app = app.clone();
-                        old_app_holder = app_holder;
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Event { app }) = app_holder {
+                        Some(app.clone())
                     } else {
-                        new_app_holder = app_holder;
-                        break;
+                        None
                     }
-                }
-            }
+                },
+            ).await
         }
-    }
+    };
 
     should_stop.store(true, Ordering::Relaxed);
-    Ok((old_app_holder, new_app_holder))
+    result
 }
 
 /// runs a stack of apps where navigation is "<Enter>" into and "<Esc>" out of

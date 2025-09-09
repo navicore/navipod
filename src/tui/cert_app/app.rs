@@ -1,12 +1,13 @@
 use crate::impl_tui_table_state;
 use crate::tui::cert_app;
 use crate::tui::common::base_table_state::BaseTableState;
+use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
 use crate::tui::data::Cert;
 use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::{stream, Stream};
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
@@ -27,41 +28,34 @@ impl AppBehavior for cert_app::app::App {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Esc, Up};
-                    match key.code {
-                        Char('q') | Esc => {
+                    // First try common key handlers
+                    match handle_common_keys(self, key, |app| Apps::Cert { app }) {
+                        KeyHandlerResult::Quit => {
                             app_holder = None;
                         }
-                        Char('j') | Down => {
-                            self.next();
-                            //todo: stop all this cloning
-                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        KeyHandlerResult::Handled(new_app) => {
+                            if let Some(app) = new_app {
+                                app_holder = Some(app);
+                            }
                         }
-                        Char('k') | Up => {
-                            self.previous();
-                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        KeyHandlerResult::HandledWithUpdate(new_app) => {
+                            app_holder = new_app;
                         }
-                        Char('c' | 'C') => {
-                            self.next_color();
-                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        KeyHandlerResult::NotHandled => {
+                            // Handle app-specific keys
+                            use KeyCode::{Char, Down, Up};
+                            match key.code {
+                                Char('j') | Down => {
+                                    self.next();
+                                    app_holder = Some(Apps::Cert { app: self.clone() });
+                                }
+                                Char('k') | Up => {
+                                    self.previous();
+                                    app_holder = Some(Apps::Cert { app: self.clone() });
+                                }
+                                _k => {}
+                            }
                         }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_forward();
-                        }
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_backward();
-                        }
-                        Char('G') => {
-                            // Jump to bottom (vim motion)
-                            self.jump_to_bottom();
-                            app_holder = Some(Apps::Cert { app: self.clone() });
-                        }
-                        Char('g') => {
-                            // Jump to top (vim motion)
-                            self.jump_to_top();
-                            app_holder = Some(Apps::Cert { app: self.clone() });
-                        }
-                        _k => {}
                     }
                 }
             }

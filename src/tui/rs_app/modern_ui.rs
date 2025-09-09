@@ -29,7 +29,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     render_footer(f, main_chunks[2], &theme);
     
     // Render YAML editor overlay if active
-    yaml_editor::render_yaml_editor(f, &app.yaml_editor);
+    yaml_editor::render_yaml_editor(f, &app.base.yaml_editor);
     
     // Handle overlays
     if app.get_show_filter_edit() {
@@ -87,7 +87,7 @@ fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
 
 fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    let selected_index = app.state.selected().unwrap_or(0);
+    let selected_index = app.base.state.selected().unwrap_or(0);
     
     // Create card-style content but render as paragraphs instead of a list
     let mut y_offset = 1; // Start after border
@@ -283,7 +283,7 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
                 .begin_symbol(Some("↑"))
                 .end_symbol(Some("↓")),
             area.inner(Margin { vertical: 1, horizontal: 0 }),
-            &mut app.scroll_state.clone(),
+            &mut app.base.scroll_state.clone(),
         );
     }
 }

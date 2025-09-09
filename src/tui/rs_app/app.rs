@@ -1,20 +1,22 @@
 use crate::cache_manager;
+use crate::impl_tui_table_state;
 use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::rs::list_replicas;
+use crate::tui::common::base_table_state::BaseTableState;
 use crate::tui::data::Rs;
 use crate::tui::pod_app;
-use crate::tui::yaml_editor::YamlEditor;
 // use crate::tui::rs_app::ui; // Unused while testing modern UI
 use crate::tui::stream::Message;
-use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
+use crate::tui::style::{ITEM_HEIGHT};
+use crate::tui::yaml_editor::YamlEditor;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
 use crate::tui::{event_app, ingress_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::Stream;
 use ratatui::prelude::*;
-use ratatui::widgets::{ScrollbarState, TableState};
+use ratatui::widgets::ScrollbarState;
 use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -65,82 +67,15 @@ async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
 
 #[derive(Clone, Debug)]
 pub struct App {
-    pub(crate) state: TableState,
-    pub(crate) items: Vec<Rs>,
-    pub(crate) scroll_state: ScrollbarState,
-    pub(crate) colors: TableColors,
-    pub(crate) color_index: usize,
-    pub(crate) filter: String,
-    pub(crate) show_filter_edit: bool,
-    pub(crate) edit_filter_cursor_position: usize,
-    pub(crate) yaml_editor: YamlEditor,
+    pub(crate) base: BaseTableState<Rs>,
 }
 
-impl TuiTableState for App {
-    type Item = Rs;
-
-    fn get_items(&self) -> &[Self::Item] {
-        &self.items
-    }
-
-    fn get_state(&mut self) -> &mut TableState {
-        &mut self.state
-    }
-
-    fn get_scroll_state(&self) -> &ScrollbarState {
-        &self.scroll_state
-    }
-
-    fn set_scroll_state(&mut self, scroll_state: ScrollbarState) {
-        self.scroll_state = scroll_state;
-    }
-
-    fn set_table_colors(&mut self, colors: TableColors) {
-        self.colors = colors;
-    }
-
-    fn get_color_index(&self) -> usize {
-        self.color_index
-    }
-
-    fn set_color_index(&mut self, color_index: usize) {
-        self.color_index = color_index;
-    }
-
-    fn reset_selection_state(&mut self) {
-        self.state = TableState::default().with_selected(0);
-        self.scroll_state = ScrollbarState::new(self.items.len().saturating_sub(1) * ITEM_HEIGHT);
-    }
-
-    fn get_filter(&self) -> String {
-        self.filter.clone()
-    }
-
-    fn set_filter(&mut self, filter: String) {
-        self.filter = filter;
-    }
-
-    fn set_cursor_pos(&mut self, cursor_pos: usize) {
-        self.edit_filter_cursor_position = cursor_pos;
-    }
-
-    fn get_cursor_pos(&self) -> usize {
-        self.edit_filter_cursor_position
-    }
-
-    fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
-        self.show_filter_edit = show_filter_edit;
-    }
-
-    fn get_show_filter_edit(&self) -> bool {
-        self.show_filter_edit
-    }
-}
+impl_tui_table_state!(App, Rs);
 
 impl AppBehavior for App {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         // Handle YAML editor events first if editor is active
-        if self.yaml_editor.is_active {
+        if self.base.yaml_editor.is_active {
             return self.handle_yaml_editor_event(event);
         }
 
@@ -255,15 +190,7 @@ impl AppBehavior for App {
 impl App {
     pub fn new(data_vec: Vec<Rs>) -> Self {
         Self {
-            state: TableState::default().with_selected(0),
-            scroll_state: ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT),
-            colors: TableColors::new(&PALETTES[0]),
-            color_index: 0,
-            items: data_vec,
-            filter: String::new(),
-            show_filter_edit: false,
-            edit_filter_cursor_position: 0,
-            yaml_editor: YamlEditor::default(),
+            base: BaseTableState::new(data_vec),
         }
     }
 
@@ -301,13 +228,11 @@ impl App {
             }
             Message::Rs(data_vec) => {
                 debug!("updating rs app data...");
-                let new_app = Self {
-                    scroll_state: ScrollbarState::new(
-                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
-                    ),
-                    items: data_vec.clone(),
-                    ..self.clone()
-                };
+                let mut new_app = self.clone();
+                new_app.base.items = data_vec.clone();
+                new_app.base.scroll_state = ScrollbarState::new(
+                    data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                );
                 let new_app_holder = Apps::Rs { app: new_app };
                 app_holder = Some(new_app_holder);
             }
@@ -386,12 +311,12 @@ impl App {
                         Char('y' | 'Y') => {
                             // View YAML
                             if let Some(selection) = self.get_selected_item() {
-                                self.yaml_editor = YamlEditor::new(
+                                self.base.yaml_editor = YamlEditor::new(
                                     "replicaset".to_string(),
                                     selection.name.clone(),
                                     Some(cache_manager::get_current_namespace_or_default()),
                                 );
-                                if let Err(e) = self.yaml_editor.fetch_yaml() {
+                                if let Err(e) = self.base.yaml_editor.fetch_yaml() {
                                     debug!("Error fetching YAML: {}", e);
                                 }
                             }
@@ -414,13 +339,11 @@ impl App {
             }
             Message::Rs(data_vec) => {
                 debug!("updating rs app data...");
-                let new_app = Self {
-                    scroll_state: ScrollbarState::new(
-                        data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
-                    ),
-                    items: data_vec.clone(),
-                    ..self.clone()
-                };
+                let mut new_app = self.clone();
+                new_app.base.items = data_vec.clone();
+                new_app.base.scroll_state = ScrollbarState::new(
+                    data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
+                );
                 let new_app_holder = Apps::Rs { app: new_app };
                 app_holder = Some(new_app_holder);
             }
@@ -430,17 +353,17 @@ impl App {
     }
 
     pub const fn set_cursor_pos(&mut self, cursor_pos: usize) {
-        self.edit_filter_cursor_position = cursor_pos;
+        self.base.edit_filter_cursor_position = cursor_pos;
     }
     pub const fn get_cursor_pos(&self) -> usize {
-        self.edit_filter_cursor_position
+        self.base.edit_filter_cursor_position
     }
 
     pub const fn set_show_filter_edit(&mut self, show_filter_edit: bool) {
-        self.show_filter_edit = show_filter_edit;
+        self.base.show_filter_edit = show_filter_edit;
     }
     pub const fn get_show_filter_edit(&self) -> bool {
-        self.show_filter_edit
+        self.base.show_filter_edit
     }
 
     pub fn get_event_details(&mut self) -> Vec<(String, String, Option<String>)> {
@@ -479,28 +402,28 @@ impl App {
                 match key.code {
                     Char('q') | Esc => {
                         // Close YAML editor
-                        self.yaml_editor.close();
+                        self.base.yaml_editor.close();
                     }
                     Char('r' | 'R') => {
                         // Refresh YAML content
-                        self.yaml_editor.fetch_yaml()?;
+                        self.base.yaml_editor.fetch_yaml()?;
                     }
                     // Removed mode switching - now read-only viewer only
                     Up | Char('k') => {
                         // Scroll up (vim-like navigation)
-                        self.yaml_editor.scroll_up(3);
+                        self.base.yaml_editor.scroll_up(3);
                     }
                     Down | Char('j') => {
                         // Scroll down (vim-like navigation)
-                        self.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
+                        self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
                     }
                     Char('G') => {
                         // Jump to bottom (vim motion)
-                        self.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
+                        self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
                     }
                     Char('g') => {
                         // Jump to top (vim motion)
-                        self.yaml_editor.jump_to_top();
+                        self.base.yaml_editor.jump_to_top();
                     }
                     _ => {}
                 }

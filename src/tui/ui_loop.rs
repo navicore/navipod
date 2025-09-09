@@ -129,6 +129,7 @@ pub async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Err
 async fn run_generic_app_loop<B, A>(
     terminal: &mut Terminal<B>,
     app: A,
+    initial_app_holder: Apps,
     should_stop: Arc<AtomicBool>,
     key_events: impl Stream<Item = Message> + Unpin,
     app_updater: impl Fn(&Option<Apps>) -> Option<A>,
@@ -146,7 +147,7 @@ where
     let mut current_app = app.clone();
     
     #[allow(unused_assignments)]
-    let mut old_app_holder = None;
+    let mut old_app_holder = Some(initial_app_holder);
     #[allow(unused_assignments)]
     let mut new_app_holder = None;
     
@@ -184,6 +185,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {
@@ -199,6 +201,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {
@@ -214,6 +217,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {
@@ -229,6 +233,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {
@@ -244,6 +249,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {
@@ -259,6 +265,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {
@@ -274,6 +281,7 @@ where
             run_generic_app_loop(
                 terminal,
                 app.clone(),
+                apps_app.clone(),
                 should_stop.clone(),
                 key_events,
                 |app_holder| {

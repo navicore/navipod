@@ -8,10 +8,10 @@ use crate::tui::data::Rs;
 use crate::tui::pod_app;
 // use crate::tui::rs_app::ui; // Unused while testing modern UI
 use crate::tui::stream::Message;
-use crate::tui::style::{ITEM_HEIGHT};
-use crate::tui::yaml_editor::YamlEditor;
+use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
+use crate::tui::yaml_editor::YamlEditor;
 use crate::tui::{event_app, ingress_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::Stream;
@@ -229,10 +229,9 @@ impl App {
             Message::Rs(data_vec) => {
                 debug!("updating rs app data...");
                 let mut new_app = self.clone();
-                new_app.base.items = data_vec.clone();
-                new_app.base.scroll_state = ScrollbarState::new(
-                    data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
-                );
+                new_app.base.items.clone_from(data_vec);
+                new_app.base.scroll_state =
+                    ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
                 let new_app_holder = Apps::Rs { app: new_app };
                 app_holder = Some(new_app_holder);
             }
@@ -340,10 +339,9 @@ impl App {
             Message::Rs(data_vec) => {
                 debug!("updating rs app data...");
                 let mut new_app = self.clone();
-                new_app.base.items = data_vec.clone();
-                new_app.base.scroll_state = ScrollbarState::new(
-                    data_vec.len().saturating_sub(1) * ITEM_HEIGHT,
-                );
+                new_app.base.items.clone_from(data_vec);
+                new_app.base.scroll_state =
+                    ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
                 let new_app_holder = Apps::Rs { app: new_app };
                 app_holder = Some(new_app_holder);
             }

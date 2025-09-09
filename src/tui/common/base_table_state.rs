@@ -17,6 +17,7 @@ pub struct BaseTableState<T> {
 }
 
 impl<T> BaseTableState<T> {
+    #[must_use]
     pub fn new(items: Vec<T>) -> Self {
         Self {
             state: TableState::default().with_selected(0),
@@ -32,7 +33,7 @@ impl<T> BaseTableState<T> {
     }
 }
 
-/// Macro to generate TuiTableState implementation for apps using BaseTableState
+/// Macro to generate `TuiTableState` implementation for apps using `BaseTableState`
 #[macro_export]
 macro_rules! impl_tui_table_state {
     ($app_type:ty, $item_type:ty) => {
@@ -70,7 +71,7 @@ macro_rules! impl_tui_table_state {
             fn reset_selection_state(&mut self) {
                 self.base.state = ratatui::widgets::TableState::default().with_selected(0);
                 self.base.scroll_state = ratatui::widgets::ScrollbarState::new(
-                    self.base.items.len().saturating_sub(1) * 25 // ITEM_HEIGHT constant
+                    self.base.items.len().saturating_sub(1) * 25, // ITEM_HEIGHT constant
                 );
             }
 

@@ -31,7 +31,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     render_footer(f, main_chunks[2], &theme);
     
     // Render YAML editor overlay if active
-    yaml_editor::render_yaml_editor(f, &app.yaml_editor);
+    yaml_editor::render_yaml_editor(f, &app.base.yaml_editor);
     
     // Handle overlays
     if app.get_show_filter_edit() {
@@ -92,7 +92,7 @@ fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
 
 fn render_pod_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    let selected_index = app.state.selected().unwrap_or(0);
+    let selected_index = app.base.state.selected().unwrap_or(0);
     
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
@@ -291,7 +291,7 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
     
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {
-        let selected_index = app.state.selected().unwrap_or(0);
+        let selected_index = app.base.state.selected().unwrap_or(0);
         
         // Calculate scrollbar position based on selection
         let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(items.len().saturating_sub(visible_cards as usize))

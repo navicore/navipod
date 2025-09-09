@@ -116,6 +116,14 @@ impl AppBehavior for container_app::app::App {
                         Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.page_backward();
                         }
+                        Char('G') => {
+                            self.jump_to_bottom();
+                            app_holder = Some(Apps::Container { app: self.clone() });
+                        }
+                        Char('g') => {
+                            self.jump_to_top();
+                            app_holder = Some(Apps::Container { app: self.clone() });
+                        }
                         Enter => {
                             if let Some(selection) = self.get_selected_item() {
                                 if let Some(selectors) = selection.selectors.clone() {

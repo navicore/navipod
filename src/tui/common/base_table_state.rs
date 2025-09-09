@@ -3,16 +3,31 @@ use crate::tui::yaml_editor::YamlEditor;
 use ratatui::widgets::{ScrollbarState, TableState};
 
 /// Shared state structure containing common fields used by all table-based apps
+///
+/// This struct consolidates the common UI state that every table-based app needs:
+/// - Table navigation and selection state
+/// - Scrolling and visual styling 
+/// - Filter editing functionality
+/// - YAML viewing capability (used by apps that support 'y' key to view K8s resources)
 #[derive(Clone, Debug)]
 pub struct BaseTableState<T> {
+    /// Ratatui table widget state for selection and navigation
     pub state: TableState,
+    /// The actual data items displayed in the table
     pub items: Vec<T>,
+    /// Scrollbar widget state
     pub scroll_state: ScrollbarState,
+    /// Current color theme for the table
     pub colors: TableColors,
+    /// Index into the available color palettes
     pub color_index: usize,
+    /// Current filter text for item filtering
     pub filter: String,
+    /// Whether filter editing mode is active
     pub show_filter_edit: bool,
+    /// Cursor position when editing the filter
     pub edit_filter_cursor_position: usize,
+    /// YAML editor for viewing Kubernetes resource definitions (supports 'y' key)
     pub yaml_editor: YamlEditor,
 }
 
@@ -71,7 +86,7 @@ macro_rules! impl_tui_table_state {
             fn reset_selection_state(&mut self) {
                 self.base.state = ratatui::widgets::TableState::default().with_selected(0);
                 self.base.scroll_state = ratatui::widgets::ScrollbarState::new(
-                    self.base.items.len().saturating_sub(1) * 25, // ITEM_HEIGHT constant
+                    self.base.items.len().saturating_sub(1) * $crate::tui::style::ITEM_HEIGHT
                 );
             }
 

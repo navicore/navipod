@@ -51,6 +51,16 @@ impl AppBehavior for cert_app::app::App {
                         Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.page_backward();
                         }
+                        Char('G') => {
+                            // Jump to bottom (vim motion)
+                            self.jump_to_bottom();
+                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        }
+                        Char('g') => {
+                            // Jump to top (vim motion)
+                            self.jump_to_top();
+                            app_holder = Some(Apps::Cert { app: self.clone() });
+                        }
                         _k => {}
                     }
                 }

@@ -1,9 +1,9 @@
 use crate::cache_manager;
 use crate::impl_tui_table_state;
-use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::rs::list_replicas;
 use crate::tui::common::base_table_state::BaseTableState;
+use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
 use crate::tui::data::Rs;
 use crate::tui::pod_app;
 // use crate::tui::rs_app::ui; // Unused while testing modern UI
@@ -12,8 +12,9 @@ use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
 use crate::tui::yaml_editor::YamlEditor;
+use crate::tui::rs_app::domain::ReplicaSetDomainService;
 use crate::tui::{event_app, ingress_app};
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
@@ -28,42 +29,6 @@ use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
 
-/// Triggers prefetch of `Pod` data for the given `ReplicaSets`
-///
-/// This function generates prefetch requests for `Pod` data based on the selectors
-/// from the provided `ReplicaSets`. It respects the configured limits for the number
-/// of `ReplicaSets` to process to avoid overwhelming the system.
-async fn trigger_replicaset_pod_prefetch(replicasets: &[Rs], context: &str) {
-    use crate::k8s::cache::fetcher::PodSelector;
-
-    if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
-        let namespace = cache_manager::get_current_namespace_or_default();
-        let mut prefetch_requests = Vec::new();
-
-        // Generate Pod requests for each ReplicaSet
-        for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
-            if let Some(selectors) = &rs.selectors {
-                let pod_request = DataRequest::Pods {
-                    namespace: namespace.clone(),
-                    selector: PodSelector::ByLabels(selectors.clone()),
-                };
-                prefetch_requests.push(pod_request);
-            }
-        }
-
-        if !prefetch_requests.is_empty() {
-            debug!(
-                "🚀 {} PREFETCH: Scheduling {} Pod requests for {} ReplicaSets",
-                context,
-                prefetch_requests.len(),
-                replicasets.len()
-            );
-            if let Err(e) = bg_fetcher.schedule_fetch_batch(prefetch_requests).await {
-                warn!("Failed to schedule {} prefetch: {}", context, e);
-            }
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -127,7 +92,7 @@ impl AppBehavior for App {
                     update = cache_rx.recv() => {
                         if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update {
                             // IMMEDIATE PREFETCH: Trigger Pod fetching for subscription updates too
-                            trigger_replicaset_pod_prefetch(&new_items, "UPDATE").await;
+                            ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "UPDATE").await;
 
                             if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
                                 break;
@@ -141,7 +106,7 @@ impl AppBehavior for App {
                      if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
                          debug!("⚡ Using cached ReplicaSets data ({} items)", cached_items.len());
                          // IMMEDIATE PREFETCH: Trigger Pod fetching for cached ReplicaSets too
-                         trigger_replicaset_pod_prefetch(&cached_items, "CACHED").await;
+                         ReplicaSetDomainService::trigger_pod_prefetch(&cached_items, "CACHED").await;
 
                          if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Rs(cached_items)).await.is_err() {
                              break;
@@ -157,7 +122,7 @@ impl AppBehavior for App {
                                      let _ = cache.put(&request, fetch_result).await;
 
                                      // IMMEDIATE PREFETCH: Trigger Pod fetching for visible ReplicaSets
-                                     trigger_replicaset_pod_prefetch(&new_items, "IMMEDIATE").await;
+                                     ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE").await;
 
                                      if new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
                                          break;
@@ -240,114 +205,110 @@ impl App {
         app_holder
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn handle_table_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        let mut app_holder = Some(Apps::Rs { app: self.clone() });
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Up};
-
-                    match key.code {
-                        Char('q') => {
-                            app_holder = None;
-                            debug!("quitting...");
+                    // First try common keys (navigation, quit, color, vim motions)
+                    return match handle_common_keys(self, key, |app| Apps::Rs { app }) {
+                        KeyHandlerResult::Quit => Ok(None),
+                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::NotHandled => {
+                            // Handle RS-specific keys
+                            self.handle_rs_specific_keys(key).await
                         }
-                        Char('j') | Down => {
-                            self.next();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('k') | Up => {
-                            self.previous();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('c' | 'C') => {
-                            self.next_color();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('e') => {
-                            let new_app_holder = Apps::Event {
-                                app: event_app::app::App::new(),
-                            };
-                            app_holder = Some(new_app_holder);
-                            debug!("changing app from rs to event...");
-                        }
-                        Char('i' | 'I') => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selector) = selection.selectors.clone() {
-                                    let data_vec =
-                                        create_ingress_data_vec(selector.clone()).await?;
-                                    let new_app_holder = Apps::Ingress {
-                                        app: ingress_app::app::App::new(data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to ingress...");
-                                }
-                            }
-                        }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_forward();
-                        }
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_backward();
-                        }
-                        Enter => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selectors) = selection.selectors.clone() {
-                                    let data_vec = vec![];
-                                    let new_app_holder = Apps::Pod {
-                                        app: pod_app::app::App::new(selectors, data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to pod...");
-                                }
-                            }
-                        }
-                        Char('/') => {
-                            self.set_show_filter_edit(true);
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('y' | 'Y') => {
-                            // View YAML
-                            if let Some(selection) = self.get_selected_item() {
-                                self.base.yaml_editor = YamlEditor::new(
-                                    "replicaset".to_string(),
-                                    selection.name.clone(),
-                                    Some(cache_manager::get_current_namespace_or_default()),
-                                );
-                                if let Err(e) = self.base.yaml_editor.fetch_yaml() {
-                                    debug!("Error fetching YAML: {}", e);
-                                }
-                            }
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('G') => {
-                            // Jump to bottom (vim motion)
-                            self.jump_to_bottom();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        Char('g') => {
-                            // Jump to top (vim motion)
-                            self.jump_to_top();
-                            app_holder = Some(Apps::Rs { app: self.clone() });
-                        }
-                        // Removed 'E' key binding - now only 'y' for read-only YAML view
-                        _k => {}
-                    }
+                    };
                 }
+                Ok(Some(Apps::Rs { app: self.clone() }))
             }
             Message::Rs(data_vec) => {
-                debug!("updating rs app data...");
-                let mut new_app = self.clone();
-                new_app.base.items.clone_from(data_vec);
-                new_app.base.scroll_state =
-                    ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
-                let new_app_holder = Apps::Rs { app: new_app };
-                app_holder = Some(new_app_holder);
+                Ok(Some(self.handle_data_update(data_vec)))
             }
-            _ => {}
+            _ => Ok(Some(Apps::Rs { app: self.clone() })),
         }
-        Ok(app_holder)
+    }
+
+    /// Handle RS-specific key events that aren't covered by common key handler
+    async fn handle_rs_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Result<Option<Apps>, io::Error> {
+        use KeyCode::{Char, Enter};
+        
+        match key.code {
+            Char('e') => {
+                debug!("changing app from rs to event...");
+                Ok(Some(Self::handle_switch_to_events()))
+            }
+            Char('i' | 'I') => self.handle_switch_to_ingress().await,
+            Enter => Ok(Some(self.handle_switch_to_pods())),
+            Char('/') => Ok(Some(self.handle_filter_mode())),
+            Char('y' | 'Y') => Ok(Some(self.handle_yaml_view())),
+            _ => Ok(Some(Apps::Rs { app: self.clone() })),
+        }
+    }
+
+    /// Handle data update message
+    fn handle_data_update(&self, data_vec: &[Rs]) -> Apps {
+        debug!("updating rs app data...");
+        let mut new_app = self.clone();
+        new_app.base.items = data_vec.to_vec();
+        new_app.base.scroll_state =
+            ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
+        Apps::Rs { app: new_app }
+    }
+
+    /// Switch to Events app
+    fn handle_switch_to_events() -> Apps {
+        Apps::Event {
+            app: event_app::app::App::new(),
+        }
+    }
+
+    /// Switch to Ingress app
+    async fn handle_switch_to_ingress(&mut self) -> Result<Option<Apps>, io::Error> {
+        if let Some(selection) = self.get_selected_item() {
+            if let Some(selector) = selection.selectors.clone() {
+                let data_vec = create_ingress_data_vec(selector.clone()).await?;
+                debug!("changing app from rs to ingress...");
+                return Ok(Some(Apps::Ingress {
+                    app: ingress_app::app::App::new(data_vec),
+                }));
+            }
+        }
+        Ok(Some(Apps::Rs { app: self.clone() }))
+    }
+
+    /// Switch to Pods app
+    fn handle_switch_to_pods(&mut self) -> Apps {
+        if let Some(selection) = self.get_selected_item() {
+            if let Some(selectors) = selection.selectors.clone() {
+                let data_vec = vec![];
+                debug!("changing app from rs to pod...");
+                return Apps::Pod {
+                    app: pod_app::app::App::new(selectors, data_vec),
+                };
+            }
+        }
+        Apps::Rs { app: self.clone() }
+    }
+
+    /// Enter filter editing mode
+    fn handle_filter_mode(&mut self) -> Apps {
+        self.set_show_filter_edit(true);
+        Apps::Rs { app: self.clone() }
+    }
+
+    /// View YAML for selected `ReplicaSet`
+    fn handle_yaml_view(&mut self) -> Apps {
+        if let Some(selection) = self.get_selected_item() {
+            self.base.yaml_editor = YamlEditor::new(
+                "replicaset".to_string(),
+                selection.name.clone(),
+                Some(cache_manager::get_current_namespace_or_default()),
+            );
+            if let Err(e) = self.base.yaml_editor.fetch_yaml() {
+                debug!("Error fetching YAML: {}", e);
+            }
+        }
+        Apps::Rs { app: self.clone() }
     }
 
     pub const fn set_cursor_pos(&mut self, cursor_pos: usize) {

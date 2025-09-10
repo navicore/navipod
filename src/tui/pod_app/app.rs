@@ -1,5 +1,6 @@
 use crate::impl_tui_table_state;
 use crate::tui::common::base_table_state::BaseTableState;
+use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
 use crate::tui::container_app;
 use crate::tui::data::RsPod;
 use crate::tui::ingress_app;
@@ -16,7 +17,7 @@ use crate::{
         pods::list_rspods,
     },
 };
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
@@ -41,137 +42,32 @@ pub struct App {
 impl_tui_table_state!(App, RsPod);
 
 impl AppBehavior for pod_app::app::App {
-    #[allow(clippy::too_many_lines)]
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        let mut app_holder = Some(Apps::Pod { app: self.clone() });
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Esc, Up};
-
                     // Handle YAML editor events first if active
                     if self.base.yaml_editor.is_active {
-                        match key.code {
-                            Char('q') | Esc => {
-                                self.base.yaml_editor.close();
-                            }
-                            Char('r' | 'R') => {
-                                // Refresh YAML content
-                                self.base.yaml_editor.fetch_yaml()?;
-                            }
-                            // Removed mode switching - now read-only viewer only
-                            Up | Char('k') => {
-                                // Scroll up (vim-like navigation)
-                                self.base.yaml_editor.scroll_up(3);
-                            }
-                            Down | Char('j') => {
-                                // Scroll down (vim-like navigation)
-                                self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
-                            }
-                            Char('G') => {
-                                // Jump to bottom (vim motion)
-                                self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
-                            }
-                            Char('g') => {
-                                // Jump to top (vim motion)
-                                self.base.yaml_editor.jump_to_top();
-                            }
-                            _k => {}
-                        }
-                        app_holder = Some(Apps::Pod { app: self.clone() });
-                        return Ok(app_holder);
+                        return self.handle_yaml_editor_event(event);
                     }
-
-                    match key.code {
-                        Char('q') | Esc => {
-                            app_holder = None;
+                    
+                    // First try common keys (navigation, quit, color, vim motions)
+                    return match handle_common_keys(self, key, |app| Apps::Pod { app }) {
+                        KeyHandlerResult::Quit => Ok(None),
+                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::NotHandled => {
+                            // Handle Pod-specific keys
+                            self.handle_pod_specific_keys(key).await
                         }
-                        Char('j') | Down => {
-                            self.next();
-                            app_holder = Some(Apps::Pod { app: self.clone() });
-                        }
-                        Char('k') | Up => {
-                            self.previous();
-                            app_holder = Some(Apps::Pod { app: self.clone() });
-                        }
-                        Char('c' | 'C') => {
-                            self.next_color();
-                            app_holder = Some(Apps::Pod { app: self.clone() });
-                        }
-                        Char('i' | 'I') => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selector) = selection.selectors.clone() {
-                                    let data_vec =
-                                        create_ingress_data_vec(selector.clone()).await?;
-                                    let new_app_holder = Apps::Ingress {
-                                        app: ingress_app::app::App::new(data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                    debug!("changing app from rs to ingress...");
-                                }
-                            }
-                        }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_forward();
-                        }
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_backward();
-                        }
-                        Enter => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selectors) = selection.selectors.clone() {
-                                    let data_vec = create_container_data_vec(
-                                        selectors,
-                                        selection.name.clone(),
-                                    )
-                                    .await?;
-                                    let new_app_holder = Apps::Container {
-                                        app: container_app::app::App::new(data_vec),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                }
-                            }
-                        }
-                        Char('y' | 'Y') => {
-                            // View YAML
-                            if let Some(selection) = self.get_selected_item() {
-                                self.base.yaml_editor = YamlEditor::new(
-                                    "pod".to_string(),
-                                    selection.name.clone(),
-                                    Some(cache_manager::get_current_namespace_or_default()),
-                                );
-                                if let Err(e) = self.base.yaml_editor.fetch_yaml() {
-                                    debug!("Error fetching YAML: {}", e);
-                                }
-                            }
-                            app_holder = Some(Apps::Pod { app: self.clone() });
-                        }
-                        Char('G') => {
-                            // Jump to bottom (vim motion)
-                            self.jump_to_bottom();
-                            app_holder = Some(Apps::Pod { app: self.clone() });
-                        }
-                        Char('g') => {
-                            // Jump to top (vim motion)
-                            self.jump_to_top();
-                            app_holder = Some(Apps::Pod { app: self.clone() });
-                        }
-                        _k => {}
-                    }
+                    };
                 }
+                Ok(Some(Apps::Pod { app: self.clone() }))
             }
             Message::Pod(data_vec) => {
-                debug!("updating pod app data...");
-                let mut new_app = self.clone();
-                new_app.base.items.clone_from(data_vec);
-                new_app.base.scroll_state =
-                    ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
-                let new_app_holder = Apps::Pod { app: new_app };
-                app_holder = Some(new_app_holder);
+                Ok(Some(self.handle_data_update(data_vec)))
             }
-            _ => {}
+            _ => Ok(Some(Apps::Pod { app: self.clone() })),
         }
-        Ok(app_holder)
     }
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
         terminal.draw(|f| super::modern_ui::ui(f, self))?; // Use modern UI
@@ -279,6 +175,114 @@ impl App {
             base: BaseTableState::new(data_vec),
             selector,
         }
+    }
+
+    /// Handle Pod-specific key events that aren't covered by common key handler
+    async fn handle_pod_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Result<Option<Apps>, io::Error> {
+        use KeyCode::{Char, Enter};
+        
+        match key.code {
+            Char('i' | 'I') => self.handle_switch_to_ingress().await,
+            Enter => self.handle_switch_to_containers().await,
+            Char('y' | 'Y') => Ok(Some(self.handle_yaml_view())),
+            _ => Ok(Some(Apps::Pod { app: self.clone() })),
+        }
+    }
+
+    /// Handle data update message
+    fn handle_data_update(&self, data_vec: &[RsPod]) -> Apps {
+        debug!("updating pod app data...");
+        let mut new_app = self.clone();
+        new_app.base.items = data_vec.to_vec();
+        new_app.base.scroll_state =
+            ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
+        Apps::Pod { app: new_app }
+    }
+
+    /// Switch to Ingress app
+    async fn handle_switch_to_ingress(&mut self) -> Result<Option<Apps>, io::Error> {
+        if let Some(selection) = self.get_selected_item() {
+            if let Some(selector) = selection.selectors.clone() {
+                let data_vec = create_ingress_data_vec(selector.clone()).await?;
+                debug!("changing app from pod to ingress...");
+                return Ok(Some(Apps::Ingress {
+                    app: ingress_app::app::App::new(data_vec),
+                }));
+            }
+        }
+        Ok(Some(Apps::Pod { app: self.clone() }))
+    }
+
+    /// Switch to Containers app
+    async fn handle_switch_to_containers(&mut self) -> Result<Option<Apps>, io::Error> {
+        if let Some(selection) = self.get_selected_item() {
+            if let Some(selectors) = selection.selectors.clone() {
+                let data_vec = create_container_data_vec(
+                    selectors,
+                    selection.name.clone(),
+                ).await?;
+                debug!("changing app from pod to container...");
+                return Ok(Some(Apps::Container {
+                    app: container_app::app::App::new(data_vec),
+                }));
+            }
+        }
+        Ok(Some(Apps::Pod { app: self.clone() }))
+    }
+
+    /// View YAML for selected Pod
+    fn handle_yaml_view(&mut self) -> Apps {
+        if let Some(selection) = self.get_selected_item() {
+            self.base.yaml_editor = YamlEditor::new(
+                "pod".to_string(),
+                selection.name.clone(),
+                Some(cache_manager::get_current_namespace_or_default()),
+            );
+            if let Err(e) = self.base.yaml_editor.fetch_yaml() {
+                debug!("Error fetching YAML: {}", e);
+            }
+        }
+        Apps::Pod { app: self.clone() }
+    }
+
+    /// Handle YAML editor events
+    fn handle_yaml_editor_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+        if let Message::Key(Event::Key(key)) = event {
+            if key.kind == KeyEventKind::Press {
+                use KeyCode::{Char, Down, Esc, Up};
+
+                match key.code {
+                    Char('q') | Esc => {
+                        // Close YAML editor
+                        self.base.yaml_editor.close();
+                    }
+                    Char('r' | 'R') => {
+                        // Refresh YAML content
+                        self.base.yaml_editor.fetch_yaml()?;
+                    }
+                    // Removed mode switching - now read-only viewer only
+                    Up | Char('k') => {
+                        // Scroll up (vim-like navigation)
+                        self.base.yaml_editor.scroll_up(3);
+                    }
+                    Down | Char('j') => {
+                        // Scroll down (vim-like navigation)
+                        self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
+                    }
+                    Char('G') => {
+                        // Jump to bottom (vim motion)
+                        self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
+                    }
+                    Char('g') => {
+                        // Jump to top (vim motion)
+                        self.base.yaml_editor.jump_to_top();
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(Some(Apps::Pod { app: self.clone() }))
     }
 
     pub fn get_event_details(&mut self) -> Vec<(String, String, Option<String>)> {

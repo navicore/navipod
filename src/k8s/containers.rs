@@ -27,7 +27,32 @@ fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
 
 /// Extract probe configuration from a Kubernetes probe specification
 fn extract_probe_info(probe: &Probe, probe_type: &str) -> ContainerProbe {
-    let (handler_type, details) = if let Some(http_get) = &probe.http_get {
+    let (handler_type, details) = probe.http_get.as_ref().map_or_else(|| {
+        probe.tcp_socket.as_ref().map_or_else(|| {
+            probe.exec.as_ref().map_or_else(|| {
+                (
+                    "Unknown".to_string(),
+                    "No handler specified".to_string()
+                )
+            }, |exec| {
+                let command = exec.command.as_ref().map_or_else(|| "No command specified".to_string(), |cmd| cmd.join(" "));
+                (
+                    "Exec".to_string(),
+                    format!("Run: {command}")
+                )
+            })
+        }, |tcp_socket| {
+            let port = match &tcp_socket.port {
+                k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(port) => port.to_string(),
+                k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(port) => port.clone(),
+            };
+            let host = tcp_socket.host.as_deref().unwrap_or("localhost");
+            (
+                "TCP".to_string(),
+                format!("Connect to {host}:{port}")
+            )
+        })
+    }, |http_get| {
         let path = http_get.path.as_deref().unwrap_or("/");
         let port = match &http_get.port {
             k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(port) => port.to_string(),
@@ -39,30 +64,7 @@ fn extract_probe_info(probe: &Probe, probe_type: &str) -> ContainerProbe {
             "HTTP".to_string(),
             format!("{} {}://{}:{}{}", "GET", scheme.to_lowercase(), host, port, path)
         )
-    } else if let Some(tcp_socket) = &probe.tcp_socket {
-        let port = match &tcp_socket.port {
-            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(port) => port.to_string(),
-            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(port) => port.clone(),
-        };
-        let host = tcp_socket.host.as_deref().unwrap_or("localhost");
-        (
-            "TCP".to_string(),
-            format!("Connect to {}:{}", host, port)
-        )
-    } else if let Some(exec) = &probe.exec {
-        let command = exec.command.as_ref()
-            .map(|cmd| cmd.join(" "))
-            .unwrap_or_else(|| "No command specified".to_string());
-        (
-            "Exec".to_string(),
-            format!("Run: {}", command)
-        )
-    } else {
-        (
-            "Unknown".to_string(),
-            "No handler specified".to_string()
-        )
-    };
+    });
 
     ContainerProbe {
         probe_type: probe_type.to_string(),

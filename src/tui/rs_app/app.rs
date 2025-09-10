@@ -33,6 +33,8 @@ const POLL_MS: u64 = 5000;
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) base: BaseTableState<Rs>,
+    /// Track background fetch activity for UI indicator
+    pub(crate) has_background_activity: bool,
 }
 
 impl_tui_table_state!(App, Rs);
@@ -156,7 +158,18 @@ impl App {
     pub fn new(data_vec: Vec<Rs>) -> Self {
         Self {
             base: BaseTableState::new(data_vec),
+            has_background_activity: false,
         }
+    }
+
+    /// Update background activity status for UI indicator
+    pub async fn update_activity_status(&mut self) {
+        self.has_background_activity = cache_manager::has_background_activity().await;
+    }
+
+    /// Get current background activity status
+    pub const fn get_background_activity(&self) -> bool {
+        self.has_background_activity
     }
 
     fn handle_filter_edit_event(&mut self, event: &Message) -> Option<Apps> {
@@ -222,7 +235,7 @@ impl App {
                 Ok(Some(Apps::Rs { app: self.clone() }))
             }
             Message::Rs(data_vec) => {
-                Ok(Some(self.handle_data_update(data_vec)))
+                Ok(Some(self.handle_data_update(data_vec).await))
             }
             _ => Ok(Some(Apps::Rs { app: self.clone() })),
         }
@@ -246,12 +259,16 @@ impl App {
     }
 
     /// Handle data update message
-    fn handle_data_update(&self, data_vec: &[Rs]) -> Apps {
+    async fn handle_data_update(&self, data_vec: &[Rs]) -> Apps {
         debug!("updating rs app data...");
         let mut new_app = self.clone();
         new_app.base.items = data_vec.to_vec();
         new_app.base.scroll_state =
             ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
+        
+        // Update background activity status for UI indicator
+        new_app.update_activity_status().await;
+        
         Apps::Rs { app: new_app }
     }
 

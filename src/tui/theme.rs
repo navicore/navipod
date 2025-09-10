@@ -187,6 +187,7 @@ impl Symbols {
     pub const SPINNER: [&'static str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
     pub const PROGRESS_EMPTY: &'static str = "░";
     pub const PROGRESS_FILL: &'static str = "█";
+    pub const FETCH_ACTIVITY: &'static str = "⟳";  // Subtle indicator for background fetch activity
     
     // Borders (rounded)
     pub const BORDER_TOP_LEFT: &'static str = "╭";

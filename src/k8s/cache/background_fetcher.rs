@@ -231,10 +231,11 @@ impl BackgroundFetcher {
                             drop(metrics); // Release metrics lock early
                         }
                         
-                        // PREDICTIVE PREFETCH: After successful cache storage, prefetch related data
-                        let prefetch_requests = cache.prefetch_related(&task.request).await;
+                        // PREDICTIVE PREFETCH: Use fresh data to generate prefetch requests immediately
+                        // This solves the chicken-and-egg problem where prefetch_related() required cached data
+                        let prefetch_requests = cache.prefetch_related_with_data(&task.request, &data);
                         if !prefetch_requests.is_empty() {
-                            info!("🔮 PREFETCH TRIGGERED: {} related requests for {}", 
+                            info!("🔮 PREFETCH TRIGGERED: {} related requests for {} using fresh data", 
                                   prefetch_requests.len(), cache_key);
                             
                             // Batch the prefetch tasks instead of spawning individual tasks
@@ -547,6 +548,20 @@ impl BackgroundFetcher {
                 metrics.successful_prefetches as f64 / total as f64
             }
         }
+    }
+
+    /// Get current fetch activity status for UI indicators
+    /// Returns (`active_fetches`, `queued_fetches`)
+    pub async fn get_activity_status(&self) -> (usize, usize) {
+        let active_count = self.active_fetches.read().await.len();
+        let queued_count = self.task_queue.read().await.len();
+        (active_count, queued_count)
+    }
+
+    /// Check if there's any background activity (active or queued fetches)
+    pub async fn has_activity(&self) -> bool {
+        let (active, queued) = self.get_activity_status().await;
+        active > 0 || queued > 0
     }
 }
 

@@ -163,6 +163,26 @@ pub fn get_background_fetcher() -> Option<Arc<BackgroundFetcher>> {
     BACKGROUND_FETCHER.get().cloned()
 }
 
+/// Check if there's any background fetch activity for UI indicators
+/// Returns true if there are active or queued fetch operations
+pub async fn has_background_activity() -> bool {
+    if let Some(fetcher) = get_background_fetcher() {
+        fetcher.has_activity().await
+    } else {
+        false
+    }
+}
+
+/// Get detailed background fetch activity status
+/// Returns (`active_fetches`, `queued_fetches`) or (0, 0) if fetcher not available
+pub async fn get_background_activity_status() -> (usize, usize) {
+    if let Some(fetcher) = get_background_fetcher() {
+        fetcher.get_activity_status().await
+    } else {
+        (0, 0)
+    }
+}
+
 /// Shutdown the cache system (background fetcher and watch manager)
 ///
 /// This should be called on application exit

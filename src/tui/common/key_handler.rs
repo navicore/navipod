@@ -1,6 +1,6 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::Apps;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Result of handling a common key event
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ pub enum KeyHandlerResult {
 }
 
 /// Handles common key events that are shared across all table-based apps
-/// Returns KeyHandlerResult indicating whether the key was handled and what action to take
+/// Returns `KeyHandlerResult` indicating whether the key was handled and what action to take
 pub fn handle_common_keys<T: TuiTableState + Clone>(
     app: &mut T,
     key_event: &KeyEvent,
@@ -25,15 +25,15 @@ pub fn handle_common_keys<T: TuiTableState + Clone>(
     match key_event.code {
         // Quit application
         KeyCode::Char('q') | KeyCode::Esc => KeyHandlerResult::Quit,
-        
+
         // Navigation: j/k (up/down) - handled by individual apps since they need custom logic
-        
+
         // Color cycling
         KeyCode::Char('c' | 'C') => {
             app.next_color();
             KeyHandlerResult::HandledWithUpdate(Some(app_variant(app.clone())))
         }
-        
+
         // Page forward/backward
         KeyCode::Char('f' | 'F') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             app.page_forward();
@@ -43,7 +43,7 @@ pub fn handle_common_keys<T: TuiTableState + Clone>(
             app.page_backward();
             KeyHandlerResult::Handled(None) // No need to clone app for page backward
         }
-        
+
         // Vim-style navigation
         KeyCode::Char('G') => {
             app.jump_to_bottom();
@@ -53,14 +53,17 @@ pub fn handle_common_keys<T: TuiTableState + Clone>(
             app.jump_to_top();
             KeyHandlerResult::HandledWithUpdate(Some(app_variant(app.clone())))
         }
-        
+
         // Not a common key
         _ => KeyHandlerResult::NotHandled,
     }
 }
 
 /// Handles YAML editor key events
-pub fn handle_yaml_editor_keys(key_event: &KeyEvent, yaml_editor: &mut crate::tui::yaml_editor::YamlEditor) -> bool {
+pub fn handle_yaml_editor_keys(
+    key_event: &KeyEvent,
+    yaml_editor: &mut crate::tui::yaml_editor::YamlEditor,
+) -> bool {
     match key_event.code {
         KeyCode::Char('q') | KeyCode::Esc => {
             yaml_editor.close();
@@ -139,20 +142,18 @@ pub fn handle_filter_editing_keys<T: TuiTableState + Clone>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crossterm::event::KeyEventKind;
-    
+
     // Basic test structure - would need to be expanded with actual test implementations
     #[test]
     fn test_quit_key_handling() {
         // Test that 'q' and Esc keys return Quit result
     }
-    
+
     #[test]
     fn test_navigation_key_handling() {
         // Test that G/g keys trigger jump operations
     }
-    
+
     #[test]
     fn test_color_cycling() {
         // Test that c/C keys trigger color changes

@@ -1,5 +1,6 @@
 use crate::impl_tui_table_state;
 use crate::tui::common::base_table_state::BaseTableState;
+use crate::tui::common::stream_factory::StreamFactory;
 use crate::tui::container_app;
 use crate::tui::data::Container;
 use crate::tui::log_app;
@@ -8,7 +9,7 @@ use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
-use futures::{stream, Stream};
+use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
 use std::io;
@@ -97,7 +98,7 @@ impl AppBehavior for container_app::app::App {
     }
 
     fn stream(&self, _should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
-        stream::empty()
+        StreamFactory::empty()
     }
 }
 

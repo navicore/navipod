@@ -1,5 +1,6 @@
 use crate::impl_tui_table_state;
 use crate::tui::common::base_table_state::BaseTableState;
+use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
 use crate::tui::common::stream_factory::StreamFactory;
 use crate::tui::container_app;
 use crate::tui::data::Container;
@@ -8,7 +9,8 @@ use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use tracing::debug;
+use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
@@ -25,60 +27,20 @@ impl_tui_table_state!(App, Container);
 
 impl AppBehavior for container_app::app::App {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        let mut app_holder = Some(Apps::Container { app: self.clone() });
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Esc, Up};
-                    match key.code {
-                        Char('q') | Esc => {
-                            app_holder = None;
+                    // First try common keys (navigation, quit, color, vim motions)
+                    return match handle_common_keys(self, key, |app| Apps::Container { app }) {
+                        KeyHandlerResult::Quit => Ok(None),
+                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::NotHandled => {
+                            // Handle Container-specific keys
+                            Ok(Some(self.handle_container_specific_keys(key)))
                         }
-                        Char('j') | Down => {
-                            self.next();
-                            //todo: stop all this cloning
-                            app_holder = Some(Apps::Container { app: self.clone() });
-                        }
-                        Char('k') | Up => {
-                            self.previous();
-                            app_holder = Some(Apps::Container { app: self.clone() });
-                        }
-                        Char('c' | 'C') => {
-                            self.next_color();
-                            app_holder = Some(Apps::Container { app: self.clone() });
-                        }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_forward();
-                        }
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_backward();
-                        }
-                        Char('G') => {
-                            self.jump_to_bottom();
-                            app_holder = Some(Apps::Container { app: self.clone() });
-                        }
-                        Char('g') => {
-                            self.jump_to_top();
-                            app_holder = Some(Apps::Container { app: self.clone() });
-                        }
-                        Enter => {
-                            if let Some(selection) = self.get_selected_item() {
-                                if let Some(selectors) = selection.selectors.clone() {
-                                    let new_app_holder = Apps::Log {
-                                        app: log_app::app::App::new(
-                                            selectors,
-                                            selection.pod_name.clone(),
-                                            selection.name.clone(),
-                                        ),
-                                    };
-                                    app_holder = Some(new_app_holder);
-                                }
-                            }
-                        }
-
-                        _k => {}
-                    }
+                    };
                 }
+                Ok(Some(Apps::Container { app: self.clone() }))
             }
             Message::Container(data_vec) => {
                 let mut new_app = self.clone();
@@ -86,11 +48,10 @@ impl AppBehavior for container_app::app::App {
                 new_app.base.scroll_state =
                     ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
                 let new_app_holder = Apps::Container { app: new_app };
-                app_holder = Some(new_app_holder);
+                Ok(Some(new_app_holder))
             }
-            _ => {}
+            _ => Ok(Some(Apps::Container { app: self.clone() }))
         }
-        Ok(app_holder)
     }
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
         terminal.draw(|f| super::modern_ui::ui(f, self))?; // Use modern UI
@@ -106,6 +67,40 @@ impl App {
     pub fn new(data_vec: Vec<Container>) -> Self {
         Self {
             base: BaseTableState::new(data_vec),
+        }
+    }
+
+    /// Handle Container-specific key events that aren't covered by common key handler
+    fn handle_container_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Apps {
+        use KeyCode::{Enter, Esc};
+        
+        match key.code {
+            Esc => {
+                // Navigate back to Pod page
+                debug!("navigating back from container to pod...");
+                let data_vec = vec![];
+                Apps::Pod {
+                    app: crate::tui::pod_app::app::App::new(
+                        std::collections::BTreeMap::new(), 
+                        data_vec
+                    ),
+                }
+            }
+            Enter => {
+                if let Some(selection) = self.get_selected_item() {
+                    if let Some(selectors) = selection.selectors.clone() {
+                        return Apps::Log {
+                            app: log_app::app::App::new(
+                                selectors,
+                                selection.pod_name.clone(),
+                                selection.name.clone(),
+                            ),
+                        };
+                    }
+                }
+                Apps::Container { app: self.clone() }
+            }
+            _ => Apps::Container { app: self.clone() },
         }
     }
 

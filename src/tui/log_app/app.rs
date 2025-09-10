@@ -1,13 +1,14 @@
 use crate::impl_tui_table_state;
 use crate::k8s::containers::logs;
 use crate::tui::common::base_table_state::BaseTableState;
+use crate::tui::common::key_handler::{handle_common_keys, handle_filter_editing_keys, KeyHandlerResult};
 use crate::tui::data::LogRec;
 use crate::tui::log_app;
 use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
@@ -36,9 +37,9 @@ impl_tui_table_state!(App, LogRec);
 impl AppBehavior for log_app::app::App {
     async fn handle_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         if self.get_show_filter_edit() {
-            Ok(self.handle_filter_edit_event(event))
+            Ok(Some(self.handle_filter_edit_event(event)))
         } else {
-            Ok(self.handle_table_event(event))
+            self.handle_table_event(event)
         }
     }
 
@@ -93,100 +94,65 @@ impl App {
         }
     }
 
-    fn handle_table_event(&mut self, event: &Message) -> Option<Apps> {
-        let mut app_holder = Some(Apps::Log { app: self.clone() });
+    /// Handle Log-specific key events that aren't covered by common key handler
+    fn handle_log_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Apps {
+        use KeyCode::{Char, Enter};
+        
+        match key.code {
+            Char('/') => {
+                self.set_show_filter_edit(true);
+                Apps::Log { app: self.clone() }
+            }
+            Enter => {
+                // noop for now but will be pretty printed detail analysis popup
+                Apps::Log { app: self.clone() }
+            }
+            _ => Apps::Log { app: self.clone() },
+        }
+    }
+
+    fn handle_table_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Char, Down, Enter, Esc, Up};
-                    match key.code {
-                        Char('q') | Esc => {
-                            app_holder = None;
-                        }
-                        Char('j') | Down => {
-                            self.next();
-                            //todo: stop all this cloning
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Char('k') | Up => {
-                            self.previous();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Char('c' | 'C') => {
-                            self.next_color();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_forward();
-                        }
-                        Char('b' | 'B') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            self.page_backward();
-                        }
-                        Enter => {
-                            // noop for now but will be pretty printed detail analysis popup
-                        }
-                        Char('/') => {
-                            self.set_show_filter_edit(true);
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Char('G') => {
-                            // Jump to bottom (vim motion)
-                            self.jump_to_bottom();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Char('g') => {
-                            // Jump to top (vim motion)
-                            self.jump_to_top();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        _k => {}
+                    // Handle ESC specially to return None for history navigation
+                    if key.code == KeyCode::Esc {
+                        debug!("navigating back from log to container...");
+                        return Ok(None); // This will use the history stack
                     }
+                    
+                    // First try common keys (navigation, quit, color, vim motions)
+                    return match handle_common_keys(self, key, |app| Apps::Log { app }) {
+                        KeyHandlerResult::Quit => Ok(None),
+                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::NotHandled => {
+                            // Handle Log-specific keys
+                            Ok(Some(self.handle_log_specific_keys(key)))
+                        }
+                    };
                 }
+                Ok(Some(Apps::Log { app: self.clone() }))
             }
             Message::Log(data_vec) => {
                 let mut new_app = self.clone();
                 new_app.base.items.clone_from(data_vec);
                 new_app.base.scroll_state =
                     ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
-                let new_app_holder = Apps::Log { app: new_app };
-                app_holder = Some(new_app_holder);
+                Ok(Some(Apps::Log { app: new_app }))
             }
-            _ => {}
+            _ => Ok(Some(Apps::Log { app: self.clone() }))
         }
-        app_holder
     }
 
-    fn handle_filter_edit_event(&mut self, event: &Message) -> Option<Apps> {
-        let mut app_holder = Some(Apps::Log { app: self.clone() });
+    fn handle_filter_edit_event(&mut self, event: &Message) -> Apps {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
-                    use KeyCode::{Backspace, Char, Enter, Esc, Left, Right};
-
-                    match key.code {
-                        Char(to_insert) => {
-                            self.enter_char(to_insert);
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Backspace => {
-                            self.delete_char();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Left => {
-                            self.move_cursor_left();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Right => {
-                            self.move_cursor_right();
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        Esc | Enter => {
-                            self.set_show_filter_edit(false);
-                            app_holder = Some(Apps::Log { app: self.clone() });
-                        }
-                        _ => {}
+                    if let Some(app) = handle_filter_editing_keys(self, key, |app| Apps::Log { app }) {
+                        return app;
                     }
                 }
+                Apps::Log { app: self.clone() }
             }
             Message::Log(data_vec) => {
                 debug!("updating log app data...");
@@ -194,11 +160,9 @@ impl App {
                 new_app.base.items.clone_from(data_vec);
                 new_app.base.scroll_state =
                     ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
-                let new_app_holder = Apps::Log { app: new_app };
-                app_holder = Some(new_app_holder);
+                Apps::Log { app: new_app }
             }
-            _ => {}
+            _ => Apps::Log { app: self.clone() }
         }
-        app_holder
     }
 }

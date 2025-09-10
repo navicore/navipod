@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod client;
+pub mod client_manager;
 pub mod containers;
 pub mod events;
 pub mod pod_ingress;

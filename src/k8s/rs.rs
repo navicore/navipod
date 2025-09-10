@@ -5,12 +5,12 @@ use crate::tui::data::Rs;
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use kube::{Api, Client};
+use kube::Api;
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 
-use super::client::new;
+use crate::k8s::client_manager::{get_client, refresh_client, should_refresh_client};
 
 fn calculate_rs_age(rs: &ReplicaSet) -> String {
     rs.metadata.creation_timestamp.as_ref().map_or_else(
@@ -29,16 +29,27 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
 pub async fn list_replicas() -> Result<Vec<Rs>> {
-    let client = new(None).await?;
+    let mut client = get_client().await?;
 
-    let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone())
-        .list(&ListParams::default())
-        .await?;
+    // Try the operation, with one retry on auth error
+    let rs_list: ObjectList<ReplicaSet> = {
+        let api = Api::default_namespaced((*client).clone());
+        match api.list(&ListParams::default()).await {
+            Ok(result) => result,
+            Err(e) if should_refresh_client(&e) => {
+                // Auth error - try refreshing client and retry once
+                client = refresh_client().await?;
+                let api = Api::default_namespaced((*client).clone());
+                api.list(&ListParams::default()).await?
+            }
+            Err(e) => return Err(e.into()),
+        }
+    };
 
     let mut rs_vec = Vec::new();
 
     // get all events from the cluster to avoid calls for each rs
-    let events = list_k8sevents(client).await?;
+    let events = list_k8sevents((*client).clone()).await?;
 
     for rs in rs_list.items {
         if let Some(owners) = &rs.metadata.owner_references {
@@ -86,13 +97,13 @@ pub async fn list_replicas() -> Result<Vec<Rs>> {
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 pub async fn get_replicaset(selector: BTreeMap<String, String>) -> Result<Option<ReplicaSet>> {
-    let client = Client::try_default().await?;
+    let client = get_client().await?;
 
     let label_selector = format_label_selector(&selector);
 
     let lp = ListParams::default().labels(&label_selector);
 
-    let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced(client.clone()).list(&lp).await?;
+    let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced((*client).clone()).list(&lp).await?;
 
     let rs = rs_list.into_iter().next();
     Ok(rs)

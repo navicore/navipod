@@ -1,11 +1,11 @@
 use crate::error::Result;
-use crate::k8s::client::new;
+use crate::k8s::client_manager::{get_client, refresh_client, should_refresh_client};
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
 use k8s_openapi::api::core::v1::ContainerPort;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    Client, ResourceExt,
+    ResourceExt,
     api::{Api, ListParams, LogParams, ObjectList},
 };
 use std::collections::BTreeMap;
@@ -32,14 +32,20 @@ fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
 #[allow(clippy::significant_drop_tightening)]
 #[allow(clippy::too_many_lines)]
 pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Result<Vec<Container>> {
-    let client = Client::try_default().await?;
-
+    let mut client = get_client().await?;
     let label_selector = format_label_selector(&selector);
-
     let lp = ListParams::default().labels(&label_selector);
 
-    // Assuming there should be a single pod matching the selector and name
-    let pod_list: ObjectList<Pod> = Api::default_namespaced(client).list(&lp).await?;
+    // Try the operation, with one retry on auth error
+    let pod_list: ObjectList<Pod> = match Api::default_namespaced((*client).clone()).list(&lp).await {
+        Ok(result) => result,
+        Err(e) if should_refresh_client(&e) => {
+            // Auth error - try refreshing client and retry once
+            client = refresh_client().await?;
+            Api::default_namespaced((*client).clone()).list(&lp).await?
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     let mut container_vec = Vec::new();
 
@@ -157,14 +163,24 @@ pub async fn logs(
     pod_name: String,
     container_name: String,
 ) -> Result<Vec<LogRec>> {
-    let client = new(None).await?;
-    let pods: Api<Pod> = Api::default_namespaced(client);
-
+    let mut client = get_client().await?;
     let label_selector = format_label_selector(&selector);
-
     let lp = ListParams::default().labels(&label_selector);
 
-    let pod_list: ObjectList<Pod> = pods.list(&lp).await?;
+    // Try the operation, with one retry on auth error
+    let pod_list: ObjectList<Pod> = {
+        let pods = Api::default_namespaced((*client).clone());
+        match pods.list(&lp).await {
+            Ok(result) => result,
+            Err(e) if should_refresh_client(&e) => {
+                // Auth error - try refreshing client and retry once
+                client = refresh_client().await?;
+                let pods = Api::default_namespaced((*client).clone());
+                pods.list(&lp).await?
+            }
+            Err(e) => return Err(e.into()),
+        }
+    };
 
     let mut log_vec = Vec::new();
 
@@ -180,8 +196,18 @@ pub async fn logs(
             ..Default::default()
         };
 
-        // Fetch logs for the specified container
-        let logs = pods.logs(&pod.name_any(), &log_params).await?;
+        // Fetch logs for the specified container, with retry on auth error
+        let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+        let logs = match pods.logs(&pod.name_any(), &log_params).await {
+            Ok(result) => result,
+            Err(e) if should_refresh_client(&e) => {
+                // Auth error - try refreshing client and retry once
+                client = refresh_client().await?;
+                let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+                pods.logs(&pod.name_any(), &log_params).await?
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         // Parse and map logs to Vec<Log>
         logs.lines().for_each(|line| {

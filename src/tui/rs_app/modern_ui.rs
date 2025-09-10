@@ -24,9 +24,10 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
     ]).split(f.area());
     
-    // Check background activity status for UI indicator
-    let has_activity = app.get_background_activity();
-    render_header(f, app, main_chunks[0], &theme, has_activity);
+    // Check activity status for UI indicator
+    let has_network_activity = app.get_network_activity();
+    let has_blocking_activity = app.get_blocking_activity();
+    render_header(f, app, main_chunks[0], &theme, has_network_activity, has_blocking_activity);
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
     
@@ -39,7 +40,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_background_activity: bool) {
+fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_network_activity: bool, has_blocking_activity: bool) {
     let header_chunks = Layout::horizontal([
         Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
         Constraint::Min(0),      // Namespace info (flexible)
@@ -61,15 +62,22 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_ba
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(namespace, header_chunks[1]);
     
-    // Actions/shortcuts with optional fetch activity indicator
-    let activity_indicator = if has_background_activity {
-        format!("{} ", Symbols::FETCH_ACTIVITY)
+    // Actions/shortcuts with colored activity indicator based on operation type
+    let (activity_indicator, indicator_style) = if has_blocking_activity {
+        // Red spinner for blocking operations (cache misses)
+        (format!("{} ", Symbols::FETCH_ACTIVITY), 
+         theme.text_style(TextType::Caption).fg(theme.error).bg(theme.bg_primary))
+    } else if has_network_activity {
+        // Normal color for background operations 
+        (format!("{} ", Symbols::FETCH_ACTIVITY), 
+         theme.text_style(TextType::Caption).fg(theme.info).bg(theme.bg_primary))
     } else {
-        String::new()
+        (String::new(), theme.text_style(TextType::Caption).bg(theme.bg_primary))
     };
+    
     let actions_text = format!("{activity_indicator}f: filter • y: yaml • c: colors • q: quit");
     let actions = Paragraph::new(actions_text)
-        .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
+        .style(indicator_style)
         .alignment(Alignment::Right)
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(actions, header_chunks[2]);

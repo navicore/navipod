@@ -26,6 +26,10 @@ static WATCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 static WATCHER_HANDLE: OnceLock<WatchManagerHandle> = OnceLock::new();
 /// Current namespace context
 static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
+/// Global counter for active network operations (blocking IO)
+static NETWORK_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Global counter for blocking network operations (cache misses - should be red!)
+static BLOCKING_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Initialize the global cache and background fetcher
 ///
@@ -161,6 +165,40 @@ pub fn get_current_namespace_or_default() -> String {
 #[must_use]
 pub fn get_background_fetcher() -> Option<Arc<BackgroundFetcher>> {
     BACKGROUND_FETCHER.get().cloned()
+}
+
+/// Increment the network activity counter (call before any K8s API operation)
+pub fn start_network_operation() {
+    NETWORK_ACTIVITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Decrement the network activity counter (call after any K8s API operation)
+pub fn end_network_operation() {
+    NETWORK_ACTIVITY_COUNTER.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Increment the blocking activity counter (call before blocking/cache miss operations)
+pub fn start_blocking_operation() {
+    BLOCKING_ACTIVITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    start_network_operation(); // Also count as general network activity
+}
+
+/// Decrement the blocking activity counter (call after blocking/cache miss operations)
+pub fn end_blocking_operation() {
+    BLOCKING_ACTIVITY_COUNTER.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    end_network_operation(); // Also decrement general network activity
+}
+
+/// Check if there's any active network IO (what users actually care about)
+/// Returns true if there are active network operations happening right now
+pub fn has_network_activity() -> bool {
+    NETWORK_ACTIVITY_COUNTER.load(std::sync::atomic::Ordering::Relaxed) > 0
+}
+
+/// Check if there's any blocking network IO (cache misses - should be red!)
+/// Returns true if there are blocking operations happening (indicates cache problems)
+pub fn has_blocking_activity() -> bool {
+    BLOCKING_ACTIVITY_COUNTER.load(std::sync::atomic::Ordering::Relaxed) > 0
 }
 
 /// Check if there's any background fetch activity for UI indicators

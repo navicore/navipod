@@ -208,7 +208,10 @@ impl BackgroundFetcher {
             // Mark as fetching in cache
             cache.mark_fetching(&task.request).await;
 
+            // Track network activity for UI indicator
+            crate::cache_manager::start_network_operation();
             let result = Self::fetch_data(&task.request).await;
+            crate::cache_manager::end_network_operation();
 
             let elapsed = start.elapsed();
             match result {

@@ -33,8 +33,10 @@ const POLL_MS: u64 = 5000;
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) base: BaseTableState<Rs>,
-    /// Track background fetch activity for UI indicator
-    pub(crate) has_background_activity: bool,
+    /// Track network activity for UI indicator
+    pub(crate) has_network_activity: bool,
+    /// Track blocking activity (cache misses) for red spinner
+    pub(crate) has_blocking_activity: bool,
 }
 
 impl_tui_table_state!(App, Rs);
@@ -114,9 +116,12 @@ impl AppBehavior for App {
                              break;
                          }
                      } else {
-                         // Cache miss - fall back to direct API call
-                         warn!("🌐 API FALLBACK: ReplicaSets cache miss, calling K8s API");
-                         match list_replicas().await {
+                         // Cache miss - fall back to direct API call with blocking activity tracking
+                         warn!("🔴 CACHE MISS: ReplicaSets cache miss, calling K8s API (blocking)");
+                         cache_manager::start_blocking_operation();
+                         let api_result = list_replicas().await;
+                         cache_manager::end_blocking_operation();
+                         match api_result {
                              Ok(new_items) => {
                                  if !new_items.is_empty() {
                                      // Store in cache for next time
@@ -158,18 +163,25 @@ impl App {
     pub fn new(data_vec: Vec<Rs>) -> Self {
         Self {
             base: BaseTableState::new(data_vec),
-            has_background_activity: false,
+            has_network_activity: false,
+            has_blocking_activity: false,
         }
     }
 
-    /// Update background activity status for UI indicator
-    pub async fn update_activity_status(&mut self) {
-        self.has_background_activity = cache_manager::has_background_activity().await;
+    /// Update activity status for UI indicator
+    pub fn update_activity_status(&mut self) {
+        self.has_network_activity = cache_manager::has_network_activity();
+        self.has_blocking_activity = cache_manager::has_blocking_activity();
     }
 
-    /// Get current background activity status
-    pub const fn get_background_activity(&self) -> bool {
-        self.has_background_activity
+    /// Get current network activity status
+    pub const fn get_network_activity(&self) -> bool {
+        self.has_network_activity
+    }
+
+    /// Get current blocking activity status (cache misses - should be red!)
+    pub const fn get_blocking_activity(&self) -> bool {
+        self.has_blocking_activity
     }
 
     fn handle_filter_edit_event(&mut self, event: &Message) -> Option<Apps> {
@@ -235,7 +247,7 @@ impl App {
                 Ok(Some(Apps::Rs { app: self.clone() }))
             }
             Message::Rs(data_vec) => {
-                Ok(Some(self.handle_data_update(data_vec).await))
+                Ok(Some(self.handle_data_update(data_vec)))
             }
             _ => Ok(Some(Apps::Rs { app: self.clone() })),
         }
@@ -259,15 +271,15 @@ impl App {
     }
 
     /// Handle data update message
-    async fn handle_data_update(&self, data_vec: &[Rs]) -> Apps {
+    fn handle_data_update(&self, data_vec: &[Rs]) -> Apps {
         debug!("updating rs app data...");
         let mut new_app = self.clone();
         new_app.base.items = data_vec.to_vec();
         new_app.base.scroll_state =
             ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
         
-        // Update background activity status for UI indicator
-        new_app.update_activity_status().await;
+        // Update network activity status for UI indicator
+        new_app.update_activity_status();
         
         Apps::Rs { app: new_app }
     }

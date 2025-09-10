@@ -26,7 +26,15 @@ pub fn handle_common_keys<T: TuiTableState + Clone>(
         // Quit application
         KeyCode::Char('q') | KeyCode::Esc => KeyHandlerResult::Quit,
 
-        // Navigation: j/k (up/down) - handled by individual apps since they need custom logic
+        // Navigation: j/k (up/down)
+        KeyCode::Char('j') | KeyCode::Down => {
+            app.next();
+            KeyHandlerResult::HandledWithUpdate(Some(app_variant(app.clone())))
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            app.previous();
+            KeyHandlerResult::HandledWithUpdate(Some(app_variant(app.clone())))
+        }
 
         // Color cycling
         KeyCode::Char('c' | 'C') => {
@@ -37,11 +45,11 @@ pub fn handle_common_keys<T: TuiTableState + Clone>(
         // Page forward/backward
         KeyCode::Char('f' | 'F') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             app.page_forward();
-            KeyHandlerResult::Handled(None) // No need to clone app for page forward
+            KeyHandlerResult::HandledWithUpdate(Some(app_variant(app.clone())))
         }
         KeyCode::Char('b' | 'B') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             app.page_backward();
-            KeyHandlerResult::Handled(None) // No need to clone app for page backward
+            KeyHandlerResult::HandledWithUpdate(Some(app_variant(app.clone())))
         }
 
         // Vim-style navigation

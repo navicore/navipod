@@ -218,6 +218,8 @@ fn render_details_panel(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTh
         Constraint::Min(0),     // Mounts section (flexible)
         Constraint::Length(1),  // Divider
         Constraint::Min(0),     // Env vars section (flexible)
+        Constraint::Length(1),  // Divider
+        Constraint::Min(0),     // Probes section (flexible)
     ]).split(area);
     
     render_mounts_section(f, app, detail_chunks[0], theme);
@@ -229,6 +231,14 @@ fn render_details_panel(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTh
     f.render_widget(divider, detail_chunks[1]);
     
     render_env_vars_section(f, app, detail_chunks[2], theme);
+    
+    // Horizontal divider
+    let divider = Block::default()
+        .borders(Borders::BOTTOM)
+        .border_style(Style::default().fg(theme.divider));
+    f.render_widget(divider, detail_chunks[3]);
+    
+    render_probes_section(f, app, detail_chunks[4], theme);
 }
 
 fn render_mounts_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
@@ -285,6 +295,62 @@ fn render_env_vars_section(f: &mut Frame, app: &mut App, area: Rect, theme: &Nav
     f.render_widget(env_list, area);
 }
 
+fn render_probes_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
+    let probes = if let Some(selected_container) = app.get_selected_item() {
+        &selected_container.probes
+    } else {
+        return; // No container selected
+    };
+    
+    let probe_items: Vec<ListItem> = probes
+        .iter()
+        .map(|probe| {
+            let handler_symbol = match probe.handler_type.as_str() {
+                "HTTP" => "🌐",
+                "TCP" => "🔌",
+                "Exec" => "⚡",
+                _ => "❓",
+            };
+            
+            let probe_type_color = match probe.probe_type.as_str() {
+                "Liveness" => theme.error,   // Red for critical liveness
+                "Readiness" => theme.warning, // Yellow for readiness
+                "Startup" => theme.info,     // Blue for startup
+                _ => theme.text_primary,
+            };
+            
+            let content = Line::from(vec![
+                Span::raw(format!("{handler_symbol} ")),
+                Span::styled(format!("{}: ", probe.probe_type), Style::default().fg(probe_type_color).add_modifier(Modifier::BOLD)),
+                Span::styled(&probe.details, theme.text_style(TextType::Caption)),
+            ]);
+            ListItem::new(content)
+        })
+        .collect();
+    
+    // Show message if no probes configured
+    let probe_list = if probe_items.is_empty() {
+        let empty_content = Line::from(vec![
+            Span::styled("No health probes configured", theme.text_style(TextType::Caption).add_modifier(Modifier::ITALIC))
+        ]);
+        List::new(vec![ListItem::new(empty_content)])
+    } else {
+        List::new(probe_items)
+    };
+    
+    let probes_widget = probe_list
+        .block(
+            Block::default()
+                .title("🏥 Health Probes")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
+                .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
+                .style(Style::default().bg(theme.bg_tertiary))
+        );
+    
+    f.render_widget(probes_widget, area);
+}
+
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
@@ -313,7 +379,7 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
 }
 
 fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
-    let footer_text = "Enter: Logs • e: Environment • m: Mounts • ↑↓: Navigate • Ctrl+F: Page Down • Ctrl+B: Page Up";
+    let footer_text = "Enter: Logs • e: Environment • m: Mounts • p: Probes • ↑↓: Navigate • Ctrl+F: Page Down • Ctrl+B: Page Up";
     let footer = Paragraph::new(footer_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)

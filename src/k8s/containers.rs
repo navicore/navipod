@@ -1,9 +1,8 @@
 use crate::error::Result;
 use crate::k8s::client_manager::{get_client, refresh_client, should_refresh_client};
 use crate::k8s::utils::format_label_selector;
-use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, LogRec};
-use k8s_openapi::api::core::v1::ContainerPort;
-use k8s_openapi::api::core::v1::Pod;
+use crate::tui::data::{Container, ContainerEnvVar, ContainerMount, ContainerProbe, LogRec};
+use k8s_openapi::api::core::v1::{ContainerPort, Pod, Probe};
 use kube::{
     ResourceExt,
     api::{Api, ListParams, LogParams, ObjectList},
@@ -24,6 +23,78 @@ fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
                 .join(", ")
         },
     )
+}
+
+/// Extract probe configuration from a Kubernetes probe specification
+fn extract_probe_info(probe: &Probe, probe_type: &str) -> ContainerProbe {
+    let (handler_type, details) = probe.http_get.as_ref().map_or_else(|| {
+        probe.tcp_socket.as_ref().map_or_else(|| {
+            probe.exec.as_ref().map_or_else(|| {
+                (
+                    "Unknown".to_string(),
+                    "No handler specified".to_string()
+                )
+            }, |exec| {
+                let command = exec.command.as_ref().map_or_else(|| "No command specified".to_string(), |cmd| cmd.join(" "));
+                (
+                    "Exec".to_string(),
+                    format!("Run: {command}")
+                )
+            })
+        }, |tcp_socket| {
+            let port = match &tcp_socket.port {
+                k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(port) => port.to_string(),
+                k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(port) => port.clone(),
+            };
+            let host = tcp_socket.host.as_deref().unwrap_or("localhost");
+            (
+                "TCP".to_string(),
+                format!("Connect to {host}:{port}")
+            )
+        })
+    }, |http_get| {
+        let path = http_get.path.as_deref().unwrap_or("/");
+        let port = match &http_get.port {
+            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::Int(port) => port.to_string(),
+            k8s_openapi::apimachinery::pkg::util::intstr::IntOrString::String(port) => port.clone(),
+        };
+        let scheme = http_get.scheme.as_deref().unwrap_or("HTTP");
+        let host = http_get.host.as_deref().unwrap_or("localhost");
+        (
+            "HTTP".to_string(),
+            format!("{} {}://{}:{}{}", "GET", scheme.to_lowercase(), host, port, path)
+        )
+    });
+
+    ContainerProbe {
+        probe_type: probe_type.to_string(),
+        handler_type,
+        details,
+        initial_delay: probe.initial_delay_seconds.unwrap_or(0),
+        period: probe.period_seconds.unwrap_or(10),
+        timeout: probe.timeout_seconds.unwrap_or(1),
+        failure_threshold: probe.failure_threshold.unwrap_or(3),
+        success_threshold: probe.success_threshold.unwrap_or(1),
+    }
+}
+
+/// Extract all probes from a Kubernetes container specification
+fn extract_container_probes(container: &k8s_openapi::api::core::v1::Container) -> Vec<ContainerProbe> {
+    let mut probes = Vec::new();
+    
+    if let Some(liveness_probe) = &container.liveness_probe {
+        probes.push(extract_probe_info(liveness_probe, "Liveness"));
+    }
+    
+    if let Some(readiness_probe) = &container.readiness_probe {
+        probes.push(extract_probe_info(readiness_probe, "Readiness"));
+    }
+    
+    if let Some(startup_probe) = &container.startup_probe {
+        probes.push(extract_probe_info(startup_probe, "Startup"));
+    }
+    
+    probes
 }
 
 /// # Errors
@@ -61,6 +132,9 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
             let container_selectors = pod.metadata.labels;
             if let Some(spec) = pod.spec {
                     for container in spec.containers {
+                        // Extract probes first before moving other fields
+                        let probes = extract_container_probes(&container);
+                        
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
                         let restarts = container_statuses
@@ -88,7 +162,6 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                                 value: e.value.unwrap_or_default(),
                             })
                             .collect();
-
                         let c = Container {
                             name: container.name,
                             description: "a pod container".to_string(),
@@ -97,6 +170,7 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                             ports,
                             mounts,
                             envvars,
+                            probes,
                             selectors: container_selectors.clone(),
                             pod_name: pod_name.clone(),
                         };
@@ -105,6 +179,9 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
 
                     if let Some(init_containers) = spec.init_containers {
                         for container in init_containers {
+                            // Extract probes first before moving other fields
+                            let probes = extract_container_probes(&container);
+                            
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
                             let restarts = container_statuses
                                 .iter()
@@ -131,7 +208,6 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                                     value: e.value.unwrap_or_default(),
                                 })
                                 .collect();
-
                             let c = Container {
                                 name: container.name,
                                 description: "an init container".to_string(), // Distinguish init containers
@@ -140,6 +216,7 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                                 ports: String::new(),
                                 mounts,
                                 envvars,
+                                probes,
                                 selectors: container_selectors.clone(),
                                 pod_name: pod_name.clone(),
                             };

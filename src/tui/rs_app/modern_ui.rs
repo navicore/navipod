@@ -89,8 +89,6 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
     let items = app.get_filtered_items();
     let selected_index = app.base.state.selected().unwrap_or(0);
     
-    // Create card-style content but render as paragraphs instead of a list
-    let mut y_offset = 1; // Start after border
     let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
     
     let filter = app.get_filter();
@@ -109,9 +107,20 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
         .style(Style::default().bg(theme.bg_secondary));
     f.render_widget(block, area);
     
-    // Render individual cards
-    for (index, rs) in items.iter().enumerate() {
-        if y_offset >= content_area.height {
+    // Calculate scroll offset to keep selected item visible  
+    let card_height = UiConstants::CARD_HEIGHT;
+    let visible_cards = content_area.height / card_height;
+    let selected_index_u16 = UiHelpers::safe_cast_u16(selected_index, "rs_scroll_offset");
+    let scroll_offset = if selected_index_u16 >= visible_cards {
+        selected_index_u16 - visible_cards + 1
+    } else {
+        0
+    };
+    
+    // Render individual cards with scroll offset
+    let mut y_offset = 0;
+    for (index, rs) in items.iter().enumerate().skip(scroll_offset as usize) {
+        if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
         
@@ -120,11 +129,11 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
             x: content_area.x,
             y: content_area.y + y_offset,
             width: content_area.width,
-            height: 3.min(content_area.height - y_offset),
+            height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
         
         render_replicaset_card(f, rs, card_area, is_selected, theme);
-        y_offset += 3;
+        y_offset += UiConstants::CARD_HEIGHT;
     }
     
     // Render scrollbar
@@ -275,15 +284,28 @@ fn render_events_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
 }
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
-    if app.get_items().len() > area.height as usize - 2 {
+    let items = app.get_filtered_items();
+    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
+    let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
+    
+    // Show scrollbar if we have more items than can fit
+    if items.len() > visible_cards as usize {
+        let selected_index = app.base.state.selected().unwrap_or(0);
+        
+        // Calculate scrollbar position based on selection
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(items.len().saturating_sub(visible_cards as usize))
+            .position(selected_index.saturating_sub(visible_cards as usize / 2));
+        
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .style(Style::default().fg(theme.border))
+                .style(Style::default().fg(theme.border).bg(theme.bg_secondary))
                 .begin_symbol(Some("↑"))
-                .end_symbol(Some("↓")),
+                .end_symbol(Some("↓"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█"),
             area.inner(Margin { vertical: 1, horizontal: 0 }),
-            &mut app.base.scroll_state.clone(),
+            &mut scrollbar_state,
         );
     }
 }

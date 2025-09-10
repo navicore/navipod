@@ -39,7 +39,7 @@ impl AppBehavior for log_app::app::App {
         if self.get_show_filter_edit() {
             Ok(Some(self.handle_filter_edit_event(event)))
         } else {
-            self.handle_table_event(event)
+            Ok(self.handle_table_event(event))
         }
     }
 
@@ -111,36 +111,36 @@ impl App {
         }
     }
 
-    fn handle_table_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
+    fn handle_table_event(&mut self, event: &Message) -> Option<Apps> {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
                     // Handle ESC specially to return None for history navigation
                     if key.code == KeyCode::Esc {
                         debug!("navigating back from log to container...");
-                        return Ok(None); // This will use the history stack
+                        return None; // This will use the history stack
                     }
                     
                     // First try common keys (navigation, quit, color, vim motions)
                     return match handle_common_keys(self, key, |app| Apps::Log { app }) {
-                        KeyHandlerResult::Quit => Ok(None),
-                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::Quit => None,
+                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => app_holder,
                         KeyHandlerResult::NotHandled => {
                             // Handle Log-specific keys
-                            Ok(Some(self.handle_log_specific_keys(key)))
+                            Some(self.handle_log_specific_keys(key))
                         }
                     };
                 }
-                Ok(Some(Apps::Log { app: self.clone() }))
+                Some(Apps::Log { app: self.clone() })
             }
             Message::Log(data_vec) => {
                 let mut new_app = self.clone();
                 new_app.base.items.clone_from(data_vec);
                 new_app.base.scroll_state =
                     ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
-                Ok(Some(Apps::Log { app: new_app }))
+                Some(Apps::Log { app: new_app })
             }
-            _ => Ok(Some(Apps::Log { app: self.clone() }))
+            _ => Some(Apps::Log { app: self.clone() })
         }
     }
 

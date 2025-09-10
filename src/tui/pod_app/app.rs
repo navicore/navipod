@@ -179,9 +179,16 @@ impl App {
 
     /// Handle Pod-specific key events that aren't covered by common key handler
     async fn handle_pod_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Result<Option<Apps>, io::Error> {
-        use KeyCode::{Char, Enter};
+        use KeyCode::{Char, Enter, Esc};
         
         match key.code {
+            Esc => {
+                // Navigate back to ReplicaSet page
+                debug!("navigating back from pod to rs...");
+                Ok(Some(Apps::Rs { 
+                    app: crate::tui::rs_app::app::App::new(vec![]) 
+                }))
+            }
             Char('i' | 'I') => self.handle_switch_to_ingress().await,
             Enter => self.handle_switch_to_containers().await,
             Char('y' | 'Y') => Ok(Some(self.handle_yaml_view())),

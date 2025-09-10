@@ -67,8 +67,18 @@ impl AppBehavior for ingress_app::app::App {
                     }
 
                     match key.code {
-                        Char('q') | Esc => {
+                        Char('q') => {
+                            crate::tui::ui_loop::set_force_quit();
                             app_holder = None;
+                        }
+                        Esc => {
+                            // Navigate back to ReplicaSet page
+                            debug!("navigating back from ingress to rs...");
+                            let data_vec = vec![];
+                            let new_app_holder = Apps::Rs {
+                                app: crate::tui::rs_app::app::App::new(data_vec),
+                            };
+                            app_holder = Some(new_app_holder);
                         }
                         Char('j') | Down => {
                             self.next();

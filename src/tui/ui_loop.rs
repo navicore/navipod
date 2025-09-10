@@ -24,6 +24,19 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{error::Error, io};
+
+/// Global flag to indicate immediate quit request (from Q key)
+static FORCE_QUIT: AtomicBool = AtomicBool::new(false);
+
+/// Set the force quit flag - called by Q key handler
+pub fn set_force_quit() {
+    FORCE_QUIT.store(true, Ordering::Relaxed);
+}
+
+/// Check if force quit was requested
+pub fn should_force_quit() -> bool {
+    FORCE_QUIT.load(Ordering::Relaxed)
+}
 use tracing::error;
 
 pub(crate) trait AppBehavior {
@@ -314,10 +327,13 @@ async fn run_root_ui_loop<B: Backend + Send>(terminal: &mut Terminal<B>) -> io::
                 app_holder = new_app_holder;
             }
             (_, _) => {
-                if let Some(previous_app) = history.pop() {
+                // Check if this was a force quit (Q key) vs navigation back (ESC key)
+                if should_force_quit() {
+                    break; // Immediate quit regardless of history
+                } else if let Some(previous_app) = history.pop() {
                     app_holder = (*previous_app).clone();
                 } else {
-                    break; //quit
+                    break; // No history left, quit
                 }
             }
         }

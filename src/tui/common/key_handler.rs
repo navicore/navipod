@@ -11,7 +11,7 @@ pub enum KeyHandlerResult {
     HandledWithUpdate(Option<Apps>),
     /// Key was not handled, app should handle it
     NotHandled,
-    /// Request to quit the application
+    /// Request to quit the application gracefully
     Quit,
 }
 
@@ -24,7 +24,10 @@ pub fn handle_common_keys<T: TuiTableState + Clone>(
 ) -> KeyHandlerResult {
     match key_event.code {
         // Quit application
-        KeyCode::Char('q') | KeyCode::Esc => KeyHandlerResult::Quit,
+        KeyCode::Char('q') => {
+            crate::tui::ui_loop::set_force_quit();
+            KeyHandlerResult::Quit
+        }
 
         // Navigation: j/k (up/down)
         KeyCode::Char('j') | KeyCode::Down => {

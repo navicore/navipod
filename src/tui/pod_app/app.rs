@@ -14,7 +14,6 @@ use crate::{
     cache_manager,
     k8s::{
         cache::{DataRequest, FetchResult, PodSelector},
-        pods::list_rspods,
     },
 };
 use crossterm::event::{Event, KeyCode, KeyEventKind};
@@ -133,28 +132,25 @@ impl AppBehavior for pod_app::app::App {
                              debug!("⚠️ Unexpected data type in cache for Pod request");
                          }
                          None => {
-                             // Cache miss - fall back to direct API call
-                             debug!("🌐 API FALLBACK: Pods cache miss, calling K8s API");
-                             match list_rspods(selector.clone()).await {
-                                 Ok(new_items) => {
-                                     if !new_items.is_empty() {
-                                         // Store in cache for next time
-                                         let fetch_result = FetchResult::Pods(new_items.clone());
-                                         let _ = cache.put(&request, fetch_result).await;
-
-                                         if new_items != initial_items && tx.send(Message::Pod(new_items)).await.is_err() {
-                                             break;
-                                         }
-                                     }
+                             // Cache miss - schedule high priority fetch instead of blocking
+                             debug!("⚡ CACHE MISS: Scheduling high-priority Pod fetch (no blocking API call)");
+                             
+                             if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
+                                 // Schedule high-priority fetch for immediate processing
+                                 bg_fetcher.schedule_fetch(request.clone(), crate::k8s::cache::fetcher::FetchPriority::High).await;
+                                 debug!("📝 HIGH-PRIORITY: Pod fetch scheduled for selectors: {:?}", selector);
+                             }
+                             
+                             // Try to use any stale cache data while we wait for the fresh fetch
+                             if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
+                                 debug!("📦 STALE DATA: Using {} stale pod items while fresh data loads", stale_items.len());
+                                 if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Pod(stale_items)).await.is_err() {
+                                     break;
                                  }
-                                 Err(_e) => {
-                                     // Still try to use stale cache data
-                                     if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
-                                         if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Pod(stale_items)).await.is_err() {
-                                             break;
-                                         }
-                                     }
-                                 }
+                             } else {
+                                 debug!("⏳ WAITING: No cached data available, fresh fetch in progress");
+                                 // No cached data at all - the background fetcher will populate it shortly
+                                 // The cache subscription will notify us when data becomes available
                              }
                          }
                      }

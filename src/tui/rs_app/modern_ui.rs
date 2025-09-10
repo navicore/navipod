@@ -24,7 +24,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
     ]).split(f.area());
     
-    render_header(f, app, main_chunks[0], &theme);
+    // Check background activity status for UI indicator
+    let has_activity = app.get_background_activity();
+    render_header(f, app, main_chunks[0], &theme, has_activity);
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
     
@@ -37,7 +39,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     }
 }
 
-fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
+fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_background_activity: bool) {
     let header_chunks = Layout::horizontal([
         Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
         Constraint::Min(0),      // Namespace info (flexible)
@@ -59,8 +61,13 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(namespace, header_chunks[1]);
     
-    // Actions/shortcuts
-    let actions_text = "f: filter • y: yaml • c: colors • q: quit";
+    // Actions/shortcuts with optional fetch activity indicator
+    let activity_indicator = if has_background_activity {
+        format!("{} ", Symbols::FETCH_ACTIVITY)
+    } else {
+        String::new()
+    };
+    let actions_text = format!("{activity_indicator}f: filter • y: yaml • c: colors • q: quit");
     let actions = Paragraph::new(actions_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Right)

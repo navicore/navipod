@@ -2,11 +2,13 @@ use crate::tui::rs_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use crate::tui::yaml_editor;
+use crate::cache_manager;
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, 
     ScrollbarOrientation, Wrap
 };
+use ratatui::text::{Line, Span};
 
 /// Modern card-based UI for `ReplicaSet` view
 pub fn ui(f: &mut Frame, app: &mut App) {
@@ -24,9 +26,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
     ]).split(f.area());
     
-    // Check activity status for UI indicator
-    let has_network_activity = app.get_network_activity();
-    let has_blocking_activity = app.get_blocking_activity();
+    // Check current activity status directly (not from app state)
+    let has_network_activity = cache_manager::has_network_activity();
+    let has_blocking_activity = cache_manager::has_blocking_activity();
     render_header(f, app, main_chunks[0], &theme, has_network_activity, has_blocking_activity);
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
@@ -62,22 +64,33 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_ne
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(namespace, header_chunks[1]);
     
-    // Actions/shortcuts with colored activity indicator based on operation type
-    let (activity_indicator, indicator_style) = if has_blocking_activity {
+    // Actions/shortcuts with colored activity indicator
+    let actions_text = if has_blocking_activity {
         // Red spinner for blocking operations (cache misses)
-        (format!("{} ", Symbols::FETCH_ACTIVITY), 
-         theme.text_style(TextType::Caption).fg(theme.error).bg(theme.bg_primary))
+        vec![
+            Span::styled(format!("{} ", Symbols::FETCH_ACTIVITY), 
+                        Style::default().fg(theme.error)),
+            Span::styled("f: filter • y: yaml • c: colors • q: quit", 
+                        theme.text_style(TextType::Caption))
+        ]
     } else if has_network_activity {
-        // Normal color for background operations 
-        (format!("{} ", Symbols::FETCH_ACTIVITY), 
-         theme.text_style(TextType::Caption).fg(theme.info).bg(theme.bg_primary))
+        // Blue spinner for background operations 
+        vec![
+            Span::styled(format!("{} ", Symbols::FETCH_ACTIVITY), 
+                        Style::default().fg(theme.info)),
+            Span::styled("f: filter • y: yaml • c: colors • q: quit", 
+                        theme.text_style(TextType::Caption))
+        ]
     } else {
-        (String::new(), theme.text_style(TextType::Caption).bg(theme.bg_primary))
+        // No spinner
+        vec![
+            Span::styled("f: filter • y: yaml • c: colors • q: quit", 
+                        theme.text_style(TextType::Caption))
+        ]
     };
     
-    let actions_text = format!("{activity_indicator}f: filter • y: yaml • c: colors • q: quit");
-    let actions = Paragraph::new(actions_text)
-        .style(indicator_style)
+    let actions = Paragraph::new(Line::from(actions_text))
+        .style(Style::default().bg(theme.bg_primary))
         .alignment(Alignment::Right)
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(actions, header_chunks[2]);

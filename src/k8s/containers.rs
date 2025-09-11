@@ -8,6 +8,61 @@ use kube::{
     api::{Api, ListParams, LogParams, ObjectList},
 };
 use std::collections::BTreeMap;
+use tracing::{debug, warn};
+use regex::Regex;
+use std::sync::OnceLock;
+
+/// Parse a log line with RFC3339 timestamp and extract components
+/// Kubernetes logs often come in format: "2025-01-11T15:30:45.123456789Z message here"
+fn parse_log_line(line: &str) -> LogRec {
+    static TIMESTAMP_REGEX: OnceLock<Regex> = OnceLock::new();
+    
+    let regex = TIMESTAMP_REGEX.get_or_init(|| {
+        // Match RFC3339 timestamp at start of line, capture the rest as message
+        Regex::new(r"^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z?)\s+(.*)$")
+            .expect("Invalid timestamp regex")
+    });
+    
+    if let Some(captures) = regex.captures(line) {
+        let timestamp = captures.get(1).map_or("", |m| m.as_str());
+        let message = captures.get(2).map_or(line, |m| m.as_str());
+        
+        // Try to extract log level from the message using common patterns
+        let level = extract_log_level(message);
+        
+        LogRec {
+            datetime: timestamp.to_string(),
+            level,
+            message: message.to_string(),
+        }
+    } else {
+        // No timestamp found, treat entire line as message
+        let level = extract_log_level(line);
+        LogRec {
+            datetime: String::new(),
+            level,
+            message: line.to_string(),
+        }
+    }
+}
+
+/// Extract log level from message content using common patterns
+fn extract_log_level(message: &str) -> String {
+    static LEVEL_REGEX: OnceLock<Regex> = OnceLock::new();
+    
+    let regex = LEVEL_REGEX.get_or_init(|| {
+        // Match common log level patterns: INFO, DEBUG, WARN, ERROR, etc.
+        // Case insensitive, word boundaries, and optional brackets/colons
+        Regex::new(r"(?i)\b(trace|debug|info|warn|warning|error|err|fatal|panic)\b")
+            .expect("Invalid log level regex")
+    });
+    
+    if let Some(captures) = regex.captures(message) {
+        captures.get(1).map_or("", |m| m.as_str()).to_uppercase()
+    } else {
+        String::new() // No recognizable log level
+    }
+}
 
 fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {
     ports.map_or_else(
@@ -286,16 +341,79 @@ pub async fn logs(
             Err(e) => return Err(e.into()),
         };
 
-        // Parse and map logs to Vec<Log>
+        // Parse and map logs to Vec<LogRec> using our smart parser
         logs.lines().for_each(|line| {
-            log_vec.push(LogRec {
-                datetime: String::new(), //need a smart parser that can figure out the format
-                level: String::new(),
-                message: line.to_string(),
-            });
+            log_vec.push(parse_log_line(line));
         });
     }
     log_vec.reverse(); // Reverse the order of logs to show the latest logs first
 
+    Ok(log_vec)
+}
+
+/// Enhanced logs function with streaming capability (using kube-rs log streaming)
+/// 
+/// # Arguments
+/// * `selector` - Label selector for finding pods
+/// * `pod_name` - Name of the pod to stream logs from
+/// * `container_name` - Name of the container within the pod
+/// * `follow` - Whether to follow/tail the logs in real-time
+/// * `tail_lines` - Number of initial lines to fetch (None for all)
+/// 
+/// # Returns
+/// Returns a Vec<LogRec> with parsed log entries
+/// 
+/// # Errors
+/// Will return `Err` if pod cannot be found or logs cannot be streamed
+pub async fn logs_enhanced(
+    _selector: BTreeMap<String, String>,
+    pod_name: String,
+    container_name: String,
+    follow: bool,
+    tail_lines: Option<i64>,
+) -> Result<Vec<LogRec>> {
+    let mut client = get_client().await?;
+    
+    let log_params = LogParams {
+        container: Some(container_name.clone()),
+        follow,
+        tail_lines,
+        timestamps: true, // Include timestamps for better log parsing
+        ..Default::default()
+    };
+
+    // Get logs with retry on auth error
+    let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+    let logs_string = match pods.logs(&pod_name, &log_params).await {
+        Ok(logs) => logs,
+        Err(e) if should_refresh_client(&e) => {
+            // Auth error - try refreshing client and retry once
+            debug!("Auth error getting logs, refreshing client and retrying...");
+            client = refresh_client().await?;
+            let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+            pods.logs(&pod_name, &log_params).await?
+        }
+        Err(e) => {
+            warn!("Failed to get logs for pod {}, container {}: {}", pod_name, container_name, e);
+            return Err(e.into());
+        }
+    };
+
+    debug!("Retrieved logs for pod: {}, container: {}, follow: {}", pod_name, container_name, follow);
+    
+    // Parse logs into LogRec vector
+    let mut log_vec = Vec::new();
+    for line in logs_string.lines() {
+        if !line.trim().is_empty() {
+            log_vec.push(parse_log_line(line.trim()));
+        }
+    }
+    
+    // Don't reverse if following (keep chronological order for streaming)
+    if !follow {
+        log_vec.reverse(); // Reverse the order of logs to show the latest logs first for static logs
+    }
+    
+    debug!("Parsed {} log lines for pod: {}, container: {}", log_vec.len(), pod_name, container_name);
     Ok(log_vec)
 }

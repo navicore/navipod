@@ -20,6 +20,9 @@ pub enum Error {
 
     #[from]
     HttpHeader(hyper::http::Error),
+
+    #[from]
+    Io(std::io::Error),
 }
 
 impl core::fmt::Display for Error {

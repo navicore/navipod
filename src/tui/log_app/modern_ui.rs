@@ -7,7 +7,7 @@ use ratatui::widgets::{
     ScrollbarOrientation, Wrap
 };
 
-const LOG_HEIGHT: u16 = 2; // 2 lines per log entry for readability
+const LOG_HEIGHT: u16 = 1; // 1 line per log entry for efficiency
 
 /// Modern streaming log viewer UI with syntax highlighting and log-level awareness
 pub fn ui(f: &mut Frame, app: &App) {
@@ -27,7 +27,7 @@ pub fn ui(f: &mut Frame, app: &App) {
     
     render_header(f, app, main_chunks[0], &theme);
     render_content(f, app, main_chunks[1], &theme);
-    render_footer(f, main_chunks[2], &theme);
+    render_footer(f, app, main_chunks[2], &theme);
     
     // Handle overlays
     if app.get_show_filter_edit() {
@@ -162,33 +162,45 @@ fn render_log_entry(f: &mut Frame, log: &crate::tui::data::LogRec, area: Rect, i
     let level_style = get_log_level_style(&log.level, theme);
     let level_symbol = get_log_level_symbol(&log.level);
     
-    // Extract time part from datetime (assume format like "2024-01-01 12:34:56")
-    let time_part = extract_time(&log.datetime);
+    // Extract time part from datetime (HH:MM:SS format for compactness)
+    let time_part = extract_compact_time(&log.datetime);
     
     // Card background - ensure proper contrast
     let log_bg = if is_selected { theme.bg_accent } else { theme.bg_tertiary };
-    let selection_indicator = if is_selected { "▶ " } else { "  " };
+    let selection_indicator = if is_selected { "▶" } else { " " };
     
-    // Create log entry content as multi-line text
-    let content = vec![
-        Line::from(vec![
-            Span::raw(selection_indicator),
-            Span::styled(level_symbol, level_style),
-            Span::raw(" "),
-            Span::styled(time_part, theme.text_style(TextType::Caption)),
-            Span::raw(" "),
-            Span::styled(format!("[{}]", log.level.to_uppercase()), level_style),
-        ]),
-        Line::from(vec![
-            Span::raw("    "),
-            Span::styled(truncate_text(&log.message, (area.width.saturating_sub(6)) as usize), 
-                        theme.text_style(TextType::Body)),
-        ]),
+    // Build spans dynamically to avoid empty brackets and timestamps
+    let mut spans = vec![
+        Span::styled(selection_indicator, theme.text_style(TextType::Body)),
     ];
     
+    // Add log level symbol if available
+    if !log.level.is_empty() {
+        spans.push(Span::styled(level_symbol, level_style));
+        spans.push(Span::raw(" "));
+    }
+    
+    // Add compact time if available
+    if !time_part.is_empty() {
+        spans.push(Span::styled(time_part, theme.text_style(TextType::Caption)));
+        spans.push(Span::raw(" "));
+    }
+    
+    // Add the message (most important part)
+    let available_width = area.width.saturating_sub(
+        spans.iter().map(|s| s.content.len() as u16).sum::<u16>() + 1
+    ) as usize;
+    
+    spans.push(Span::styled(
+        truncate_text(&log.message, available_width), 
+        theme.text_style(TextType::Body)
+    ));
+    
+    // Create single-line log entry
+    let content = Line::from(spans);
+    
     let log_entry = Paragraph::new(content)
-        .style(Style::default().bg(log_bg))
-        .wrap(Wrap { trim: false });
+        .style(Style::default().bg(log_bg));
     
     f.render_widget(log_entry, area);
 }
@@ -220,8 +232,17 @@ fn render_log_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme)
     }
 }
 
-fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
-    let footer_text = "↑↓: Navigate • /: Filter • End: Jump to latest • Home: Jump to oldest • Ctrl+F/B: Page Up/Down";
+fn render_footer(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
+    let base_text = "↑↓: Navigate • /: Filter • t: Toggle Tailing • G: Jump to Latest • g: Jump to Top";
+    
+    // Add tailing status indicator
+    let tailing_status = if app.is_tailing {
+        format!(" • 🟢 TAILING")
+    } else {
+        format!(" • ⏸ PAUSED")
+    };
+    
+    let footer_text = format!("{}{}", base_text, tailing_status);
     let footer = Paragraph::new(footer_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
@@ -321,35 +342,49 @@ fn get_log_level_style(level: &str, theme: &NaviTheme) -> Style {
 
 /// Extract time portion from datetime string
 #[allow(clippy::option_if_let_else)] // Complex nested logic is more readable with if/let
-fn extract_time(datetime: &str) -> String {
-    // Handle various datetime formats
+fn extract_compact_time(datetime: &str) -> String {
+    // Return empty string for empty datetime to avoid showing empty timestamps
+    if datetime.is_empty() {
+        return String::new();
+    }
+    
+    // Handle various datetime formats and extract just HH:MM for compactness
     if let Some(space_pos) = datetime.find(' ') {
-        // Format: "2024-01-01 12:34:56" -> "12:34:56"
+        // Format: "2024-01-01 12:34:56" -> "12:34"
         let time_part = &datetime[space_pos + 1..];
-        if time_part.len() >= 8 {
-            // Take first 8 characters (HH:MM:SS)
-            time_part[..8].to_string()
+        if time_part.len() >= 5 {
+            // Take first 5 characters (HH:MM)
+            time_part[..5].to_string()
         } else {
             time_part.to_string()
         }
     } else if datetime.contains('T') {
-        // ISO format: "2024-01-01T12:34:56Z" -> "12:34:56"
+        // ISO 8601 format: "2024-01-01T12:34:56Z" -> "12:34"
         if let Some(t_pos) = datetime.find('T') {
             let time_part = &datetime[t_pos + 1..];
-            if let Some(z_pos) = time_part.find('Z') {
-                time_part[..z_pos.min(8)].to_string()
+            let clean_time = if let Some(z_pos) = time_part.find('Z') {
+                &time_part[..z_pos]
+            } else if let Some(dot_pos) = time_part.find('.') {
+                // Handle microseconds: "12:34:56.123456"
+                &time_part[..dot_pos]
             } else {
-                time_part[..8.min(time_part.len())].to_string()
+                time_part
+            };
+            
+            if clean_time.len() >= 5 {
+                clean_time[..5].to_string() // Just HH:MM
+            } else {
+                clean_time.to_string()
             }
         } else {
-            datetime.to_string()
+            String::new()
         }
     } else {
-        // Fallback - show last 8 characters if it looks like time
-        if datetime.len() >= 8 && datetime.contains(':') {
-            datetime[datetime.len() - 8..].to_string()
+        // If it's already just time or unknown format, extract HH:MM
+        if datetime.len() >= 5 && datetime.chars().nth(2) == Some(':') {
+            datetime[..5].to_string()
         } else {
-            truncate_text(datetime, 8)
+            datetime.to_string()
         }
     }
 }

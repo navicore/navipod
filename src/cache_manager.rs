@@ -30,6 +30,10 @@ static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
 static NETWORK_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 /// Global counter for blocking network operations (cache misses - should be red!)
 static BLOCKING_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Last time we had blocking activity (for minimum display time)
+static LAST_BLOCKING_TIME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Last time we had network activity (for minimum display time)  
+static LAST_NETWORK_TIME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Initialize the global cache and background fetcher
 ///
@@ -106,7 +110,10 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     };
 
     // Fetch ReplicaSet data directly and populate cache immediately
-    match crate::k8s::rs::list_replicas().await {
+    start_blocking_operation();
+    let rs_result = crate::k8s::rs::list_replicas().await;
+    end_blocking_operation();
+    match rs_result {
         Ok(rs_data) => {
             let fetch_result = FetchResult::ReplicaSets(rs_data);
             if let Err(e) = cache.put(&essential_request, fetch_result).await {
@@ -170,6 +177,11 @@ pub fn get_background_fetcher() -> Option<Arc<BackgroundFetcher>> {
 /// Increment the network activity counter (call before any K8s API operation)
 pub fn start_network_operation() {
     NETWORK_ACTIVITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    LAST_NETWORK_TIME.store(now, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Decrement the network activity counter (call after any K8s API operation)
@@ -180,6 +192,11 @@ pub fn end_network_operation() {
 /// Increment the blocking activity counter (call before blocking/cache miss operations)
 pub fn start_blocking_operation() {
     BLOCKING_ACTIVITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    LAST_BLOCKING_TIME.store(now, std::sync::atomic::Ordering::Relaxed);
     start_network_operation(); // Also count as general network activity
 }
 
@@ -191,14 +208,40 @@ pub fn end_blocking_operation() {
 
 /// Check if there's any active network IO (what users actually care about)
 /// Returns true if there are active network operations happening right now
+/// OR if network activity happened recently (minimum 500ms display time)
 pub fn has_network_activity() -> bool {
-    NETWORK_ACTIVITY_COUNTER.load(std::sync::atomic::Ordering::Relaxed) > 0
+    let active_count = NETWORK_ACTIVITY_COUNTER.load(std::sync::atomic::Ordering::Relaxed);
+    if active_count > 0 {
+        return true;
+    }
+    
+    // Show for minimum time even after operation completes
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last_activity = LAST_NETWORK_TIME.load(std::sync::atomic::Ordering::Relaxed);
+    
+    now.saturating_sub(last_activity) < 500 // Show for 500ms minimum
 }
 
 /// Check if there's any blocking network IO (cache misses - should be red!)
 /// Returns true if there are blocking operations happening (indicates cache problems)
+/// OR if blocking activity happened recently (minimum 1000ms display time)
 pub fn has_blocking_activity() -> bool {
-    BLOCKING_ACTIVITY_COUNTER.load(std::sync::atomic::Ordering::Relaxed) > 0
+    let active_count = BLOCKING_ACTIVITY_COUNTER.load(std::sync::atomic::Ordering::Relaxed);
+    if active_count > 0 {
+        return true;
+    }
+    
+    // Show for minimum time even after operation completes
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last_activity = LAST_BLOCKING_TIME.load(std::sync::atomic::Ordering::Relaxed);
+    
+    now.saturating_sub(last_activity) < 1000 // Show for 1000ms minimum
 }
 
 /// Check if there's any background fetch activity for UI indicators

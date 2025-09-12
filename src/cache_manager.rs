@@ -177,10 +177,12 @@ pub fn get_background_fetcher() -> Option<Arc<BackgroundFetcher>> {
 /// Increment the network activity counter (call before any K8s API operation)
 pub fn start_network_operation() {
     NETWORK_ACTIVITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
+    let now = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    ).unwrap_or(u64::MAX);
     LAST_NETWORK_TIME.store(now, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -192,10 +194,12 @@ pub fn end_network_operation() {
 /// Increment the blocking activity counter (call before blocking/cache miss operations)
 pub fn start_blocking_operation() {
     BLOCKING_ACTIVITY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
+    let now = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    ).unwrap_or(u64::MAX);
     LAST_BLOCKING_TIME.store(now, std::sync::atomic::Ordering::Relaxed);
     start_network_operation(); // Also count as general network activity
 }
@@ -206,7 +210,8 @@ pub fn end_blocking_operation() {
     end_network_operation(); // Also decrement general network activity
 }
 
-/// Check if there's any active network IO (what users actually care about)
+/// Check if there's any active network IO (what users actually care about).
+/// 
 /// Returns true if there are active network operations happening right now
 /// OR if network activity happened recently (minimum 500ms display time)
 pub fn has_network_activity() -> bool {
@@ -216,16 +221,19 @@ pub fn has_network_activity() -> bool {
     }
     
     // Show for minimum time even after operation completes
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
+    let now = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    ).unwrap_or(u64::MAX);
     let last_activity = LAST_NETWORK_TIME.load(std::sync::atomic::Ordering::Relaxed);
     
     now.saturating_sub(last_activity) < 500 // Show for 500ms minimum
 }
 
-/// Check if there's any blocking network IO (cache misses - should be red!)
+/// Check if there's any blocking network IO (cache misses - should be red!).
+/// 
 /// Returns true if there are blocking operations happening (indicates cache problems)
 /// OR if blocking activity happened recently (minimum 1000ms display time)
 pub fn has_blocking_activity() -> bool {
@@ -235,10 +243,12 @@ pub fn has_blocking_activity() -> bool {
     }
     
     // Show for minimum time even after operation completes
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
+    let now = u64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    ).unwrap_or(u64::MAX);
     let last_activity = LAST_BLOCKING_TIME.load(std::sync::atomic::Ordering::Relaxed);
     
     now.saturating_sub(last_activity) < 1000 // Show for 1000ms minimum

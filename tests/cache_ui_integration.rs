@@ -1,6 +1,6 @@
 /// Test that verifies the cache works with UI components
 /// 
-/// This tests the integration between cache_manager and UI components
+/// This tests the integration between `cache_manager` and UI components
 
 use navipod::{cache_manager, k8s::cache::{DataRequest, FetchResult}};
 use std::collections::BTreeMap;

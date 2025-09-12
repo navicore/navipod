@@ -197,7 +197,7 @@ mod tests {
             let _pool = init(db_location.to_string()).await.unwrap();
 
             // Check if the database has been created successfully
-            let mut conn = SqliteConnection::connect(&format!("sqlite:{}", db_location))
+            let mut conn = SqliteConnection::connect(&format!("sqlite:{db_location}"))
                 .await
                 .unwrap();
             assert!(conn.ping().await.is_ok());
@@ -219,8 +219,8 @@ mod tests {
             let pool = init(db_location.to_string()).await.unwrap();
 
             match create_table(&pool).await {
-                Ok(_) => (),
-                Err(e) => panic!("create_table failed with {:?}", e),
+                Ok(()) => (),
+                Err(e) => panic!("create_table failed with {e:?}"),
             }
 
             // Check if the table has been created

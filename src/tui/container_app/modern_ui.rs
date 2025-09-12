@@ -1,3 +1,5 @@
+#![allow(clippy::match_same_arms)] // Some match arms are intentionally the same
+
 use crate::tui::container_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};

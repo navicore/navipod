@@ -1,3 +1,5 @@
+#![allow(clippy::cast_possible_truncation)] // UI dimensions are always small enough for u16
+
 use crate::tui::log_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, Symbols, TextType, UiConstants, UiHelpers};
@@ -135,22 +137,21 @@ fn render_log_stream(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     };
     
     // Render individual log entries with scroll offset
-    let mut y_offset = 0;
-    for (index, log) in items.iter().enumerate().skip(scroll_offset) {
-        if y_offset + LOG_HEIGHT > content_area.height {
+    for (y_offset, (index, log)) in items.iter().enumerate().skip(scroll_offset).enumerate() {
+        let y_position = y_offset as u16 * LOG_HEIGHT;
+        if y_position + LOG_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
         
         let is_selected = index == selected_index;
         let log_area = Rect {
             x: content_area.x,
-            y: content_area.y + y_offset,
+            y: content_area.y + y_position,
             width: content_area.width,
-            height: LOG_HEIGHT.min(content_area.height - y_offset),
+            height: LOG_HEIGHT.min(content_area.height - y_position),
         };
         
         render_log_entry(f, log, log_area, is_selected, theme);
-        y_offset += LOG_HEIGHT;
     }
     
     // Render scrollbar

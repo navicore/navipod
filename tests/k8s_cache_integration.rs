@@ -1,6 +1,6 @@
 /// Integration test that validates the cache against a real K8s cluster
 /// 
-/// Run with: cargo test --test k8s_cache_integration -- --nocapture
+/// Run with: cargo test --test `k8s_cache_integration` -- --nocapture
 /// 
 /// This test will:
 /// 1. Skip if no K8s cluster is available
@@ -70,8 +70,7 @@ async fn test_cache_with_real_k8s() {
     
     assert!(cached.is_some());
     assert!(cache_time < api_time / 10, 
-            "Cache hit ({:?}) should be at least 10x faster than API call ({:?})", 
-            cache_time, api_time);
+            "Cache hit ({cache_time:?}) should be at least 10x faster than API call ({api_time:?})");
     
     // Test 2: Verify data matches
     match cached.unwrap() {
@@ -161,7 +160,7 @@ async fn test_concurrent_k8s_operations() {
         let cache_clone = cache.clone();
         let handle = tokio::spawn(async move {
             let request = DataRequest::ReplicaSets {
-                namespace: Some(format!("test-ns-{}", i)),
+                namespace: Some(format!("test-ns-{i}")),
                 labels: BTreeMap::new(),
             };
             

@@ -1,3 +1,6 @@
+#![allow(clippy::cognitive_complexity)] // UI event handling is necessarily complex
+#![allow(clippy::items_after_statements)] // Local constants are fine
+
 use crate::impl_tui_table_state;
 use crate::k8s::containers::logs_enhanced;
 use crate::tui::common::base_table_state::BaseTableState;

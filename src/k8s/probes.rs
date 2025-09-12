@@ -1,4 +1,10 @@
-/// Port-forward based probe execution for health and readiness checks
+#![allow(clippy::cast_sign_loss)] // Probe timeouts are always positive
+#![allow(clippy::unused_self)] // Methods may use self in future
+#![allow(clippy::unused_async)] // Async consistency for API
+#![allow(clippy::option_if_let_else)] // if-let is often clearer
+
+//! Port-forward based probe execution for health and readiness checks
+
 use crate::error::Result;
 use crate::tui::data::ContainerProbe;
 use serde::{Deserialize, Serialize};
@@ -204,15 +210,15 @@ impl ProbeExecutor {
     }
     
     /// Execute HTTP request to localhost
+    #[allow(clippy::match_wildcard_for_single_variants)] // Clearer to show default case
     async fn execute_http_request(&self, method: &str, url: &str, probe: &ContainerProbe) -> ProbeResult {
         let client = reqwest::Client::new();
         let timeout_duration = Duration::from_secs(probe.timeout as u64);
         
         let request = match method {
-            "GET" => client.get(url),
             "POST" => client.post(url),
             "HEAD" => client.head(url),
-            _ => client.get(url), // Default to GET
+            _ => client.get(url), // Default to GET (includes "GET" and unknown methods)
         };
         
         match timeout(timeout_duration, request.send()).await {

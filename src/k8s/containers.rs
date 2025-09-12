@@ -1,3 +1,5 @@
+#![allow(clippy::cognitive_complexity)] // Some functions handle complex k8s data
+
 use crate::error::Result;
 use crate::k8s::client_manager::{get_client, refresh_client, should_refresh_client};
 use crate::k8s::utils::format_label_selector;
@@ -20,30 +22,33 @@ fn parse_log_line(line: &str) -> LogRec {
     let regex = TIMESTAMP_REGEX.get_or_init(|| {
         // Match RFC3339 timestamp at start of line, capture the rest as message
         Regex::new(r"^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z?)\s+(.*)$")
-            .expect("Invalid timestamp regex")
+            .unwrap_or_else(|e| panic!("Invalid timestamp regex: {e}"))
     });
     
-    if let Some(captures) = regex.captures(line) {
-        let timestamp = captures.get(1).map_or("", |m| m.as_str());
-        let message = captures.get(2).map_or(line, |m| m.as_str());
-        
-        // Try to extract log level from the message using common patterns
-        let level = extract_log_level(message);
-        
-        LogRec {
-            datetime: timestamp.to_string(),
-            level,
-            message: message.to_string(),
+    regex.captures(line).map_or_else(
+        || {
+            // No timestamp found, treat entire line as message
+            let level = extract_log_level(line);
+            LogRec {
+                datetime: String::new(),
+                level,
+                message: line.to_string(),
+            }
+        },
+        |captures| {
+            let timestamp = captures.get(1).map_or("", |m| m.as_str());
+            let message = captures.get(2).map_or(line, |m| m.as_str());
+            
+            // Try to extract log level from the message using common patterns
+            let level = extract_log_level(message);
+            
+            LogRec {
+                datetime: timestamp.to_string(),
+                level,
+                message: message.to_string(),
+            }
         }
-    } else {
-        // No timestamp found, treat entire line as message
-        let level = extract_log_level(line);
-        LogRec {
-            datetime: String::new(),
-            level,
-            message: line.to_string(),
-        }
-    }
+    )
 }
 
 /// Extract log level from message content using common patterns
@@ -54,14 +59,13 @@ fn extract_log_level(message: &str) -> String {
         // Match common log level patterns: INFO, DEBUG, WARN, ERROR, etc.
         // Case insensitive, word boundaries, and optional brackets/colons
         Regex::new(r"(?i)\b(trace|debug|info|warn|warning|error|err|fatal|panic)\b")
-            .expect("Invalid log level regex")
+            .unwrap_or_else(|e| panic!("Invalid log level regex: {e}"))
     });
     
-    if let Some(captures) = regex.captures(message) {
-        captures.get(1).map_or("", |m| m.as_str()).to_uppercase()
-    } else {
-        String::new() // No recognizable log level
-    }
+    regex.captures(message).map_or_else(
+        String::new, // No recognizable log level
+        |captures| captures.get(1).map_or("", |m| m.as_str()).to_uppercase()
+    )
 }
 
 fn format_ports(ports: Option<Vec<ContainerPort>>) -> String {

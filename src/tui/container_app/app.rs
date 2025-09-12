@@ -1,3 +1,7 @@
+#![allow(clippy::cognitive_complexity)] // UI event handling is necessarily complex
+#![allow(clippy::option_if_let_else)] // if-let is often clearer
+#![allow(clippy::items_after_statements)] // Local constants are fine
+
 use crate::impl_tui_table_state;
 use crate::k8s::probes::{ProbeExecutor, ProbeResult};
 use crate::tui::common::base_table_state::BaseTableState;
@@ -117,13 +121,11 @@ impl App {
         // Handle popup first if it's showing
         if self.show_probe_popup {
             self.key_was_handled_by_container = true;
-            match key.code {
-                Esc => {
-                    self.show_probe_popup = false;
-                    self.current_probe_result = None;
-                }
-                _ => {} // Ignore other keys when popup is showing
+            if key.code == Esc {
+                self.show_probe_popup = false;
+                self.current_probe_result = None;
             }
+            // Ignore other keys when popup is showing
             return Apps::Container { app: self.clone() };
         }
         
@@ -355,6 +357,7 @@ impl App {
     
     
     /// Get probe results for the selected container
+    #[allow(clippy::items_after_statements)] // Const is local to this function
     pub fn get_probe_results(&mut self) -> Vec<(String, String, Option<String>)> {
         let container_name = if let Some(container) = self.get_selected_item() {
             container.name.clone()

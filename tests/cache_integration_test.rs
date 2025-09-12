@@ -84,7 +84,7 @@ async fn test_memory_limit_and_eviction() {
     // Fill cache with data
     for i in 0..100 {
         let request = DataRequest::ReplicaSets {
-            namespace: Some(format!("namespace-{}", i)),
+            namespace: Some(format!("namespace-{i}")),
             labels: BTreeMap::new(),
         };
 
@@ -111,7 +111,7 @@ async fn test_concurrent_access() {
         let cache_clone = cache.clone();
         let handle = tokio::spawn(async move {
             let request = DataRequest::Pods {
-                namespace: format!("namespace-{}", i),
+                namespace: format!("namespace-{i}"),
                 selector: PodSelector::All,
             };
 

@@ -23,6 +23,9 @@ pub enum Error {
 
     #[from]
     Io(std::io::Error),
+
+    /// Custom error message
+    Custom(String),
 }
 
 impl core::fmt::Display for Error {

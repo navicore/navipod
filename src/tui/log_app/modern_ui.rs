@@ -237,12 +237,12 @@ fn render_footer(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     
     // Add tailing status indicator
     let tailing_status = if app.is_tailing {
-        format!(" • 🟢 TAILING")
+        " • 🟢 TAILING".to_string()
     } else {
-        format!(" • ⏸ PAUSED")
+        " • ⏸ PAUSED".to_string()
     };
     
-    let footer_text = format!("{}{}", base_text, tailing_status);
+    let footer_text = format!("{base_text}{tailing_status}");
     let footer = Paragraph::new(footer_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)

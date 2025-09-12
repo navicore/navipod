@@ -137,19 +137,84 @@ fn extract_probe_info(probe: &Probe, probe_type: &str) -> ContainerProbe {
 fn extract_container_probes(container: &k8s_openapi::api::core::v1::Container) -> Vec<ContainerProbe> {
     let mut probes = Vec::new();
     
+    debug!("Extracting probes for container: {}", container.name);
+    
     if let Some(liveness_probe) = &container.liveness_probe {
-        probes.push(extract_probe_info(liveness_probe, "Liveness"));
+        let probe = extract_probe_info(liveness_probe, "Liveness");
+        debug!("Found liveness probe: {} - {}", probe.handler_type, probe.details);
+        probes.push(probe);
     }
     
     if let Some(readiness_probe) = &container.readiness_probe {
-        probes.push(extract_probe_info(readiness_probe, "Readiness"));
+        let probe = extract_probe_info(readiness_probe, "Readiness");
+        debug!("Found readiness probe: {} - {}", probe.handler_type, probe.details);
+        probes.push(probe);
     }
     
     if let Some(startup_probe) = &container.startup_probe {
-        probes.push(extract_probe_info(startup_probe, "Startup"));
+        let probe = extract_probe_info(startup_probe, "Startup");
+        debug!("Found startup probe: {} - {}", probe.handler_type, probe.details);
+        probes.push(probe);
+    }
+    
+    // Extract metrics endpoints from pod annotations (this will be added separately with pod metadata)
+    
+    if probes.is_empty() {
+        debug!("No probes found for container: {}", container.name);
+    } else {
+        debug!("Extracted {} total probes/endpoints for container: {}", probes.len(), container.name);
     }
     
     probes
+}
+
+/// Extract metrics endpoints from pod annotations
+fn extract_metrics_from_annotations(annotations: &std::collections::BTreeMap<String, String>, _container_ports: Option<&Vec<k8s_openapi::api::core::v1::ContainerPort>>) -> Vec<ContainerProbe> {
+    let mut metrics_probes = Vec::new();
+    
+    // Check for Prometheus annotations
+    if annotations.get("prometheus.io/scrape").map(String::as_str) == Some("true") {
+        let metrics_path = annotations.get("prometheus.io/path").cloned().unwrap_or_else(|| "/metrics".to_string());
+        let metrics_port = annotations.get("prometheus.io/port")
+            .and_then(|p| p.parse::<i32>().ok())
+            .unwrap_or(8080);
+            
+        metrics_probes.push(ContainerProbe {
+            probe_type: "Metrics".to_string(),
+            handler_type: "HTTP".to_string(),
+            details: format!("GET http://localhost:{metrics_port}{metrics_path}"),
+            initial_delay: 0,
+            period: 10,
+            timeout: 5,
+            failure_threshold: 1,
+            success_threshold: 1,
+        });
+    }
+    
+    // Check for navipod.io annotations  
+    if annotations.get("navipod.io/metrics-enabled").map(String::as_str) == Some("true") {
+        let metrics_path = annotations.get("navipod.io/metrics-path").cloned().unwrap_or_else(|| "/metrics".to_string());
+        let metrics_port = annotations.get("navipod.io/metrics-port")
+            .and_then(|p| p.parse::<i32>().ok())
+            .unwrap_or(8080);
+            
+        // Only add if not already added by prometheus annotations
+        if !metrics_probes.iter().any(|p| p.details.contains(&format!(":{metrics_port}{metrics_path}"))) {
+            metrics_probes.push(ContainerProbe {
+                probe_type: "Metrics".to_string(),
+                handler_type: "HTTP".to_string(),
+                details: format!("GET http://localhost:{metrics_port}{metrics_path}"),
+                initial_delay: 0,
+                period: 10,
+                timeout: 5,
+                failure_threshold: 1,
+                success_threshold: 1,
+            });
+        }
+    }
+    
+    debug!("Extracted {} metrics endpoints from annotations", metrics_probes.len());
+    metrics_probes
 }
 
 /// # Errors
@@ -188,7 +253,13 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
             if let Some(spec) = pod.spec {
                     for container in spec.containers {
                         // Extract probes first before moving other fields
-                        let probes = extract_container_probes(&container);
+                        let mut probes = extract_container_probes(&container);
+                        
+                        // Add metrics endpoints from pod annotations
+                        if let Some(ref annotations) = pod.metadata.annotations {
+                            let metrics_probes = extract_metrics_from_annotations(annotations, container.ports.as_ref());
+                            probes.extend(metrics_probes);
+                        }
                         
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
@@ -235,7 +306,13 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                     if let Some(init_containers) = spec.init_containers {
                         for container in init_containers {
                             // Extract probes first before moving other fields
-                            let probes = extract_container_probes(&container);
+                            let mut probes = extract_container_probes(&container);
+                            
+                            // Add metrics endpoints from pod annotations
+                            if let Some(ref annotations) = pod.metadata.annotations {
+                                let metrics_probes = extract_metrics_from_annotations(annotations, container.ports.as_ref());
+                                probes.extend(metrics_probes);
+                            }
                             
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
                             let restarts = container_statuses

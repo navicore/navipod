@@ -3,7 +3,7 @@ use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use ratatui::prelude::*;
 use ratatui::widgets::{
-    Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, 
+    Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, 
     ScrollbarOrientation, Wrap
 };
 
@@ -32,6 +32,11 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     // Handle overlays
     if app.get_show_filter_edit() {
         render_filter_modal(f, app, &theme);
+    }
+    
+    // Show probe results popup if active
+    if app.show_probe_popup {
+        render_probe_results_popup(f, app, &theme);
     }
 }
 
@@ -69,7 +74,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(context, header_chunks[1]);
     
     // Actions/shortcuts
-    let actions_text = "f: filter • Enter: logs • c: colors • q: quit";
+    let actions_text = "TAB: panels • f: filter • Enter: execute • q: quit";
     let actions = Paragraph::new(actions_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Right)
@@ -243,24 +248,55 @@ fn render_details_panel(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTh
 
 fn render_mounts_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let mounts = app.get_left_details();
+    let is_focused = app.focused_panel == crate::tui::container_app::app::FocusedPanel::Mounts;
     
-    let mount_items: Vec<ListItem> = mounts
+    let scroll_offset = if is_focused { app.detail_scroll_offset } else { 0 };
+    let visible_mounts: Vec<_> = mounts
         .iter()
-        .map(|(name, path, _)| {
+        .enumerate()
+        .skip(scroll_offset)
+        .take(10) // Show up to 10 visible items
+        .collect();
+    
+    let mount_items: Vec<ListItem> = visible_mounts
+        .iter()
+        .map(|(absolute_index, (name, path, _))| {
+            let is_selected = is_focused && *absolute_index == app.detail_selection;
+            let selection_indicator = if is_selected { "▶ " } else { "  " };
+            
             let content = Line::from(vec![
+                Span::raw(selection_indicator),
                 Span::styled(format!("{name}: "), theme.text_style(TextType::Body)),
                 Span::styled(path, theme.text_style(TextType::Caption)),
             ]);
-            ListItem::new(content)
+            
+            let item = ListItem::new(content);
+            if is_selected {
+                item.style(Style::default().bg(theme.bg_accent))
+            } else {
+                item
+            }
         })
         .collect();
+    
+    let border_style = if is_focused {
+        Style::default().fg(theme.border_focus).bg(theme.bg_tertiary).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.border).bg(theme.bg_tertiary)
+    };
+    
+    let title = if is_focused {
+        format!("{} Volume Mounts [TAB: next panel]", Symbols::FOLDER)
+    } else {
+        format!("{} Volume Mounts", Symbols::FOLDER)
+    };
     
     let mounts_list = List::new(mount_items)
         .block(
             Block::default()
-                .title(format!("{} Volume Mounts", Symbols::FOLDER))
+                .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
+                .border_style(border_style)
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
                 .style(Style::default().bg(theme.bg_tertiary))
         );
@@ -270,24 +306,55 @@ fn render_mounts_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
 
 fn render_env_vars_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let env_vars = app.get_right_details();
+    let is_focused = app.focused_panel == crate::tui::container_app::app::FocusedPanel::EnvVars;
     
-    let env_items: Vec<ListItem> = env_vars
+    let scroll_offset = if is_focused { app.detail_scroll_offset } else { 0 };
+    let visible_env_vars: Vec<_> = env_vars
         .iter()
-        .map(|(key, value, _)| {
+        .enumerate()
+        .skip(scroll_offset)
+        .take(10) // Show up to 10 visible items
+        .collect();
+    
+    let env_items: Vec<ListItem> = visible_env_vars
+        .iter()
+        .map(|(absolute_index, (key, value, _))| {
+            let is_selected = is_focused && *absolute_index == app.detail_selection;
+            let selection_indicator = if is_selected { "▶ " } else { "  " };
+            
             let content = Line::from(vec![
+                Span::raw(selection_indicator),
                 Span::styled(format!("{key}: "), theme.text_style(TextType::Body)),
                 Span::styled(truncate_text(value, 25), theme.text_style(TextType::Caption)),
             ]);
-            ListItem::new(content)
+            
+            let item = ListItem::new(content);
+            if is_selected {
+                item.style(Style::default().bg(theme.bg_accent))
+            } else {
+                item
+            }
         })
         .collect();
+    
+    let border_style = if is_focused {
+        Style::default().fg(theme.border_focus).bg(theme.bg_tertiary).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.border).bg(theme.bg_tertiary)
+    };
+    
+    let title = if is_focused {
+        format!("{} Environment Variables [TAB: next panel]", Symbols::SETTINGS)
+    } else {
+        format!("{} Environment Variables", Symbols::SETTINGS)
+    };
     
     let env_list = List::new(env_items)
         .block(
             Block::default()
-                .title(format!("{} Environment Variables", Symbols::SETTINGS))
+                .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
+                .border_style(border_style)
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
                 .style(Style::default().bg(theme.bg_tertiary))
         );
@@ -296,59 +363,110 @@ fn render_env_vars_section(f: &mut Frame, app: &mut App, area: Rect, theme: &Nav
 }
 
 fn render_probes_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
-    let probes = if let Some(selected_container) = app.get_selected_item() {
-        &selected_container.probes
+    let selected_container = app.get_selected_item().cloned();
+    let is_focused = app.focused_panel == crate::tui::container_app::app::FocusedPanel::Probes;
+    
+    let probes = if let Some(ref container) = selected_container {
+        &container.probes
     } else {
         return; // No container selected
     };
     
-    let probe_items: Vec<ListItem> = probes
-        .iter()
-        .map(|probe| {
-            let handler_symbol = match probe.handler_type.as_str() {
-                "HTTP" => "🌐",
-                "TCP" => "🔌",
-                "Exec" => "⚡",
-                _ => "❓",
-            };
-            
-            let probe_type_color = match probe.probe_type.as_str() {
-                "Liveness" => theme.error,   // Red for critical liveness
-                "Readiness" => theme.warning, // Yellow for readiness
-                "Startup" => theme.info,     // Blue for startup
-                _ => theme.text_primary,
-            };
-            
-            let content = Line::from(vec![
-                Span::raw(format!("{handler_symbol} ")),
-                Span::styled(format!("{}: ", probe.probe_type), Style::default().fg(probe_type_color).add_modifier(Modifier::BOLD)),
-                Span::styled(&probe.details, theme.text_style(TextType::Caption)),
-            ]);
-            ListItem::new(content)
-        })
-        .collect();
-    
-    // Show message if no probes configured
-    let probe_list = if probe_items.is_empty() {
-        let empty_content = Line::from(vec![
-            Span::styled("No health probes configured", theme.text_style(TextType::Caption).add_modifier(Modifier::ITALIC))
-        ]);
-        List::new(vec![ListItem::new(empty_content)])
+    // Show probe configurations with selection and scrolling
+    let probe_items: Vec<ListItem> = if probes.is_empty() {
+        vec![ListItem::new(Line::from(vec![
+            Span::styled("  No health probes configured", theme.text_style(TextType::Caption).add_modifier(Modifier::ITALIC))
+        ]))]
     } else {
-        List::new(probe_items)
+        // Don't manually slice - let ListState handle scrolling and selection
+        probes
+            .iter()
+            .enumerate()
+            .map(|(index, probe)| {
+                let is_selected = is_focused && index == app.detail_selection;
+                let selection_indicator = if is_selected { "▶ " } else { "  " };
+                
+                let handler_symbol = match probe.handler_type.as_str() {
+                    "HTTP" => "🌐",
+                    "TCP" => "🔌", 
+                    "Exec" => "⚡",
+                    _ => "❓",
+                };
+                
+                let probe_type_color = match probe.probe_type.as_str() {
+                    "Liveness" => theme.error,   // Red for critical liveness
+                    "Readiness" => theme.warning, // Yellow for readiness
+                    "Startup" => theme.info,     // Blue for startup
+                    _ => theme.text_primary,
+                };
+                
+                let content = Line::from(vec![
+                    Span::raw(selection_indicator),
+                    Span::raw(format!("{handler_symbol} ")),
+                    Span::styled(format!("{}: ", probe.probe_type), Style::default().fg(probe_type_color).add_modifier(Modifier::BOLD)),
+                    Span::styled(&probe.details, theme.text_style(TextType::Caption)),
+                ]);
+                
+                ListItem::new(content)
+            })
+            .collect()
     };
     
-    let probes_widget = probe_list
+    let border_style = if is_focused {
+        Style::default().fg(theme.border_focus).bg(theme.bg_tertiary).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme.border).bg(theme.bg_tertiary)
+    };
+    
+    let title = if is_focused {
+        "🏥 Health Probes [ENTER: execute • TAB: next panel]"
+    } else {
+        "🏥 Health Probes"
+    };
+    
+    // Create the list widget
+    let probes_widget = List::new(probe_items)
         .block(
             Block::default()
-                .title("🏥 Health Probes")
+                .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
+                .border_style(border_style)
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
                 .style(Style::default().bg(theme.bg_tertiary))
         );
     
-    f.render_widget(probes_widget, area);
+    // Create list state for scrolling
+    let mut list_state = ListState::default();
+    if is_focused && !probes.is_empty() {
+        list_state.select(Some(app.detail_selection));
+    }
+    
+    f.render_stateful_widget(probes_widget, area, &mut list_state);
+    
+    // Add scrollbar if focused and has items that might scroll
+    if is_focused && !probes.is_empty() {
+        let scrollbar_area = Rect {
+            x: area.right() - 1,
+            y: area.top() + 1,
+            width: 1,
+            height: area.height.saturating_sub(2),
+        };
+        
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(probes.len().saturating_sub(1))
+            .position(app.detail_selection);
+            
+        f.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .style(Style::default().fg(theme.border_focus).bg(theme.bg_tertiary))
+                .begin_symbol(Some("↑"))
+                .end_symbol(Some("↓"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█"),
+            scrollbar_area,
+            &mut scrollbar_state,
+        );
+    }
 }
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
@@ -379,7 +497,7 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
 }
 
 fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
-    let footer_text = "Enter: Logs • e: Environment • m: Mounts • p: Probes • ↑↓: Navigate • Ctrl+F: Page Down • Ctrl+B: Page Up";
+    let footer_text = "TAB: Focus panels • Enter: Execute/Logs • ↑↓: Navigate • f: filter • Esc: Back/Close • q: quit";
     let footer = Paragraph::new(footer_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
@@ -448,6 +566,117 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
         .block(Block::default().style(Style::default().bg(theme.bg_primary)));
     
     f.render_widget(help, help_area);
+}
+
+fn render_probe_results_popup(f: &mut Frame, app: &App, theme: &NaviTheme) {
+    let area = f.area();
+    let modal_area = centered_rect(70, 60, area);
+    
+    // Clear background
+    f.render_widget(Clear, modal_area);
+    
+    if let Some(ref result) = app.current_probe_result {
+        // Create popup content
+        let mut content_lines = Vec::new();
+        
+        // Header with probe type and status
+        let status_symbol = match result.status {
+            crate::k8s::probes::ProbeStatus::Success => "✅",
+            crate::k8s::probes::ProbeStatus::Failure => "❌", 
+            crate::k8s::probes::ProbeStatus::Timeout => "⏱️",
+            crate::k8s::probes::ProbeStatus::Error => "🚫",
+        };
+        
+        let status_color = match result.status {
+            crate::k8s::probes::ProbeStatus::Success => theme.success,
+            crate::k8s::probes::ProbeStatus::Failure => theme.error,
+            crate::k8s::probes::ProbeStatus::Timeout => theme.warning,
+            crate::k8s::probes::ProbeStatus::Error => theme.error,
+        };
+        
+        content_lines.push(Line::from(vec![
+            Span::styled(format!("{} {} {} Probe Result", status_symbol, result.probe_type, result.handler_type), 
+                Style::default().fg(status_color).add_modifier(Modifier::BOLD))
+        ]));
+        
+        content_lines.push(Line::from(vec![Span::raw("")])); // Empty line
+        
+        // Execution details
+        content_lines.push(Line::from(vec![
+            Span::styled("Execution Time: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{}ms", result.response_time_ms), theme.text_style(TextType::Body)),
+        ]));
+        
+        content_lines.push(Line::from(vec![
+            Span::styled("Timestamp: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+            Span::styled(&result.timestamp, theme.text_style(TextType::Body)),
+        ]));
+        
+        if let Some(status_code) = result.status_code {
+            content_lines.push(Line::from(vec![
+                Span::styled("HTTP Status: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+                Span::styled(status_code.to_string(), theme.text_style(TextType::Body)),
+            ]));
+        }
+        
+        if let Some(ref error) = result.error_message {
+            content_lines.push(Line::from(vec![Span::raw("")])); // Empty line
+            content_lines.push(Line::from(vec![
+                Span::styled("Error: ", Style::default().fg(theme.error).add_modifier(Modifier::BOLD)),
+                Span::styled(error, Style::default().fg(theme.error)),
+            ]));
+        }
+        
+        if !result.response_body.is_empty() {
+            content_lines.push(Line::from(vec![Span::raw("")])); // Empty line
+            content_lines.push(Line::from(vec![
+                Span::styled("Response:", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD))
+            ]));
+            
+            // Split response body into lines and add them
+            for line in result.response_body.lines().take(10) { // Limit to 10 lines
+                content_lines.push(Line::from(vec![
+                    Span::styled(line, theme.text_style(TextType::Caption))
+                ]));
+            }
+            
+            if result.response_body.lines().count() > 10 {
+                content_lines.push(Line::from(vec![
+                    Span::styled("... (truncated)", theme.text_style(TextType::Caption).add_modifier(Modifier::ITALIC))
+                ]));
+            }
+        }
+        
+        let popup = Paragraph::new(content_lines)
+            .style(Style::default().bg(theme.bg_secondary))
+            .block(
+                Block::default()
+                    .title("🏥 Probe Execution Result")
+                    .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
+                    .style(Style::default().bg(theme.bg_secondary))
+            )
+            .wrap(Wrap { trim: true });
+            
+        f.render_widget(popup, modal_area);
+        
+        // Help text
+        let help_area = Rect {
+            x: modal_area.x,
+            y: modal_area.y + modal_area.height,
+            width: modal_area.width,
+            height: 1,
+        };
+        
+        let help_text = "ESC: Close";
+        let help = Paragraph::new(help_text)
+            .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
+            .alignment(Alignment::Center)
+            .block(Block::default().style(Style::default().bg(theme.bg_primary)));
+        
+        f.render_widget(help, help_area);
+    }
 }
 
 // Helper functions

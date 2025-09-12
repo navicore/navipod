@@ -73,11 +73,9 @@ impl AppBehavior for log_app::app::App {
                 Some(100),
             ).await {
                 Ok(initial_logs) => {
-                    if !initial_logs.is_empty() {
-                        if tx.send(Message::Log(initial_logs)).await.is_err() {
-                            debug!("Failed to send initial logs, receiver dropped");
-                            return;
-                        }
+                    if !initial_logs.is_empty() && tx.send(Message::Log(initial_logs)).await.is_err() {
+                        debug!("Failed to send initial logs, receiver dropped");
+                        return;
                     }
                 }
                 Err(e) => {
@@ -192,8 +190,8 @@ impl App {
             self.base.state.select(Some(last_index));
             // Update scroll state to show bottom
             self.base.scroll_state = ratatui::widgets::ScrollbarState::new(
-                self.base.items.len().saturating_sub(1) * ITEM_HEIGHT as usize
-            ).position(last_index * ITEM_HEIGHT as usize);
+                self.base.items.len().saturating_sub(1) * ITEM_HEIGHT
+            ).position(last_index * ITEM_HEIGHT);
         }
     }
 
@@ -221,7 +219,7 @@ impl App {
         
         // Update scroll state
         self.base.scroll_state = ratatui::widgets::ScrollbarState::new(
-            self.base.items.len().saturating_sub(1) * ITEM_HEIGHT as usize
+            self.base.items.len().saturating_sub(1) * ITEM_HEIGHT
         );
         
         // Auto-tail if enabled and we were at bottom
@@ -257,7 +255,7 @@ impl App {
                 if !self.base.items.is_empty() {
                     self.base.state.select(Some(0));
                     self.base.scroll_state = ratatui::widgets::ScrollbarState::new(
-                        self.base.items.len().saturating_sub(1) * ITEM_HEIGHT as usize
+                        self.base.items.len().saturating_sub(1) * ITEM_HEIGHT
                     ).position(0);
                     self.set_tailing(false); // Disable tailing when manually navigating
                     self.user_scrolled = true;
@@ -280,7 +278,7 @@ impl App {
         let was_at_bottom = self.is_at_bottom();
         
         match key.code {
-            Up | Char('k') | Down | Char('j') | PageUp | PageDown | Home | End => {
+            Up | Char('k' | 'j') | Down | PageUp | PageDown | Home | End => {
                 // Mark that user has manually scrolled
                 self.user_scrolled = true;
                 

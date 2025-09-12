@@ -572,113 +572,146 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 
 fn render_probe_results_popup(f: &mut Frame, app: &App, theme: &NaviTheme) {
     let area = f.area();
-    let modal_area = centered_rect(70, 60, area);
+    let modal_area = centered_rect(75, 70, area);
     
     // Clear background
     f.render_widget(Clear, modal_area);
     
     if let Some(ref result) = app.current_probe_result {
-        // Create popup content
-        let mut content_lines = Vec::new();
+        let all_lines = build_probe_result_lines(result, theme);
+        let content_height = modal_area.height.saturating_sub(4); // 2 for borders, 2 for padding
+        let total_lines = all_lines.len();
         
-        // Header with probe type and status
-        let status_symbol = match result.status {
-            crate::k8s::probes::ProbeStatus::Success => "✅",
-            crate::k8s::probes::ProbeStatus::Failure => "❌", 
-            crate::k8s::probes::ProbeStatus::Timeout => "⏱️",
-            crate::k8s::probes::ProbeStatus::Error => "🚫",
-        };
+        // Apply scrolling - skip lines based on scroll position
+        let visible_lines: Vec<Line> = all_lines
+            .clone()
+            .into_iter()
+            .skip(app.probe_popup_scroll)
+            .take(content_height as usize)
+            .collect();
         
-        let status_color = match result.status {
-            crate::k8s::probes::ProbeStatus::Success => theme.success,
-            crate::k8s::probes::ProbeStatus::Failure => theme.error,
-            crate::k8s::probes::ProbeStatus::Timeout => theme.warning,
-            crate::k8s::probes::ProbeStatus::Error => theme.error,
-        };
-        
-        content_lines.push(Line::from(vec![
-            Span::styled(format!("{} {} {} Probe Result", status_symbol, result.probe_type, result.handler_type), 
-                Style::default().fg(status_color).add_modifier(Modifier::BOLD))
-        ]));
-        
-        content_lines.push(Line::from(vec![Span::raw("")])); // Empty line
-        
-        // Execution details
-        content_lines.push(Line::from(vec![
-            Span::styled("Execution Time: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{}ms", result.response_time_ms), theme.text_style(TextType::Body)),
-        ]));
-        
-        content_lines.push(Line::from(vec![
-            Span::styled("Timestamp: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
-            Span::styled(&result.timestamp, theme.text_style(TextType::Body)),
-        ]));
-        
-        if let Some(status_code) = result.status_code {
-            content_lines.push(Line::from(vec![
-                Span::styled("HTTP Status: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
-                Span::styled(status_code.to_string(), theme.text_style(TextType::Body)),
-            ]));
-        }
-        
-        if let Some(ref error) = result.error_message {
-            content_lines.push(Line::from(vec![Span::raw("")])); // Empty line
-            content_lines.push(Line::from(vec![
-                Span::styled("Error: ", Style::default().fg(theme.error).add_modifier(Modifier::BOLD)),
-                Span::styled(error, Style::default().fg(theme.error)),
-            ]));
-        }
-        
-        if !result.response_body.is_empty() {
-            content_lines.push(Line::from(vec![Span::raw("")])); // Empty line
-            content_lines.push(Line::from(vec![
-                Span::styled("Response:", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD))
-            ]));
-            
-            // Split response body into lines and add them
-            for line in result.response_body.lines().take(10) { // Limit to 10 lines
-                content_lines.push(Line::from(vec![
-                    Span::styled(line, theme.text_style(TextType::Caption))
-                ]));
-            }
-            
-            if result.response_body.lines().count() > 10 {
-                content_lines.push(Line::from(vec![
-                    Span::styled("... (truncated)", theme.text_style(TextType::Caption).add_modifier(Modifier::ITALIC))
-                ]));
-            }
-        }
-        
-        let popup = Paragraph::new(content_lines)
-            .style(Style::default().bg(theme.bg_secondary))
-            .block(
-                Block::default()
-                    .title("🏥 Probe Execution Result")
-                    .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
-                    .style(Style::default().bg(theme.bg_secondary))
-            )
-            .wrap(Wrap { trim: true });
-            
-        f.render_widget(popup, modal_area);
-        
-        // Help text
-        let help_area = Rect {
-            x: modal_area.x,
-            y: modal_area.y + modal_area.height,
-            width: modal_area.width,
-            height: 1,
-        };
-        
-        let help_text = "ESC: Close";
-        let help = Paragraph::new(help_text)
-            .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
-            .alignment(Alignment::Center)
-            .block(Block::default().style(Style::default().bg(theme.bg_primary)));
-        
-        f.render_widget(help, help_area);
+        render_probe_popup_content(f, modal_area, visible_lines, theme);
+        render_probe_popup_scrollbar(f, modal_area, total_lines, content_height, app.probe_popup_scroll);
+        render_probe_popup_help(f, modal_area, theme);
     }
+}
+
+fn build_probe_result_lines(result: &crate::k8s::probes::ProbeResult, theme: &NaviTheme) -> Vec<Line<'static>> {
+    let mut all_lines = Vec::new();
+    
+    // Header with probe type and status
+    let (status_symbol, status_color) = get_probe_status_display(&result.status, theme);
+    
+    all_lines.push(Line::from(vec![
+        Span::styled(format!("{} {} {} Probe Result", status_symbol, result.probe_type, result.handler_type), 
+            Style::default().fg(status_color).add_modifier(Modifier::BOLD))
+    ]));
+    
+    all_lines.push(Line::from(vec![Span::raw("")])); // Empty line
+    
+    // Execution details
+    all_lines.push(Line::from(vec![
+        Span::styled("Execution Time: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{}ms", result.response_time_ms), theme.text_style(TextType::Body)),
+    ]));
+    
+    all_lines.push(Line::from(vec![
+        Span::styled("Timestamp: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+        Span::styled(result.timestamp.clone(), theme.text_style(TextType::Body)),
+    ]));
+    
+    if let Some(status_code) = result.status_code {
+        all_lines.push(Line::from(vec![
+            Span::styled("HTTP Status: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+            Span::styled(status_code.to_string(), theme.text_style(TextType::Body)),
+        ]));
+    }
+    
+    if let Some(ref error) = result.error_message {
+        all_lines.push(Line::from(vec![Span::raw("")])); // Empty line
+        all_lines.push(Line::from(vec![
+            Span::styled("Error: ", Style::default().fg(theme.error).add_modifier(Modifier::BOLD)),
+            Span::styled(error.clone(), Style::default().fg(theme.error)),
+        ]));
+    }
+    
+    if !result.response_body.is_empty() {
+        all_lines.push(Line::from(vec![Span::raw("")])); // Empty line
+        all_lines.push(Line::from(vec![
+            Span::styled("Response:", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD))
+        ]));
+        
+        // Add ALL response body lines for scrolling
+        for line in result.response_body.lines() {
+            all_lines.push(Line::from(vec![
+                Span::styled(line.to_string(), theme.text_style(TextType::Caption))
+            ]));
+        }
+    }
+    
+    all_lines
+}
+
+const fn get_probe_status_display(status: &crate::k8s::probes::ProbeStatus, theme: &NaviTheme) -> (&'static str, Color) {
+    match status {
+        crate::k8s::probes::ProbeStatus::Success => ("✅", theme.success),
+        crate::k8s::probes::ProbeStatus::Failure => ("❌", theme.error),
+        crate::k8s::probes::ProbeStatus::Timeout => ("⏱️", theme.warning),
+        crate::k8s::probes::ProbeStatus::Error => ("🚫", theme.error),
+    }
+}
+
+fn render_probe_popup_content(f: &mut Frame, modal_area: Rect, visible_lines: Vec<Line>, theme: &NaviTheme) {
+    let popup = Paragraph::new(visible_lines)
+        .style(Style::default().bg(theme.bg_secondary))
+        .block(
+            Block::default()
+                .title("🏥 Probe Execution Result")
+                .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
+                .style(Style::default().bg(theme.bg_secondary))
+        )
+        .wrap(Wrap { trim: true });
+        
+    f.render_widget(popup, modal_area);
+}
+
+fn render_probe_popup_scrollbar(f: &mut Frame, modal_area: Rect, total_lines: usize, content_height: u16, scroll_position: usize) {
+    if total_lines > content_height as usize {
+        let scrollbar = ratatui::widgets::Scrollbar::new(ratatui::widgets::ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+            
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(total_lines)
+            .position(scroll_position);
+            
+        f.render_stateful_widget(
+            scrollbar,
+            modal_area.inner(ratatui::layout::Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
+            &mut scrollbar_state,
+        );
+    }
+}
+
+fn render_probe_popup_help(f: &mut Frame, modal_area: Rect, theme: &NaviTheme) {
+    let help_area = Rect {
+        x: modal_area.x,
+        y: modal_area.y + modal_area.height,
+        width: modal_area.width,
+        height: 1,
+    };
+    
+    let help_text = "↑↓/j/k: Scroll • g/G: Top/Bottom • q: Quit • ESC: Close";
+    let help = Paragraph::new(help_text)
+        .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
+        .alignment(Alignment::Center)
+        .block(Block::default().style(Style::default().bg(theme.bg_primary)));
+    
+    f.render_widget(help, help_area);
 }
 
 // Helper functions

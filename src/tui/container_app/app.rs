@@ -47,6 +47,8 @@ pub struct App {
     pub(crate) show_probe_popup: bool,
     /// Current probe execution result for popup
     pub(crate) current_probe_result: Option<ProbeResult>,
+    /// Scroll position in the probe popup
+    pub(crate) probe_popup_scroll: usize,
     /// Track if container-specific handler handled a key
     pub(crate) key_was_handled_by_container: bool,
 }
@@ -107,11 +109,13 @@ impl App {
             detail_scroll_offset: 0,
             show_probe_popup: false,
             current_probe_result: None,
+            probe_popup_scroll: 0,
             key_was_handled_by_container: false,
         }
     }
 
     /// Handle Container-specific key events that aren't covered by common key handler
+    #[allow(clippy::too_many_lines)] // UI event handling is necessarily complex
     fn handle_container_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Apps {
         use KeyCode::{Enter, Esc, Tab, BackTab, Up, Down};
         
@@ -121,11 +125,59 @@ impl App {
         // Handle popup first if it's showing
         if self.show_probe_popup {
             self.key_was_handled_by_container = true;
-            if key.code == Esc {
-                self.show_probe_popup = false;
-                self.current_probe_result = None;
+            match key.code {
+                Esc => {
+                    self.show_probe_popup = false;
+                    self.current_probe_result = None;
+                    self.probe_popup_scroll = 0;
+                }
+                KeyCode::Char('q') => {
+                    // Quit entire application from popup
+                    self.show_probe_popup = false;
+                    self.current_probe_result = None;
+                    self.probe_popup_scroll = 0;
+                    crate::tui::ui_loop::set_force_quit();
+                    return Apps::Container { app: self.clone() };
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    // Scroll down in popup
+                    if let Some(ref result) = self.current_probe_result {
+                        let content_lines = self.count_probe_popup_lines(result);
+                        if self.probe_popup_scroll + 1 < content_lines {
+                            self.probe_popup_scroll += 1;
+                        }
+                    }
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    // Scroll up in popup
+                    if self.probe_popup_scroll > 0 {
+                        self.probe_popup_scroll -= 1;
+                    }
+                }
+                KeyCode::Char('g') => {
+                    // Go to top
+                    self.probe_popup_scroll = 0;
+                }
+                KeyCode::Char('G') => {
+                    // Go to bottom
+                    if let Some(ref result) = self.current_probe_result {
+                        let content_lines = self.count_probe_popup_lines(result);
+                        self.probe_popup_scroll = content_lines.saturating_sub(1);
+                    }
+                }
+                KeyCode::PageDown | KeyCode::Char('f') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
+                    // Page down
+                    if let Some(ref result) = self.current_probe_result {
+                        let content_lines = self.count_probe_popup_lines(result);
+                        self.probe_popup_scroll = (self.probe_popup_scroll + 10).min(content_lines.saturating_sub(1));
+                    }
+                }
+                KeyCode::PageUp | KeyCode::Char('b') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
+                    // Page up
+                    self.probe_popup_scroll = self.probe_popup_scroll.saturating_sub(10);
+                }
+                _ => {} // Ignore other keys
             }
-            // Ignore other keys when popup is showing
             return Apps::Container { app: self.clone() };
         }
         
@@ -336,6 +388,7 @@ impl App {
                 timestamp: chrono::Utc::now().format("%H:%M:%S").to_string(),
             });
             self.show_probe_popup = true;
+            self.probe_popup_scroll = 0; // Reset scroll position
             
             // Execute the probe asynchronously but block for the result
             // This will freeze the UI briefly but provides real probe execution
@@ -355,6 +408,27 @@ impl App {
         }
     }
     
+    
+    /// Count the number of lines in the probe popup content
+    #[allow(clippy::unused_self)] // May use self in future
+    fn count_probe_popup_lines(&self, result: &ProbeResult) -> usize {
+        let mut lines = 7; // Header, empty line, execution time, timestamp, and possible status code
+        
+        if result.status_code.is_some() {
+            lines += 1;
+        }
+        
+        if result.error_message.is_some() {
+            lines += 2; // Empty line + error line
+        }
+        
+        if !result.response_body.is_empty() {
+            lines += 2; // Empty line + "Response:" header
+            lines += result.response_body.lines().count().min(100); // Limit to 100 lines
+        }
+        
+        lines
+    }
     
     /// Get probe results for the selected container
     #[allow(clippy::items_after_statements)] // Const is local to this function

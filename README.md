@@ -1,73 +1,163 @@
-A TUI and CLI for Inspecting Containers in Kubernetes
-============
+# NaviPod
 
-![an image showing navipod inspecting replicas and pod and ingress](docs/demo.png)
+A comprehensive TUI and CLI for inspecting containers in Kubernetes clusters.
 
-Alpha - Under constant development as I practice Rust programming and discover
-needs not met by other tools.
+![NaviPod inspecting replicas, pods, and ingress](docs/demo.png)
 
-The command uses the local kubecontext credentials to access Kubernetes clusters.
+## Overview
 
-The primary use case of the tool is to get quick answers to replica and pod
-and ingress state.
+NaviPod provides a modern terminal interface for Kubernetes operations, built
+with Rust for performance and reliability. The tool uses local kubecontext
+credentials to access Kubernetes clusters and offers both interactive TUI and
+scriptable CLI modes.
 
-The tool also captures data to an embedded DB for exporting as RDF.
+## Key Features
 
-It will get Prometheus data from pods which are annotated for Prometheus
-using the convention:
+### Terminal User Interface (TUI)
 
+- **Multi-view Navigation**: Navigate between deployments, pods, containers, and logs
+- **Container Inspection**:
+  - View environment variables, volume mounts, and resource limits
+  - Execute liveness, readiness, and startup probes and view results
+  - Inspect container logs with smart tailing and filtering
+- **Interactive Probe Testing**:
+  - Support for HTTP, TCP, and Exec probe types
+  - Detailed response viewing with scrollable popup windows
+- **Log Viewer**:
+  - Log streaming with tailing
+  - Log level detection and color coding
+  - Detailed log entry viewer
+  - Filtering and search capabilities
+- **Keyboard Navigation**:
+  - Vim-style keybindings (j/k, g/G)
+  - Tab navigation between panels
+
+### Command Line Interface
+
+- **Pod Analysis**: Report on pod external ingress configurations
+- **Metrics Collection**: Gather Prometheus metrics from annotated pods
+- **RDF Export**: Export cluster data to N-Triples or Turtle RDF formats
+- **Database Operations**: Embedded database for offline analysis
+- **Shell Completion**: Auto-completion support for bash and zsh
+
+### Architecture
+
+- **Async/Await**: Non-blocking operations for responsive UI
+- **Modular Design**: Clean separation between Kubernetes API, UI, and data layers
+- **Theme System**: Customizable color schemes
+- **Error Handling**: Comprehensive error handling with user-friendly messages
+- **Caching**: Intelligent caching for improved performance
+
+## Prometheus Integration
+
+NaviPod automatically discovers and collects metrics from pods annotated with:
+
+```yaml
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8081"
 ```
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/path: "/actuator/prometheus"
-        prometheus.io/port: "8081"
-```
 
-The cli supports exporting the db to both N-Triple and Turtle RDF files.
+## Installation
 
-Install
-----------
+### From crates.io
 
 ```bash
-#latest stable version via https://crates.io/crates/navipod
 cargo install navipod
+```
 
-#or from this repo:
+### From source
+
+```bash
+git clone https://github.com/navicore/navipod.git
+cd navipod
 cargo install --path .
 ```
 
-Configure for tab completion:
+### Shell Completion
 
-```bash
+For zsh:
+```zsh
 navipod generate-completion zsh > /usr/local/share/zsh/site-functions/_navipod
 ```
 
-Usage
----------
+For bash:
+```bash
+navipod generate-completion bash > /etc/bash_completion.d/navipod
+```
 
-from `navipod -h`
+## Usage
+
+### Interactive TUI
+
+```bash
+# Start the TUI with default namespace
+navipod tui
+
+# Start with specific namespace
+navipod tui -n production
+```
+
+#### TUI Navigation
+
+- `Tab/Shift+Tab`: Switch between panels
+- `j/k` or `↑/↓`: Navigate lists
+- `Enter`: Select item or execute probe
+- `g/G`: Jump to top/bottom
+- `/`: Search/filter
+- `ESC`: Go back or close popup
+- `q`: Quit application
+- `c`: Cycle color themes
+
+### CLI Commands
+
+```bash
+# Analyze pod ingress configuration
+navipod explain-pod -n production
+
+# Collect metrics to database
+navipod scan-metrics -n production
+
+# Export to RDF formats
+navipod export-turtle -t cluster-data.ttl
+navipod export-triples -r cluster-data.nt
+
+# Show database statistics
+navipod report
+```
+
+### Command Options
 
 ```
-A cli tool for inspecting containers in Kubernetes
-
-Usage: navipod [OPTIONS] <COMMAND>
-
-Commands:
-  tui                  start text-based UI
-  explain-pod          report on pod external ingress
-  scan-metrics         collect pod metrics and write to db
-  export-triples       export db data to RDF nt files
-  export-turtle        export db data to RDF turtle files
-  report               show db stats
-  generate-completion  generate completion script for bash and zsh
-  help                 Print this message or the help of the given subcommand(s)
-
 Options:
-  -t, --ttl-rdf-filename <TTL_RDF_FILENAME>  export Turtle RDF file [default: navipod.ttl]
-  -r, --rdf-filename <RDF_FILENAME>          export N-Triples RDF file [default: navipod.nt]
-  -n, --namespace <NAMESPACE>                Name of the namespace to walk
-  -d, --db-location <DB_LOCATION>            [default: /tmp/navipod.db]
-  -h, --help                                 Print help
-  -V, --version                              Print version
+  -t, --ttl-rdf-filename <FILE>  Export Turtle RDF file [default: navipod.ttl]
+  -r, --rdf-filename <FILE>       Export N-Triples RDF file [default: navipod.nt]
+  -n, --namespace <NAMESPACE>     Kubernetes namespace to inspect
+  -d, --db-location <PATH>        Database location [default: /tmp/navipod.db]
+  -h, --help                      Print help information
+  -V, --version                   Print version information
 ```
 
+## Screenshots
+
+### Health Probe Inspection
+![NaviPod inspecting health probes and metrics endpoints](docs/probes.png)
+
+## Requirements
+
+- Rust 1.89 or higher (for building from source)
+- Valid Kubernetes configuration (`~/.kube/config`)
+- Access to target Kubernetes clusters
+
+## Development Status
+
+Active development - New features and improvements are regularly added. The project serves as both a practical Kubernetes tool and a platform for exploring Rust programming patterns.
+
+## Contributing
+
+Contributions are welcome. Please ensure all changes maintain the existing code quality standards and pass the project's clippy lints.
+
+## License
+
+See LICENSE file for details.

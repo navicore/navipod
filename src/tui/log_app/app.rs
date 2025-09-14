@@ -39,6 +39,12 @@ pub struct App {
     pub(crate) user_scrolled: bool,
     /// Maximum number of log lines to keep in memory
     pub(crate) max_log_lines: usize,
+    /// Whether to show the log detail popup
+    pub(crate) show_detail_popup: bool,
+    /// The currently selected log for detail view
+    pub(crate) selected_log_detail: Option<LogRec>,
+    /// Scroll position in the detail popup
+    pub(crate) detail_popup_scroll: usize,
 }
 
 impl_tui_table_state!(App, LogRec);
@@ -159,6 +165,9 @@ impl App {
             is_tailing: true,  // Start with tailing enabled
             user_scrolled: false,
             max_log_lines: 1000, // Keep last 1000 lines in memory
+            show_detail_popup: false,
+            selected_log_detail: None,
+            detail_popup_scroll: 0,
         }
     }
 
@@ -231,6 +240,47 @@ impl App {
         }
     }
 
+    /// Handle key events for the detail popup
+    fn handle_detail_popup_keys(&mut self, key: &crossterm::event::KeyEvent) -> Apps {
+        use KeyCode::{Esc, Down, Up, Char, PageDown, PageUp};
+
+        match key.code {
+            Esc | Char('q') => {
+                // Close the popup
+                self.show_detail_popup = false;
+                self.selected_log_detail = None;
+                self.detail_popup_scroll = 0;
+            }
+            Down | Char('j') => {
+                // Scroll down
+                self.detail_popup_scroll = self.detail_popup_scroll.saturating_add(1);
+            }
+            Up | Char('k') => {
+                // Scroll up
+                self.detail_popup_scroll = self.detail_popup_scroll.saturating_sub(1);
+            }
+            PageDown => {
+                // Scroll down by page
+                self.detail_popup_scroll = self.detail_popup_scroll.saturating_add(10);
+            }
+            PageUp => {
+                // Scroll up by page
+                self.detail_popup_scroll = self.detail_popup_scroll.saturating_sub(10);
+            }
+            Char('g') => {
+                // Jump to top
+                self.detail_popup_scroll = 0;
+            }
+            Char('G') => {
+                // Jump to bottom (will be limited in render function)
+                self.detail_popup_scroll = usize::MAX;
+            }
+            _ => {}
+        }
+
+        Apps::Log { app: self.clone() }
+    }
+
     /// Handle Log-specific key events that aren't covered by common key handler
     fn handle_log_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Apps {
         use KeyCode::{Char, Enter};
@@ -267,7 +317,14 @@ impl App {
                 Apps::Log { app: self.clone() }
             }
             Enter => {
-                // noop for now but will be pretty printed detail analysis popup
+                // Show detail popup for selected log entry
+                if let Some(selected) = self.base.state.selected() {
+                    if let Some(log_entry) = self.base.items.get(selected) {
+                        self.selected_log_detail = Some(log_entry.clone());
+                        self.show_detail_popup = true;
+                        self.detail_popup_scroll = 0;
+                    }
+                }
                 Apps::Log { app: self.clone() }
             }
             _ => Apps::Log { app: self.clone() },
@@ -299,17 +356,22 @@ impl App {
         match event {
             Message::Key(Event::Key(key)) => {
                 if key.kind == KeyEventKind::Press {
+                    // Handle popup first if it's showing
+                    if self.show_detail_popup {
+                        return Some(self.handle_detail_popup_keys(key));
+                    }
+
                     // Handle ESC specially to return None for history navigation
                     if key.code == KeyCode::Esc {
                         debug!("navigating back from log to container...");
                         return None; // This will use the history stack
                     }
-                    
+
                     // Check for navigation keys first to track user scrolling
                     if self.handle_navigation_key(key) {
                         // Navigation was handled, still need to process through common keys
                     }
-                    
+
                     // First try common keys (navigation, quit, color, vim motions)
                     return match handle_common_keys(self, key, |app| Apps::Log { app }) {
                         KeyHandlerResult::Quit => None,

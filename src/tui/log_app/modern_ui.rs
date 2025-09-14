@@ -35,6 +35,11 @@ pub fn ui(f: &mut Frame, app: &App) {
     if app.get_show_filter_edit() {
         render_filter_modal(f, app, &theme);
     }
+
+    // Render log detail popup if active
+    if app.show_detail_popup {
+        render_log_detail_popup(f, app, &theme);
+    }
 }
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
@@ -396,6 +401,127 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     } else {
         format!("{}…", &text[..max_len.saturating_sub(1)])
     }
+}
+
+fn render_log_detail_popup(f: &mut Frame, app: &App, theme: &NaviTheme) {
+    let area = f.area();
+    let modal_area = centered_rect(80, 75, area);
+
+    // Clear background
+    f.render_widget(Clear, modal_area);
+
+    if let Some(ref log_entry) = app.selected_log_detail {
+        // Build the content with word wrapping
+        let mut content = Vec::new();
+
+        // Header with timestamp and level
+        content.push(Line::from(vec![
+            Span::styled("Timestamp: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+            Span::styled(&log_entry.datetime, theme.text_style(TextType::Body)),
+        ]));
+
+        // Log level with color coding
+        let level_style = match log_entry.level.to_lowercase().as_str() {
+            "error" | "err" => Style::default().fg(theme.error),
+            "warn" | "warning" => Style::default().fg(theme.warning),
+            "info" => Style::default().fg(theme.info),
+            "debug" => theme.text_style(TextType::Caption),
+            _ => theme.text_style(TextType::Body),
+        };
+
+        content.push(Line::from(vec![
+            Span::styled("Level: ", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+            Span::styled(&log_entry.level, level_style),
+        ]));
+
+        content.push(Line::from("")); // Empty line separator
+
+        // Message header
+        content.push(Line::from(vec![
+            Span::styled("Message:", theme.text_style(TextType::Body).add_modifier(Modifier::BOLD)),
+        ]));
+
+        content.push(Line::from("")); // Empty line before message
+
+        // The message itself - will be wrapped automatically
+        content.push(Line::from(vec![
+            Span::styled(&log_entry.message, theme.text_style(TextType::Body)),
+        ]));
+
+        // Calculate visible area (leave room for borders)
+        let content_height = modal_area.height.saturating_sub(2); // 2 for borders
+
+        // Create scrollable paragraph with word wrap
+        let paragraph = Paragraph::new(content)
+            .style(Style::default().bg(theme.bg_secondary))
+            .block(
+                Block::default()
+                    .title(" 📋 Log Entry Details ")
+                    .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
+                    .style(Style::default().bg(theme.bg_secondary))
+            )
+            .wrap(Wrap { trim: false }) // Word wrap without trimming
+            .scroll((app.detail_popup_scroll as u16, 0));
+
+        f.render_widget(paragraph, modal_area);
+
+        // Render scrollbar if needed
+        let text_height = calculate_wrapped_height(&log_entry.message, modal_area.width.saturating_sub(2)) + 6; // +6 for header lines
+        if text_height > content_height as usize {
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("↑"))
+                .end_symbol(Some("↓"));
+
+            let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(text_height.saturating_sub(content_height as usize))
+                .position(app.detail_popup_scroll.min(text_height.saturating_sub(content_height as usize)));
+
+            f.render_stateful_widget(
+                scrollbar,
+                modal_area.inner(ratatui::layout::Margin {
+                    vertical: 1,
+                    horizontal: 0,
+                }),
+                &mut scrollbar_state,
+            );
+        }
+
+        // Help text
+        let help_area = Rect {
+            x: modal_area.x,
+            y: modal_area.y + modal_area.height,
+            width: modal_area.width,
+            height: 1,
+        };
+
+        let help_text = "↑↓/j/k: Scroll • PgUp/PgDn: Page • g/G: Top/Bottom • ESC/q: Close";
+        let help = Paragraph::new(help_text)
+            .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
+            .alignment(Alignment::Center)
+            .block(Block::default().style(Style::default().bg(theme.bg_primary)));
+
+        f.render_widget(help, help_area);
+    }
+}
+
+/// Calculate the height of wrapped text
+fn calculate_wrapped_height(text: &str, width: u16) -> usize {
+    if width == 0 {
+        return text.lines().count();
+    }
+
+    let mut total_lines = 0;
+    for line in text.lines() {
+        if line.is_empty() {
+            total_lines += 1;
+        } else {
+            // Calculate how many display lines this text line will take
+            let line_width = line.chars().count();
+            total_lines += line_width.div_ceil(width as usize);
+        }
+    }
+    total_lines.max(1)
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

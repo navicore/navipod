@@ -74,7 +74,7 @@ pub async fn list_all() -> NvResult<Vec<ResourceEvent>> {
     let lp = ListParams::default();
 
     let mut unfiltered_events: Vec<Event> =
-        Api::default_namespaced(super::client::new(None).await?)
+        Api::default_namespaced(super::client::new(Some(super::USER_AGENT)).await?)
             .list(&lp)
             .await?
             .items;

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 use crate::error::Result as NvResult;
+use super::{client::add_user_agent_header, USER_AGENT};
 
 /// Singleton Kubernetes client manager that handles client lifecycle,
 /// credential caching, and token refresh automatically.
@@ -81,17 +82,20 @@ impl K8sClientManager {
                 drop(config_guard); // Release read lock
                 
                 debug!("📄 Loading Kubernetes configuration from default sources");
-                let new_config = Config::infer().await.map_err(|e| {
+                let mut new_config = Config::infer().await.map_err(|e| {
                     error!("❌ Failed to infer Kubernetes configuration: {}", e);
                     e
                 })?;
-                
+
+                // Add custom user-agent header using the shared helper
+                add_user_agent_header(&mut new_config, Some(USER_AGENT));
+
                 // Store the config for reuse
                 {
                     let mut config_guard = self.config.write().await;
                     *config_guard = Some(new_config.clone());
                 }
-                
+
                 new_config
             }
         };

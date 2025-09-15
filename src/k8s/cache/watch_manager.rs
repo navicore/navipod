@@ -11,6 +11,7 @@ use super::config::{
 use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
+use crate::k8s::{client, USER_AGENT};
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
@@ -63,7 +64,7 @@ impl WatchManager {
     ///
     /// Returns an error if K8s client creation fails
     pub async fn new(cache: Arc<K8sDataCache>, namespace: String) -> Result<Self> {
-        let client = Client::try_default().await?;
+        let client = client::new(Some(USER_AGENT)).await?;
         let (invalidation_tx, invalidation_rx) = mpsc::channel(INVALIDATION_CHANNEL_CAPACITY);
         let stats = Arc::new(std::sync::RwLock::new(WatchStats {
             active_watchers: 3,

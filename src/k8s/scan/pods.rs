@@ -1,8 +1,8 @@
 use crate::k8s::scan::metrics;
+use crate::k8s::{client, USER_AGENT};
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::ObjectList;
 use kube::{
-    Client,
     api::{Api, ListParams},
 };
 use sqlx::sqlite::SqlitePool;
@@ -14,9 +14,9 @@ use tracing::error;
 pub async fn fetch(
     namespace: String,
 ) -> Result<(ObjectList<Pod>, Api<Pod>), Box<dyn std::error::Error>> {
-    let client = Client::try_default()
+    let client = client::new(Some(USER_AGENT))
         .await
-        .map_err(std::io::Error::other)?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     let lp = ListParams::default();
     let pods: Api<Pod> = Api::namespaced(client.clone(), namespace.as_str());

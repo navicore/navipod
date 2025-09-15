@@ -10,3 +10,6 @@ pub mod rs;
 pub mod rs_ingress;
 pub mod scan;
 pub mod utils;
+
+/// Default user agent for `NaviPod` - automatically uses the package version
+pub const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));

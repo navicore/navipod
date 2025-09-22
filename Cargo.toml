@@ -14,7 +14,7 @@ name = "navipod"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.99"
+anyhow = "1.0.100"
 async-trait = "0.1"
 bytes = "1.10.1"
 chrono = "0.4"

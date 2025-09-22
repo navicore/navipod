@@ -12,12 +12,9 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-    
+    # Only run if the secret is available (won't run for external contributor PRs)
+    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -172,6 +172,29 @@ fn extract_container_probes(container: &k8s_openapi::api::core::v1::Container) -
     probes
 }
 
+/// Extract resource requirements from container spec
+fn extract_container_resources(container: &k8s_openapi::api::core::v1::Container) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+    use crate::k8s::resources::{format_cpu, format_memory, parse_cpu, parse_memory};
+
+    let (cpu_request, memory_request) = container.resources.as_ref()
+        .and_then(|resources| resources.requests.as_ref())
+        .map_or((None, None), |requests| {
+            let cpu_req = requests.get("cpu").and_then(|q| parse_cpu(&q.0).map(format_cpu));
+            let mem_req = requests.get("memory").and_then(|q| parse_memory(&q.0).map(format_memory));
+            (cpu_req, mem_req)
+        });
+
+    let (cpu_limit, memory_limit) = container.resources.as_ref()
+        .and_then(|resources| resources.limits.as_ref())
+        .map_or((None, None), |limits| {
+            let cpu_lim = limits.get("cpu").and_then(|q| parse_cpu(&q.0).map(format_cpu));
+            let mem_lim = limits.get("memory").and_then(|q| parse_memory(&q.0).map(format_memory));
+            (cpu_lim, mem_lim)
+        });
+
+    (cpu_request, cpu_limit, memory_request, memory_limit)
+}
+
 /// Extract metrics endpoints from pod annotations
 fn extract_metrics_from_annotations(annotations: &std::collections::BTreeMap<String, String>, _container_ports: Option<&Vec<k8s_openapi::api::core::v1::ContainerPort>>) -> Vec<ContainerProbe> {
     let mut metrics_probes = Vec::new();
@@ -227,20 +250,66 @@ fn extract_metrics_from_annotations(annotations: &std::collections::BTreeMap<Str
 #[allow(clippy::significant_drop_tightening)]
 #[allow(clippy::too_many_lines)]
 pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Result<Vec<Container>> {
+    use crate::k8s::metrics_client::{fetch_pod_metrics, create_metrics_lookup};
+    use tracing::debug;
+
     let mut client = get_client().await?;
     let label_selector = format_label_selector(&selector);
     let lp = ListParams::default().labels(&label_selector);
 
     // Try the operation, with one retry on auth error
-    let pod_list: ObjectList<Pod> = match Api::default_namespaced((*client).clone()).list(&lp).await {
+    // Fetch pod list and metrics in parallel to reduce latency
+    let pods_api: Api<Pod> = Api::default_namespaced((*client).clone());
+
+    let (pod_list_result, pod_metrics_result) = tokio::join!(
+        pods_api.list(&lp),
+        fetch_pod_metrics((*client).clone(), None)
+    );
+
+    let pod_list: ObjectList<Pod> = match pod_list_result {
         Ok(result) => result,
         Err(e) if should_refresh_client(&e) => {
             // Auth error - try refreshing client and retry once
             client = refresh_client().await?;
-            Api::default_namespaced((*client).clone()).list(&lp).await?
+            // Fetch again in parallel after client refresh
+            let retry_pods_api: Api<Pod> = Api::default_namespaced((*client).clone());
+            let (retry_list, retry_metrics) = tokio::join!(
+                retry_pods_api.list(&lp),
+                fetch_pod_metrics((*client).clone(), None)
+            );
+
+            // Use the retry metrics if successful
+            let pod_metrics = retry_metrics.unwrap_or_else(|e| {
+                debug!("Could not fetch container metrics after retry: {}", e);
+                Vec::new()
+            });
+            let metrics_lookup = create_metrics_lookup(pod_metrics);
+
+            // Process pods with retry results
+            let pod_list = retry_list?;
+            return process_pod_list(pod_list, pod_name, metrics_lookup);
         }
         Err(e) => return Err(e.into()),
     };
+
+    let pod_metrics = pod_metrics_result.unwrap_or_else(|e| {
+        debug!("Could not fetch container metrics: {}", e);
+        Vec::new()
+    });
+    let metrics_lookup = create_metrics_lookup(pod_metrics);
+
+    process_pod_list(pod_list, pod_name, metrics_lookup)
+}
+
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::unnecessary_wraps)]
+fn process_pod_list(
+    pod_list: ObjectList<Pod>,
+    pod_name: String,
+    metrics_lookup: std::collections::HashMap<String, std::collections::HashMap<String, crate::k8s::metrics_client::ContainerMetric>>,
+) -> Result<Vec<Container>> {
+    use crate::k8s::resources::{format_cpu, format_memory};
 
     let mut container_vec = Vec::new();
 
@@ -258,13 +327,26 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                     for container in spec.containers {
                         // Extract probes first before moving other fields
                         let mut probes = extract_container_probes(&container);
-                        
+
                         // Add metrics endpoints from pod annotations
                         if let Some(ref annotations) = pod.metadata.annotations {
                             let metrics_probes = extract_metrics_from_annotations(annotations, container.ports.as_ref());
                             probes.extend(metrics_probes);
                         }
-                        
+
+                        // Extract resource limits and requests
+                        let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
+
+                        // Get actual usage from metrics for this container
+                        let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(&pod_name).and_then(|m| m.get(&container.name)) {
+                            (
+                                container_metrics.cpu_usage.map(format_cpu),
+                                container_metrics.memory_usage.map(format_memory),
+                            )
+                        } else {
+                            (None, None)
+                        };
+
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
                         let restarts = container_statuses
@@ -303,6 +385,12 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                             probes,
                             selectors: container_selectors.clone(),
                             pod_name: pod_name.clone(),
+                            cpu_request,
+                            cpu_limit,
+                            cpu_usage,
+                            memory_request,
+                            memory_limit,
+                            memory_usage,
                         };
                         container_vec.push(c);
                     }
@@ -311,13 +399,26 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                         for container in init_containers {
                             // Extract probes first before moving other fields
                             let mut probes = extract_container_probes(&container);
-                            
+
                             // Add metrics endpoints from pod annotations
                             if let Some(ref annotations) = pod.metadata.annotations {
                                 let metrics_probes = extract_metrics_from_annotations(annotations, container.ports.as_ref());
                                 probes.extend(metrics_probes);
                             }
-                            
+
+                            // Extract resource limits and requests
+                            let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
+
+                            // Get actual usage from metrics for this init container
+                            let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(&pod_name).and_then(|m| m.get(&container.name)) {
+                                (
+                                    container_metrics.cpu_usage.map(format_cpu),
+                                    container_metrics.memory_usage.map(format_memory),
+                                )
+                            } else {
+                                (None, None)
+                            };
+
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
                             let restarts = container_statuses
                                 .iter()
@@ -355,6 +456,12 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                                 probes,
                                 selectors: container_selectors.clone(),
                                 pod_name: pod_name.clone(),
+                                cpu_request,
+                                cpu_limit,
+                                cpu_usage,
+                                memory_request,
+                                memory_limit,
+                                memory_usage,
                             };
                             container_vec.push(c);
                         }

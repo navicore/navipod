@@ -190,8 +190,7 @@ mod tests {
         if let (Ok(client1), Ok(client2)) = (result1, result2) {
             // Ideally they're the same instance, but we accept functional equivalence
             if Arc::ptr_eq(&client1, &client2) {
-                // Perfect singleton behavior
-                assert!(true);
+                // Perfect singleton behavior - pointers are equal
             } else {
                 // In test environment, just verify both clients are functional
                 // This tests that the singleton works without being too strict

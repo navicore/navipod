@@ -200,6 +200,13 @@ pub struct Container {
     pub probes: Vec<ContainerProbe>,  // New field for probe configurations
     pub selectors: Option<BTreeMap<String, String>>,
     pub pod_name: String,
+    // Resource limits and usage
+    pub cpu_request: Option<String>,
+    pub cpu_limit: Option<String>,
+    pub cpu_usage: Option<String>,
+    pub memory_request: Option<String>,
+    pub memory_limit: Option<String>,
+    pub memory_usage: Option<String>,
 }
 
 impl Filterable for Container {
@@ -242,7 +249,7 @@ impl Container {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct RsPod {
     pub name: String,
     pub status: String,
@@ -251,6 +258,17 @@ pub struct RsPod {
     pub containers: String,
     pub selectors: Option<BTreeMap<String, String>>,
     pub events: Vec<ResourceEvent>,
+    // Aggregated resource limits and usage (sum of all containers)
+    pub cpu_request: Option<String>,
+    pub cpu_limit: Option<String>,
+    pub cpu_usage: Option<String>,
+    pub memory_request: Option<String>,
+    pub memory_limit: Option<String>,
+    pub memory_usage: Option<String>,
+    // Node information
+    pub node_name: Option<String>,
+    pub node_cpu_percent: Option<f64>,
+    pub node_memory_percent: Option<f64>,
 }
 
 impl Filterable for RsPod {
@@ -720,6 +738,12 @@ mod tests {
                 probes: vec![],
                 selectors: None,
                 pod_name: "my-pod-1234".to_string(),
+                cpu_request: None,
+                cpu_limit: None,
+                cpu_usage: None,
+                memory_request: None,
+                memory_limit: None,
+                memory_usage: None,
             },
             Container {
                 name: "replica-923450-987654".to_string(),
@@ -732,6 +756,12 @@ mod tests {
                 probes: vec![],
                 selectors: None,
                 pod_name: "my-pod-5678".to_string(),
+                cpu_request: None,
+                cpu_limit: None,
+                cpu_usage: None,
+                memory_request: None,
+                memory_limit: None,
+                memory_usage: None,
             },
         ];
         let (
@@ -759,6 +789,15 @@ mod tests {
                 containers: "2/2".to_string(),
                 selectors: None,
                 events: vec![],
+                cpu_request: None,
+                cpu_limit: None,
+                cpu_usage: None,
+                memory_request: None,
+                memory_limit: None,
+                memory_usage: None,
+                node_name: None,
+                node_cpu_percent: None,
+                node_memory_percent: None,
             },
             RsPod {
                 name: "replica-923450-987654".to_string(),
@@ -768,6 +807,15 @@ mod tests {
                 containers: "2/2".to_string(),
                 selectors: None,
                 events: vec![],
+                cpu_request: None,
+                cpu_limit: None,
+                cpu_usage: None,
+                memory_request: None,
+                memory_limit: None,
+                memory_usage: None,
+                node_name: None,
+                node_cpu_percent: None,
+                node_memory_percent: None,
             },
         ];
         let (

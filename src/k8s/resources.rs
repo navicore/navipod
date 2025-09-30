@@ -268,11 +268,10 @@ impl ContainerResources {
             (Some(usage), Some(limit)) => {
                 let usage_str = format_cpu(usage);
                 let limit_str = format_cpu(limit);
-                if let Some(pct) = self.cpu_usage_percent() {
-                    format!("{usage_str}/{limit_str} [{pct:.0}%]")
-                } else {
-                    format!("{usage_str}/{limit_str}")
-                }
+                self.cpu_usage_percent().map_or_else(
+                    || format!("{usage_str}/{limit_str}"),
+                    |pct| format!("{usage_str}/{limit_str} [{pct:.0}%]")
+                )
             }
             (Some(usage), None) => format!("{}/∞", format_cpu(usage)),
             (None, Some(limit)) => format!("?/{}", format_cpu(limit)),
@@ -287,11 +286,10 @@ impl ContainerResources {
             (Some(usage), Some(limit)) => {
                 let usage_str = format_memory(usage);
                 let limit_str = format_memory(limit);
-                if let Some(pct) = self.memory_usage_percent() {
-                    format!("{usage_str}/{limit_str} [{pct:.0}%]")
-                } else {
-                    format!("{usage_str}/{limit_str}")
-                }
+                self.memory_usage_percent().map_or_else(
+                    || format!("{usage_str}/{limit_str}"),
+                    |pct| format!("{usage_str}/{limit_str} [{pct:.0}%]")
+                )
             }
             (Some(usage), None) => format!("{}/∞", format_memory(usage)),
             (None, Some(limit)) => format!("?/{}", format_memory(limit)),

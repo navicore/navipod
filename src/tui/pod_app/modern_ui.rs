@@ -169,22 +169,20 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
     let cpu_bar_color = get_resource_bar_color(cpu_percentage, theme);
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_sign_loss)]
-    let (cpu_bar, _) = if let Some(pct) = cpu_percentage {
-        UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
-    } else {
-        ("──────────".to_string(), theme.text_muted)
-    };
+    let (cpu_bar, _) = cpu_percentage.map_or_else(
+        || ("──────────".to_string(), theme.text_muted),
+        |pct| UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
+    );
 
     let memory_display = format_resource_display(pod.memory_usage.as_ref(), pod.memory_limit.as_ref());
     let memory_percentage = calculate_resource_percentage(pod.memory_usage.as_ref(), pod.memory_limit.as_ref());
     let memory_bar_color = get_resource_bar_color(memory_percentage, theme);
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_sign_loss)]
-    let (memory_bar, _) = if let Some(pct) = memory_percentage {
-        UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
-    } else {
-        ("──────────".to_string(), theme.text_muted)
-    };
+    let (memory_bar, _) = memory_percentage.map_or_else(
+        || ("──────────".to_string(), theme.text_muted),
+        |pct| UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
+    );
 
     // Format node info
     let node_display = if let (Some(node_name), Some(cpu_pct), Some(mem_pct)) =
@@ -548,11 +546,10 @@ fn get_resource_bar_color(percentage: Option<f64>, theme: &NaviTheme) -> Color {
 fn format_resource_display(usage: Option<&String>, limit: Option<&String>) -> String {
     match (usage, limit) {
         (Some(u), Some(l)) => {
-            if let Some(pct) = calculate_resource_percentage(Some(u), Some(l)) {
-                format!("{u}/{l} [{pct:.0}%]")
-            } else {
-                format!("{u}/{l}")
-            }
+            calculate_resource_percentage(Some(u), Some(l)).map_or_else(
+                || format!("{u}/{l}"),
+                |pct| format!("{u}/{l} [{pct:.0}%]")
+            )
         }
         (Some(u), None) => format!("{u}/∞"),
         (None, Some(l)) => format!("?/{l}"),

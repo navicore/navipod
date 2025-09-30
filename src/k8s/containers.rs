@@ -338,14 +338,14 @@ fn process_pod_list(
                         let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
 
                         // Get actual usage from metrics for this container
-                        let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(&pod_name).and_then(|m| m.get(&container.name)) {
-                            (
-                                container_metrics.cpu_usage.map(format_cpu),
-                                container_metrics.memory_usage.map(format_memory),
-                            )
-                        } else {
-                            (None, None)
-                        };
+                        let (cpu_usage, memory_usage) = metrics_lookup.get(&pod_name)
+                            .and_then(|m| m.get(&container.name))
+                            .map_or((None, None), |container_metrics| {
+                                (
+                                    container_metrics.cpu_usage.map(format_cpu),
+                                    container_metrics.memory_usage.map(format_memory),
+                                )
+                            });
 
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
@@ -410,14 +410,14 @@ fn process_pod_list(
                             let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
 
                             // Get actual usage from metrics for this init container
-                            let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(&pod_name).and_then(|m| m.get(&container.name)) {
-                                (
-                                    container_metrics.cpu_usage.map(format_cpu),
-                                    container_metrics.memory_usage.map(format_memory),
-                                )
-                            } else {
-                                (None, None)
-                            };
+                            let (cpu_usage, memory_usage) = metrics_lookup.get(&pod_name)
+                                .and_then(|m| m.get(&container.name))
+                                .map_or((None, None), |container_metrics| {
+                                    (
+                                        container_metrics.cpu_usage.map(format_cpu),
+                                        container_metrics.memory_usage.map(format_memory),
+                                    )
+                                });
 
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
                             let restarts = container_statuses

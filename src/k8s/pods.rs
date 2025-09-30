@@ -168,7 +168,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     list_events_for_resource(events.clone(), instance_name).await?;
 
                 // Aggregate resource requests and limits from all containers
-                let (cpu_request, cpu_limit, memory_request, memory_limit) = if let Some(ref spec) = pod.spec {
+                let (cpu_request, cpu_limit, memory_request, memory_limit) = pod.spec.as_ref().map_or((None, None, None, None), |spec| {
                     let mut total_cpu_req = 0.0;
                     let mut total_cpu_lim = 0.0;
                     let mut total_mem_req = 0u64;
@@ -217,12 +217,10 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                         if has_mem_req { Some(format_memory(total_mem_req)) } else { None },
                         if has_mem_lim { Some(format_memory(total_mem_lim)) } else { None },
                     )
-                } else {
-                    (None, None, None, None)
-                };
+                });
 
                 // Get actual usage from metrics
-                let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(instance_name) {
+                let (cpu_usage, memory_usage) = metrics_lookup.get(instance_name).map_or((None, None), |container_metrics| {
                     let mut total_cpu_usage = 0.0;
                     let mut total_mem_usage = 0u64;
                     let mut has_cpu_usage = false;
@@ -243,9 +241,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                         if has_cpu_usage { Some(format_cpu(total_cpu_usage)) } else { None },
                         if has_mem_usage { Some(format_memory(total_mem_usage)) } else { None },
                     )
-                } else {
-                    (None, None)
-                };
+                });
 
                 // Get node info for this pod
                 let node_name = pod.spec.as_ref().and_then(|spec| spec.node_name.clone());

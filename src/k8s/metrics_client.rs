@@ -58,10 +58,10 @@ pub async fn fetch_pod_metrics(
         kind: "PodMetrics".to_string(),
     });
 
-    let api: Api<DynamicObject> = match namespace {
-        Some(ns) => Api::namespaced_with(client.clone(), ns, &ar),
-        None => Api::all_with(client.clone(), &ar),
-    };
+    let api: Api<DynamicObject> = namespace.map_or_else(
+        || Api::all_with(client.clone(), &ar),
+        |ns| Api::namespaced_with(client.clone(), ns, &ar)
+    );
 
     match api.list(&ListParams::default()).await {
         Ok(metrics_list) => {

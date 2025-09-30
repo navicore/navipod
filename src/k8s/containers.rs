@@ -251,7 +251,6 @@ fn extract_metrics_from_annotations(annotations: &std::collections::BTreeMap<Str
 #[allow(clippy::too_many_lines)]
 pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Result<Vec<Container>> {
     use crate::k8s::metrics_client::{fetch_pod_metrics, create_metrics_lookup};
-    use crate::k8s::resources::{format_cpu, format_memory};
     use tracing::debug;
 
     let mut client = get_client().await?;
@@ -259,22 +258,58 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
     let lp = ListParams::default().labels(&label_selector);
 
     // Try the operation, with one retry on auth error
-    let pod_list: ObjectList<Pod> = match Api::default_namespaced((*client).clone()).list(&lp).await {
+    // Fetch pod list and metrics in parallel to reduce latency
+    let pods_api: Api<Pod> = Api::default_namespaced((*client).clone());
+
+    let (pod_list_result, pod_metrics_result) = tokio::join!(
+        pods_api.list(&lp),
+        fetch_pod_metrics((*client).clone(), None)
+    );
+
+    let pod_list: ObjectList<Pod> = match pod_list_result {
         Ok(result) => result,
         Err(e) if should_refresh_client(&e) => {
             // Auth error - try refreshing client and retry once
             client = refresh_client().await?;
-            Api::default_namespaced((*client).clone()).list(&lp).await?
+            // Fetch again in parallel after client refresh
+            let retry_pods_api: Api<Pod> = Api::default_namespaced((*client).clone());
+            let (retry_list, retry_metrics) = tokio::join!(
+                retry_pods_api.list(&lp),
+                fetch_pod_metrics((*client).clone(), None)
+            );
+
+            // Use the retry metrics if successful
+            let pod_metrics = retry_metrics.unwrap_or_else(|e| {
+                debug!("Could not fetch container metrics after retry: {}", e);
+                Vec::new()
+            });
+            let metrics_lookup = create_metrics_lookup(pod_metrics);
+
+            // Process pods with retry results
+            let pod_list = retry_list?;
+            return process_pod_list(pod_list, pod_name, metrics_lookup);
         }
         Err(e) => return Err(e.into()),
     };
 
-    // Fetch metrics for containers
-    let pod_metrics = fetch_pod_metrics((*client).clone(), None).await.unwrap_or_else(|e| {
+    let pod_metrics = pod_metrics_result.unwrap_or_else(|e| {
         debug!("Could not fetch container metrics: {}", e);
         Vec::new()
     });
     let metrics_lookup = create_metrics_lookup(pod_metrics);
+
+    process_pod_list(pod_list, pod_name, metrics_lookup)
+}
+
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::unnecessary_wraps)]
+fn process_pod_list(
+    pod_list: ObjectList<Pod>,
+    pod_name: String,
+    metrics_lookup: std::collections::HashMap<String, std::collections::HashMap<String, crate::k8s::metrics_client::ContainerMetric>>,
+) -> Result<Vec<Container>> {
+    use crate::k8s::resources::{format_cpu, format_memory};
 
     let mut container_vec = Vec::new();
 

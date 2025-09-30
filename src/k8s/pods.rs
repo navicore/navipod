@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use k8s_openapi::api::core::v1::{Pod, Node};
 use kube::Api;
 use kube::api::ListParams;
-use kube::api::ObjectList;
 use std::collections::{BTreeMap, HashMap};
 use tracing::debug;
 
@@ -72,26 +71,35 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
     // Apply the label selector in ListParams
     let lp = ListParams::default().labels(&label_selector);
 
-    let pod_list: ObjectList<Pod> = Api::default_namespaced(client.clone()).list(&lp).await?;
+    // Fetch all data in parallel to reduce latency
+    let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
+    let nodes_api: Api<Node> = Api::all(client.clone());
+    let node_lp = ListParams::default();
 
-    let mut pod_vec = Vec::new();
+    let (pod_list_result, events_result, pod_metrics_result, node_list_result, node_metrics_result) = tokio::join!(
+        pods_api.list(&lp),
+        list_k8sevents(client.clone()),
+        fetch_pod_metrics(client.clone(), None),
+        nodes_api.list(&node_lp),
+        fetch_node_metrics(client.clone())
+    );
 
-    // get all events from the cluster to avoid calls for each pod
-    let events = list_k8sevents(client.clone()).await?;
+    let pod_list = pod_list_result?;
+    let events = events_result?;
 
-    // Fetch pod metrics from metrics server (fails gracefully if not available)
-    let pod_metrics = fetch_pod_metrics(client.clone(), None).await.unwrap_or_else(|e| {
+    let pod_metrics = pod_metrics_result.unwrap_or_else(|e| {
         debug!("Could not fetch pod metrics: {}", e);
         Vec::new()
     });
     let metrics_lookup = create_metrics_lookup(pod_metrics);
 
-    // Fetch node capacity and metrics
-    let node_list: ObjectList<Node> = Api::all(client.clone()).list(&ListParams::default()).await?;
-    let node_metrics = fetch_node_metrics(client.clone()).await.unwrap_or_else(|e| {
+    let node_list = node_list_result?;
+    let node_metrics = node_metrics_result.unwrap_or_else(|e| {
         debug!("Could not fetch node metrics: {}", e);
         Vec::new()
     });
+
+    let mut pod_vec = Vec::new();
 
     // Build node info lookup: node_name -> (cpu_percent, memory_percent)
     let mut node_info: HashMap<String, (f64, f64)> = HashMap::new();

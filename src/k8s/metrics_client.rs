@@ -8,7 +8,7 @@ use kube::{Client, api::{Api, ApiResource, DynamicObject, ListParams}};
 use std::collections::HashMap;
 use tracing::{debug, warn};
 
-/// Container metrics extracted from PodMetrics
+/// Container metrics extracted from `PodMetrics`
 #[derive(Debug, Clone)]
 pub struct ContainerMetric {
     pub name: String,
@@ -207,7 +207,8 @@ pub async fn fetch_node_metrics(client: Client) -> Result<Vec<NodeMetric>> {
 /// * `pod_metrics` - Vector of pod metrics
 ///
 /// # Returns
-/// HashMap mapping pod_name -> HashMap(container_name -> ContainerMetric)
+/// `HashMap` mapping `pod_name` -> `HashMap(container_name -> ContainerMetric)`
+#[must_use]
 pub fn create_metrics_lookup(
     pod_metrics: Vec<PodMetric>,
 ) -> HashMap<String, HashMap<String, ContainerMetric>> {
@@ -315,7 +316,7 @@ mod tests {
     #[test]
     fn test_parse_cpu_quantity() {
         // Nanocores
-        assert_eq!(parse_cpu_quantity("12345678n"), Some(12.345678));
+        assert_eq!(parse_cpu_quantity("12345678n"), Some(12.345_678));
         assert_eq!(parse_cpu_quantity("1000000n"), Some(1.0));
 
         // Millicores

@@ -62,6 +62,7 @@ fn get_pod_state(pod: &Pod) -> String {
 ///
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 #[allow(clippy::significant_drop_tightening)]
+#[allow(clippy::too_many_lines)]
 pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod>> {
     let client = new(Some(USER_AGENT)).await?;
 
@@ -115,6 +116,7 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                 (Some(usage), Some(capacity)) if capacity > 0.0 => Some((usage / capacity) * 100.0),
                 _ => None,
             };
+            #[allow(clippy::cast_precision_loss)]
             let mem_pct = match (mem_usage, mem_capacity) {
                 (Some(usage), Some(capacity)) if capacity > 0 => Some((usage as f64 / capacity as f64) * 100.0),
                 _ => None,

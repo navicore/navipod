@@ -176,37 +176,21 @@ fn extract_container_probes(container: &k8s_openapi::api::core::v1::Container) -
 fn extract_container_resources(container: &k8s_openapi::api::core::v1::Container) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
     use crate::k8s::resources::{format_cpu, format_memory, parse_cpu, parse_memory};
 
-    let (cpu_request, memory_request) = if let Some(ref resources) = container.resources {
-        if let Some(ref requests) = resources.requests {
-            let cpu_req = requests.get("cpu").and_then(|q| {
-                parse_cpu(&q.0).map(format_cpu)
-            });
-            let mem_req = requests.get("memory").and_then(|q| {
-                parse_memory(&q.0).map(format_memory)
-            });
+    let (cpu_request, memory_request) = container.resources.as_ref()
+        .and_then(|resources| resources.requests.as_ref())
+        .map_or((None, None), |requests| {
+            let cpu_req = requests.get("cpu").and_then(|q| parse_cpu(&q.0).map(format_cpu));
+            let mem_req = requests.get("memory").and_then(|q| parse_memory(&q.0).map(format_memory));
             (cpu_req, mem_req)
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
+        });
 
-    let (cpu_limit, memory_limit) = if let Some(ref resources) = container.resources {
-        if let Some(ref limits) = resources.limits {
-            let cpu_lim = limits.get("cpu").and_then(|q| {
-                parse_cpu(&q.0).map(format_cpu)
-            });
-            let mem_lim = limits.get("memory").and_then(|q| {
-                parse_memory(&q.0).map(format_memory)
-            });
+    let (cpu_limit, memory_limit) = container.resources.as_ref()
+        .and_then(|resources| resources.limits.as_ref())
+        .map_or((None, None), |limits| {
+            let cpu_lim = limits.get("cpu").and_then(|q| parse_cpu(&q.0).map(format_cpu));
+            let mem_lim = limits.get("memory").and_then(|q| parse_memory(&q.0).map(format_memory));
             (cpu_lim, mem_lim)
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
+        });
 
     (cpu_request, cpu_limit, memory_request, memory_limit)
 }

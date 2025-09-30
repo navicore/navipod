@@ -167,6 +167,8 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
     let cpu_display = format_resource_display(pod.cpu_usage.as_ref(), pod.cpu_limit.as_ref());
     let cpu_percentage = calculate_resource_percentage(pod.cpu_usage.as_ref(), pod.cpu_limit.as_ref());
     let cpu_bar_color = get_resource_bar_color(cpu_percentage, theme);
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
     let (cpu_bar, _) = if let Some(pct) = cpu_percentage {
         UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
     } else {
@@ -176,6 +178,8 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
     let memory_display = format_resource_display(pod.memory_usage.as_ref(), pod.memory_limit.as_ref());
     let memory_percentage = calculate_resource_percentage(pod.memory_usage.as_ref(), pod.memory_limit.as_ref());
     let memory_bar_color = get_resource_bar_color(memory_percentage, theme);
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
     let (memory_bar, _) = if let Some(pct) = memory_percentage {
         UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
     } else {
@@ -193,7 +197,7 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
         } else {
             "🟢"
         };
-        format!(" {} C:{:.0}% M:{:.0}% {}", node_name, cpu_pct, mem_pct, node_symbol)
+        format!(" {node_name} C:{cpu_pct:.0}% M:{mem_pct:.0}% {node_symbol}")
     } else {
         String::new()
     };
@@ -518,6 +522,7 @@ fn calculate_resource_percentage(usage_str: Option<&String>, limit_str: Option<&
                 }
             }
             // Try memory parsing
+            #[allow(clippy::cast_precision_loss)]
             if let (Some(usage_val), Some(limit_val)) = (parse_memory(usage), parse_memory(limit)) {
                 if limit_val > 0 {
                     return Some((usage_val as f64 / limit_val as f64) * 100.0);
@@ -544,13 +549,13 @@ fn format_resource_display(usage: Option<&String>, limit: Option<&String>) -> St
     match (usage, limit) {
         (Some(u), Some(l)) => {
             if let Some(pct) = calculate_resource_percentage(Some(u), Some(l)) {
-                format!("{}/{} [{:.0}%]", u, l, pct)
+                format!("{u}/{l} [{pct:.0}%]")
             } else {
-                format!("{}/{}", u, l)
+                format!("{u}/{l}")
             }
         }
-        (Some(u), None) => format!("{}/∞", u),
-        (None, Some(l)) => format!("?/{}", l),
+        (Some(u), None) => format!("{u}/∞"),
+        (None, Some(l)) => format!("?/{l}"),
         (None, None) => "N/A".to_string(),
     }
 }

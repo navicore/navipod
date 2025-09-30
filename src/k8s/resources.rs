@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use tracing::warn;
 
 /// Resource usage status based on percentage of limit
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceStatus {
     /// Usage >= 75% of limit (throttling/OOM risk)
     Critical,
@@ -24,16 +24,17 @@ pub enum ResourceStatus {
 /// Parse CPU resource string to millicores
 ///
 /// Examples:
-/// - "100m" -> 100.0
-/// - "1" -> 1000.0
-/// - "0.5" -> 500.0
-/// - "2.5" -> 2500.0
+/// - `"100m"` -> `100.0`
+/// - `"1"` -> `1000.0`
+/// - `"0.5"` -> `500.0`
+/// - `"2.5"` -> `2500.0`
 ///
 /// # Arguments
 /// * `cpu_str` - Kubernetes CPU quantity string
 ///
 /// # Returns
-/// CPU in millicores, or None if parsing fails
+/// CPU in millicores, or `None` if parsing fails
+#[must_use]
 pub fn parse_cpu(cpu_str: &str) -> Option<f64> {
     let cpu_str = cpu_str.trim();
 
@@ -53,16 +54,17 @@ pub fn parse_cpu(cpu_str: &str) -> Option<f64> {
 /// Parse memory resource string to bytes
 ///
 /// Examples:
-/// - "128Mi" -> 134217728
-/// - "1Gi" -> 1073741824
-/// - "500M" -> 500000000
-/// - "1G" -> 1000000000
+/// - `"128Mi"` -> `134217728`
+/// - `"1Gi"` -> `1073741824`
+/// - `"500M"` -> `500000000`
+/// - `"1G"` -> `1000000000`
 ///
 /// # Arguments
 /// * `mem_str` - Kubernetes memory quantity string
 ///
 /// # Returns
-/// Memory in bytes, or None if parsing fails
+/// Memory in bytes, or `None` if parsing fails
+#[must_use]
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
 pub fn parse_memory(mem_str: &str) -> Option<u64> {
@@ -106,25 +108,31 @@ pub fn parse_memory(mem_str: &str) -> Option<u64> {
 /// Format CPU millicores to human-readable string
 ///
 /// Examples:
-/// - 100.0 -> "100m"
-/// - 1000.0 -> "1"
-/// - 1500.0 -> "1.5"
-/// - 250.0 -> "250m"
+/// - `100.0` -> `"100m"`
+/// - `1000.0` -> `"1"`
+/// - `1500.0` -> `"1.5"`
+/// - `250.0` -> `"250m"`
 ///
 /// # Arguments
 /// * `millicores` - CPU in millicores
 ///
 /// # Returns
 /// Formatted CPU string
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
 pub fn format_cpu(millicores: f64) -> String {
     if millicores < 1000.0 {
-        format!("{}m", millicores as i64)
+        #[allow(clippy::cast_possible_truncation)]
+        let millis = millicores as i64;
+        format!("{millis}m")
     } else {
         let cores = millicores / 1000.0;
         if cores.fract() == 0.0 {
-            format!("{}", cores as i64)
+            #[allow(clippy::cast_possible_truncation)]
+            let whole_cores = cores as i64;
+            format!("{whole_cores}")
         } else {
-            format!("{:.1}", cores)
+            format!("{cores:.1}")
         }
     }
 }
@@ -132,16 +140,18 @@ pub fn format_cpu(millicores: f64) -> String {
 /// Format memory bytes to human-readable string
 ///
 /// Examples:
-/// - 134217728 -> "128Mi"
-/// - 1073741824 -> "1Gi"
-/// - 500000000 -> "477Mi"
+/// - `134217728` -> `"128Mi"`
+/// - `1073741824` -> `"1Gi"`
+/// - `500000000` -> `"477Mi"`
 ///
 /// # Arguments
 /// * `bytes` - Memory in bytes
 ///
 /// # Returns
 /// Formatted memory string
+#[must_use]
 #[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_possible_truncation)]
 pub fn format_memory(bytes: u64) -> String {
     const KI: f64 = 1024.0;
     const MI: f64 = 1024.0 * 1024.0;
@@ -157,19 +167,19 @@ pub fn format_memory(bytes: u64) -> String {
         if gi.fract() == 0.0 {
             format!("{}Gi", gi as i64)
         } else {
-            format!("{:.1}Gi", gi)
+            format!("{gi:.1}Gi")
         }
     } else if bytes_f64 >= MI {
         let mi = bytes_f64 / MI;
         if mi.fract() == 0.0 {
             format!("{}Mi", mi as i64)
         } else {
-            format!("{:.0}Mi", mi)
+            format!("{mi:.0}Mi")
         }
     } else if bytes_f64 >= KI {
         format!("{}Ki", (bytes_f64 / KI) as i64)
     } else {
-        format!("{}B", bytes)
+        format!("{bytes}B")
     }
 }
 
@@ -181,6 +191,7 @@ pub fn format_memory(bytes: u64) -> String {
 ///
 /// # Returns
 /// Percentage (0.0 - 100.0), or None if limit is 0 or invalid
+#[must_use]
 pub fn calculate_usage_percent(usage: f64, limit: f64) -> Option<f64> {
     if limit <= 0.0 {
         None
@@ -196,6 +207,7 @@ pub fn calculate_usage_percent(usage: f64, limit: f64) -> Option<f64> {
 ///
 /// # Returns
 /// Resource status enum
+#[must_use]
 pub fn determine_status(usage_percent: Option<f64>) -> ResourceStatus {
     match usage_percent {
         Some(pct) if pct >= 75.0 => ResourceStatus::Critical,
@@ -219,6 +231,7 @@ pub struct ContainerResources {
 
 impl ContainerResources {
     /// Calculate CPU usage percentage
+    #[must_use]
     pub fn cpu_usage_percent(&self) -> Option<f64> {
         match (self.cpu_usage, self.cpu_limit) {
             (Some(usage), Some(limit)) => calculate_usage_percent(usage, limit),
@@ -227,6 +240,8 @@ impl ContainerResources {
     }
 
     /// Calculate memory usage percentage
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn memory_usage_percent(&self) -> Option<f64> {
         match (self.memory_usage, self.memory_limit) {
             (Some(usage), Some(limit)) => calculate_usage_percent(usage as f64, limit as f64),
@@ -235,25 +250,28 @@ impl ContainerResources {
     }
 
     /// Get CPU status
+    #[must_use]
     pub fn cpu_status(&self) -> ResourceStatus {
         determine_status(self.cpu_usage_percent())
     }
 
     /// Get memory status
+    #[must_use]
     pub fn memory_status(&self) -> ResourceStatus {
         determine_status(self.memory_usage_percent())
     }
 
     /// Format CPU for display: "usage/limit [percent%]"
+    #[must_use]
     pub fn format_cpu_display(&self) -> String {
         match (self.cpu_usage, self.cpu_limit) {
             (Some(usage), Some(limit)) => {
                 let usage_str = format_cpu(usage);
                 let limit_str = format_cpu(limit);
                 if let Some(pct) = self.cpu_usage_percent() {
-                    format!("{}/{} [{:.0}%]", usage_str, limit_str, pct)
+                    format!("{usage_str}/{limit_str} [{pct:.0}%]")
                 } else {
-                    format!("{}/{}", usage_str, limit_str)
+                    format!("{usage_str}/{limit_str}")
                 }
             }
             (Some(usage), None) => format!("{}/∞", format_cpu(usage)),
@@ -263,15 +281,16 @@ impl ContainerResources {
     }
 
     /// Format memory for display: "usage/limit [percent%]"
+    #[must_use]
     pub fn format_memory_display(&self) -> String {
         match (self.memory_usage, self.memory_limit) {
             (Some(usage), Some(limit)) => {
                 let usage_str = format_memory(usage);
                 let limit_str = format_memory(limit);
                 if let Some(pct) = self.memory_usage_percent() {
-                    format!("{}/{} [{:.0}%]", usage_str, limit_str, pct)
+                    format!("{usage_str}/{limit_str} [{pct:.0}%]")
                 } else {
-                    format!("{}/{}", usage_str, limit_str)
+                    format!("{usage_str}/{limit_str}")
                 }
             }
             (Some(usage), None) => format!("{}/∞", format_memory(usage)),
@@ -288,8 +307,9 @@ impl ContainerResources {
 ///
 /// # Returns
 /// Aggregated resources (sum of all containers)
-pub fn aggregate_container_resources(
-    containers: &HashMap<String, ContainerResources>,
+#[must_use]
+pub fn aggregate_container_resources<S: std::hash::BuildHasher>(
+    containers: &HashMap<String, ContainerResources, S>,
 ) -> ContainerResources {
     let mut total = ContainerResources::default();
 

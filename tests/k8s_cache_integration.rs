@@ -1,13 +1,12 @@
 /// Integration test that validates the cache against a real K8s cluster
-/// 
+///
 /// Run with: cargo test --test `k8s_cache_integration` -- --nocapture
-/// 
+///
 /// This test will:
 /// 1. Skip if no K8s cluster is available
 /// 2. Verify cache is faster than direct API calls
 /// 3. Verify background fetcher works with real data
 /// 4. Verify data consistency
-
 use navipod::k8s::cache::{
     K8sDataCache, BackgroundFetcher, DataRequest, FetchResult, FetchPriority
 };

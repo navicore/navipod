@@ -1,7 +1,6 @@
 /// Test that verifies the cache works with UI components
-/// 
+///
 /// This tests the integration between `cache_manager` and UI components
-
 use navipod::{cache_manager, k8s::cache::{DataRequest, FetchResult}};
 use std::collections::BTreeMap;
 
@@ -23,8 +22,8 @@ async fn test_cache_manager_initialization() {
     };
     
     // Should be empty initially (or filled by background fetcher)
-    let initial = cache.get(&request).await;
-    
+    let _initial = cache.get(&request).await;
+
     // Store some test data
     let test_data = FetchResult::ReplicaSets(vec![]);
     cache.put(&request, test_data.clone()).await.unwrap();
@@ -42,7 +41,7 @@ async fn test_cache_manager_initialization() {
     cache.put(&request, test_data).await.unwrap();
     
     // Should receive update (with timeout to avoid hanging)
-    let result = tokio::time::timeout(
+    let _result = tokio::time::timeout(
         std::time::Duration::from_millis(100),
         rx.recv()
     ).await;

@@ -249,7 +249,7 @@ impl Container {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct RsPod {
     pub name: String,
     pub status: String,
@@ -265,6 +265,10 @@ pub struct RsPod {
     pub memory_request: Option<String>,
     pub memory_limit: Option<String>,
     pub memory_usage: Option<String>,
+    // Node information
+    pub node_name: Option<String>,
+    pub node_cpu_percent: Option<f64>,
+    pub node_memory_percent: Option<f64>,
 }
 
 impl Filterable for RsPod {
@@ -791,6 +795,9 @@ mod tests {
                 memory_request: None,
                 memory_limit: None,
                 memory_usage: None,
+                node_name: None,
+                node_cpu_percent: None,
+                node_memory_percent: None,
             },
             RsPod {
                 name: "replica-923450-987654".to_string(),
@@ -806,6 +813,9 @@ mod tests {
                 memory_request: None,
                 memory_limit: None,
                 memory_usage: None,
+                node_name: None,
+                node_cpu_percent: None,
+                node_memory_percent: None,
             },
         ];
         let (

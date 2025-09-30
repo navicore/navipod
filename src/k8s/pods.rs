@@ -1,15 +1,15 @@
 use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
-use crate::k8s::metrics_client::{fetch_pod_metrics, create_metrics_lookup};
+use crate::k8s::metrics_client::{fetch_pod_metrics, fetch_node_metrics, create_metrics_lookup};
 use crate::k8s::resources::{format_cpu, format_memory, parse_cpu, parse_memory};
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::RsPod;
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::api::core::v1::{Pod, Node};
 use kube::Api;
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use tracing::debug;
 
 use super::{client::new, USER_AGENT};
@@ -84,6 +84,47 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
         Vec::new()
     });
     let metrics_lookup = create_metrics_lookup(pod_metrics);
+
+    // Fetch node capacity and metrics
+    let node_list: ObjectList<Node> = Api::all(client.clone()).list(&ListParams::default()).await?;
+    let node_metrics = fetch_node_metrics(client.clone()).await.unwrap_or_else(|e| {
+        debug!("Could not fetch node metrics: {}", e);
+        Vec::new()
+    });
+
+    // Build node info lookup: node_name -> (cpu_percent, memory_percent)
+    let mut node_info: HashMap<String, (f64, f64)> = HashMap::new();
+    for node in &node_list.items {
+        if let Some(node_name) = &node.metadata.name {
+            // Get capacity from node spec
+            let (cpu_capacity, mem_capacity) = node.status.as_ref()
+                .and_then(|status| status.capacity.as_ref())
+                .map_or((None, None), |capacity| {
+                    let cpu = capacity.get("cpu").and_then(|q| parse_cpu(&q.0));
+                    let mem = capacity.get("memory").and_then(|q| parse_memory(&q.0));
+                    (cpu, mem)
+                });
+
+            // Get usage from metrics
+            let (cpu_usage, mem_usage) = node_metrics.iter()
+                .find(|nm| nm.node_name == *node_name)
+                .map_or((None, None), |nm| (nm.cpu_usage, nm.memory_usage));
+
+            // Calculate percentages
+            let cpu_pct = match (cpu_usage, cpu_capacity) {
+                (Some(usage), Some(capacity)) if capacity > 0.0 => Some((usage / capacity) * 100.0),
+                _ => None,
+            };
+            let mem_pct = match (mem_usage, mem_capacity) {
+                (Some(usage), Some(capacity)) if capacity > 0 => Some((usage as f64 / capacity as f64) * 100.0),
+                _ => None,
+            };
+
+            if let (Some(cpu), Some(mem)) = (cpu_pct, mem_pct) {
+                node_info.insert(node_name.clone(), (cpu, mem));
+            }
+        }
+    }
 
     for pod in pod_list.items {
         if let Some(owners) = &pod.metadata.owner_references {
@@ -196,6 +237,12 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     (None, None)
                 };
 
+                // Get node info for this pod
+                let node_name = pod.spec.as_ref().and_then(|spec| spec.node_name.clone());
+                let (node_cpu_percent, node_memory_percent) = node_name.as_ref()
+                    .and_then(|name| node_info.get(name))
+                    .map_or((None, None), |(cpu, mem)| (Some(*cpu), Some(*mem)));
+
                 let data = RsPod {
                     name: instance_name.to_string(),
                     status: status.to_string(),
@@ -210,6 +257,9 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     memory_request,
                     memory_limit,
                     memory_usage,
+                    node_name,
+                    node_cpu_percent,
+                    node_memory_percent,
                 };
 
                 pod_vec.push(data);

@@ -182,6 +182,22 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
         ("──────────".to_string(), theme.text_muted)
     };
 
+    // Format node info
+    let node_display = if let (Some(node_name), Some(cpu_pct), Some(mem_pct)) =
+        (&pod.node_name, pod.node_cpu_percent, pod.node_memory_percent) {
+        let worst_pct = cpu_pct.max(mem_pct);
+        let node_symbol = if worst_pct >= 75.0 {
+            "🔴"
+        } else if worst_pct >= 60.0 {
+            "🟡"
+        } else {
+            "🟢"
+        };
+        format!(" {} C:{:.0}% M:{:.0}% {}", node_name, cpu_pct, mem_pct, node_symbol)
+    } else {
+        String::new()
+    };
+
     // Create card content as multi-line text
     let mut content = vec![
         Line::from(vec![
@@ -191,6 +207,7 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
             Span::styled(&pod.name, theme.text_style(TextType::Title)),
             Span::raw("  "),
             Span::styled(&pod.age, theme.text_style(TextType::Caption)),
+            Span::styled(&node_display, theme.text_style(TextType::Caption)),
         ]),
         Line::from(vec![
             Span::raw("    Status: "),

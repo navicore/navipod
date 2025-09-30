@@ -266,6 +266,10 @@ fn extract_metrics_from_annotations(annotations: &std::collections::BTreeMap<Str
 #[allow(clippy::significant_drop_tightening)]
 #[allow(clippy::too_many_lines)]
 pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Result<Vec<Container>> {
+    use crate::k8s::metrics_client::{fetch_pod_metrics, create_metrics_lookup};
+    use crate::k8s::resources::{format_cpu, format_memory};
+    use tracing::debug;
+
     let mut client = get_client().await?;
     let label_selector = format_label_selector(&selector);
     let lp = ListParams::default().labels(&label_selector);
@@ -280,6 +284,13 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
         }
         Err(e) => return Err(e.into()),
     };
+
+    // Fetch metrics for containers
+    let pod_metrics = fetch_pod_metrics((*client).clone(), None).await.unwrap_or_else(|e| {
+        debug!("Could not fetch container metrics: {}", e);
+        Vec::new()
+    });
+    let metrics_lookup = create_metrics_lookup(pod_metrics);
 
     let mut container_vec = Vec::new();
 
@@ -306,6 +317,16 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
 
                         // Extract resource limits and requests
                         let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
+
+                        // Get actual usage from metrics for this container
+                        let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(&pod_name).and_then(|m| m.get(&container.name)) {
+                            (
+                                container_metrics.cpu_usage.map(format_cpu),
+                                container_metrics.memory_usage.map(format_memory),
+                            )
+                        } else {
+                            (None, None)
+                        };
 
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
@@ -347,10 +368,10 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                             pod_name: pod_name.clone(),
                             cpu_request,
                             cpu_limit,
-                            cpu_usage: None, // Will be filled by metrics later
+                            cpu_usage,
                             memory_request,
                             memory_limit,
-                            memory_usage: None, // Will be filled by metrics later
+                            memory_usage,
                         };
                         container_vec.push(c);
                     }
@@ -368,6 +389,16 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
 
                             // Extract resource limits and requests
                             let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
+
+                            // Get actual usage from metrics for this init container
+                            let (cpu_usage, memory_usage) = if let Some(container_metrics) = metrics_lookup.get(&pod_name).and_then(|m| m.get(&container.name)) {
+                                (
+                                    container_metrics.cpu_usage.map(format_cpu),
+                                    container_metrics.memory_usage.map(format_memory),
+                                )
+                            } else {
+                                (None, None)
+                            };
 
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
                             let restarts = container_statuses
@@ -408,10 +439,10 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                                 pod_name: pod_name.clone(),
                                 cpu_request,
                                 cpu_limit,
-                                cpu_usage: None, // Will be filled by metrics later
+                                cpu_usage,
                                 memory_request,
                                 memory_limit,
-                                memory_usage: None, // Will be filled by metrics later
+                                memory_usage,
                             };
                             container_vec.push(c);
                         }

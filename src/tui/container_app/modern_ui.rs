@@ -182,9 +182,28 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
     
     // Extract short image name (remove registry/tag for display)
     let short_image = extract_image_name(container.image());
-    
+
+    // Calculate CPU and memory info
+    let cpu_display = format_resource_display(container.cpu_usage.as_ref(), container.cpu_limit.as_ref());
+    let cpu_percentage = calculate_resource_percentage(container.cpu_usage.as_ref(), container.cpu_limit.as_ref());
+    let cpu_bar_color = get_resource_bar_color(cpu_percentage, theme);
+    let (cpu_bar, _) = if let Some(pct) = cpu_percentage {
+        UiHelpers::health_progress_bar((pct as usize).min(100), 100, 8, theme)
+    } else {
+        ("────────".to_string(), theme.text_muted)
+    };
+
+    let memory_display = format_resource_display(container.memory_usage.as_ref(), container.memory_limit.as_ref());
+    let memory_percentage = calculate_resource_percentage(container.memory_usage.as_ref(), container.memory_limit.as_ref());
+    let memory_bar_color = get_resource_bar_color(memory_percentage, theme);
+    let (memory_bar, _) = if let Some(pct) = memory_percentage {
+        UiHelpers::health_progress_bar((pct as usize).min(100), 100, 8, theme)
+    } else {
+        ("────────".to_string(), theme.text_muted)
+    };
+
     // Create card content as multi-line text
-    let content = vec![
+    let mut content = vec![
         Line::from(vec![
             Span::raw(selection_indicator),
             Span::styled(status_symbol, status_style),
@@ -204,15 +223,37 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
             Span::styled(format!("{restart_count} "), get_restart_style(restart_count, theme)),
             Span::styled(restart_bar, Style::default().fg(restart_color)),
         ]),
-        Line::from(vec![
-            Span::raw("    "),
-            Span::styled(truncate_text(container.description(), 60), theme.text_style(TextType::Caption)),
-        ]),
-        Line::from(vec![
-            // Add spacing line for card separation
-            Span::raw(""),
-        ]),
     ];
+
+    // Add CPU line if we have data
+    if container.cpu_usage.is_some() || container.cpu_limit.is_some() {
+        content.push(Line::from(vec![
+            Span::raw("    CPU: "),
+            Span::styled(&cpu_display, theme.text_style(TextType::Body)),
+            Span::raw(" "),
+            Span::styled(cpu_bar, Style::default().fg(cpu_bar_color)),
+        ]));
+    }
+
+    // Add memory line if we have data
+    if container.memory_usage.is_some() || container.memory_limit.is_some() {
+        content.push(Line::from(vec![
+            Span::raw("    Mem: "),
+            Span::styled(&memory_display, theme.text_style(TextType::Body)),
+            Span::raw(" "),
+            Span::styled(memory_bar, Style::default().fg(memory_bar_color)),
+        ]));
+    }
+
+    content.push(Line::from(vec![
+        Span::raw("    "),
+        Span::styled(truncate_text(container.description(), 60), theme.text_style(TextType::Caption)),
+    ]));
+
+    content.push(Line::from(vec![
+        // Add spacing line for card separation
+        Span::raw(""),
+    ]));
     
     let card = Paragraph::new(content)
         .style(Style::default().bg(card_bg));
@@ -768,4 +809,54 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage(percent_x),
         Constraint::Percentage((100 - percent_x) / 2),
     ]).split(popup_layout[1])[1]
+}
+
+/// Calculate usage percentage for resource
+fn calculate_resource_percentage(usage_str: Option<&String>, limit_str: Option<&String>) -> Option<f64> {
+    use crate::k8s::resources::{parse_cpu, parse_memory};
+
+    match (usage_str, limit_str) {
+        (Some(usage), Some(limit)) => {
+            // Try CPU parsing first
+            if let (Some(usage_val), Some(limit_val)) = (parse_cpu(usage), parse_cpu(limit)) {
+                if limit_val > 0.0 {
+                    return Some((usage_val / limit_val) * 100.0);
+                }
+            }
+            // Try memory parsing
+            if let (Some(usage_val), Some(limit_val)) = (parse_memory(usage), parse_memory(limit)) {
+                if limit_val > 0 {
+                    return Some((usage_val as f64 / limit_val as f64) * 100.0);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Get resource bar color based on usage percentage
+fn get_resource_bar_color(percentage: Option<f64>, theme: &NaviTheme) -> Color {
+    match percentage {
+        Some(pct) if pct >= 75.0 => theme.error,  // Critical - Red
+        Some(pct) if pct >= 60.0 => theme.warning, // Warning - Yellow
+        Some(_) => theme.success,                   // Healthy - Green
+        None => theme.text_muted,                        // Unknown - Gray
+    }
+}
+
+/// Format resource display: "usage/limit [percent%]"
+fn format_resource_display(usage: Option<&String>, limit: Option<&String>) -> String {
+    match (usage, limit) {
+        (Some(u), Some(l)) => {
+            if let Some(pct) = calculate_resource_percentage(Some(u), Some(l)) {
+                format!("{}/{} [{:.0}%]", u, l, pct)
+            } else {
+                format!("{}/{}", u, l)
+            }
+        }
+        (Some(u), None) => format!("{}/∞", u),
+        (None, Some(l)) => format!("?/{}", l),
+        (None, None) => "N/A".to_string(),
+    }
 }

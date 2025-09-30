@@ -172,6 +172,45 @@ fn extract_container_probes(container: &k8s_openapi::api::core::v1::Container) -
     probes
 }
 
+/// Extract resource requirements from container spec
+fn extract_container_resources(container: &k8s_openapi::api::core::v1::Container) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+    use crate::k8s::resources::{format_cpu, format_memory, parse_cpu, parse_memory};
+
+    let (cpu_request, memory_request) = if let Some(ref resources) = container.resources {
+        if let Some(ref requests) = resources.requests {
+            let cpu_req = requests.get("cpu").and_then(|q| {
+                parse_cpu(&q.0).map(format_cpu)
+            });
+            let mem_req = requests.get("memory").and_then(|q| {
+                parse_memory(&q.0).map(format_memory)
+            });
+            (cpu_req, mem_req)
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    let (cpu_limit, memory_limit) = if let Some(ref resources) = container.resources {
+        if let Some(ref limits) = resources.limits {
+            let cpu_lim = limits.get("cpu").and_then(|q| {
+                parse_cpu(&q.0).map(format_cpu)
+            });
+            let mem_lim = limits.get("memory").and_then(|q| {
+                parse_memory(&q.0).map(format_memory)
+            });
+            (cpu_lim, mem_lim)
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    (cpu_request, cpu_limit, memory_request, memory_limit)
+}
+
 /// Extract metrics endpoints from pod annotations
 fn extract_metrics_from_annotations(annotations: &std::collections::BTreeMap<String, String>, _container_ports: Option<&Vec<k8s_openapi::api::core::v1::ContainerPort>>) -> Vec<ContainerProbe> {
     let mut metrics_probes = Vec::new();
@@ -258,13 +297,16 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                     for container in spec.containers {
                         // Extract probes first before moving other fields
                         let mut probes = extract_container_probes(&container);
-                        
+
                         // Add metrics endpoints from pod annotations
                         if let Some(ref annotations) = pod.metadata.annotations {
                             let metrics_probes = extract_metrics_from_annotations(annotations, container.ports.as_ref());
                             probes.extend(metrics_probes);
                         }
-                        
+
+                        // Extract resource limits and requests
+                        let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
+
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
                         let ports = format_ports(container.ports);
                         let restarts = container_statuses
@@ -303,6 +345,12 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                             probes,
                             selectors: container_selectors.clone(),
                             pod_name: pod_name.clone(),
+                            cpu_request,
+                            cpu_limit,
+                            cpu_usage: None, // Will be filled by metrics later
+                            memory_request,
+                            memory_limit,
+                            memory_usage: None, // Will be filled by metrics later
                         };
                         container_vec.push(c);
                     }
@@ -311,13 +359,16 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                         for container in init_containers {
                             // Extract probes first before moving other fields
                             let mut probes = extract_container_probes(&container);
-                            
+
                             // Add metrics endpoints from pod annotations
                             if let Some(ref annotations) = pod.metadata.annotations {
                                 let metrics_probes = extract_metrics_from_annotations(annotations, container.ports.as_ref());
                                 probes.extend(metrics_probes);
                             }
-                            
+
+                            // Extract resource limits and requests
+                            let (cpu_request, cpu_limit, memory_request, memory_limit) = extract_container_resources(&container);
+
                             let image = container.image.unwrap_or_else(|| "unknown".to_string());
                             let restarts = container_statuses
                                 .iter()
@@ -355,6 +406,12 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
                                 probes,
                                 selectors: container_selectors.clone(),
                                 pod_name: pod_name.clone(),
+                                cpu_request,
+                                cpu_limit,
+                                cpu_usage: None, // Will be filled by metrics later
+                                memory_request,
+                                memory_limit,
+                                memory_usage: None, // Will be filled by metrics later
                             };
                             container_vec.push(c);
                         }

@@ -12,8 +12,9 @@ on:
 
 jobs:
   claude-review:
-    # Only run if the secret is available (won't run for external contributor PRs)
-    if: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    # Only run for PRs from the same repository (not forks)
+    # This ensures the secret is available
+    if: github.event.pull_request.head.repo.full_name == github.repository
 
     runs-on: ubuntu-latest
     permissions:

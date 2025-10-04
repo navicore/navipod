@@ -341,6 +341,14 @@ fn process_pod_list(
                         let (cpu_usage, memory_usage) = metrics_lookup.get(&pod_name)
                             .and_then(|m| m.get(&container.name))
                             .map_or((None, None), |container_metrics| {
+                                // Record metrics in history for trend visualization
+                                crate::cache_manager::record_container_metrics(
+                                    &pod_name,
+                                    &container.name,
+                                    container_metrics.cpu_usage,
+                                    container_metrics.memory_usage,
+                                );
+
                                 (
                                     container_metrics.cpu_usage.map(format_cpu),
                                     container_metrics.memory_usage.map(format_memory),
@@ -413,6 +421,14 @@ fn process_pod_list(
                             let (cpu_usage, memory_usage) = metrics_lookup.get(&pod_name)
                                 .and_then(|m| m.get(&container.name))
                                 .map_or((None, None), |container_metrics| {
+                                    // Record metrics in history for trend visualization
+                                    crate::cache_manager::record_container_metrics(
+                                        &pod_name,
+                                        &container.name,
+                                        container_metrics.cpu_usage,
+                                        container_metrics.memory_usage,
+                                    );
+
                                     (
                                         container_metrics.cpu_usage.map(format_cpu),
                                         container_metrics.memory_usage.map(format_memory),

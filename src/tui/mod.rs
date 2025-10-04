@@ -7,6 +7,7 @@ mod ingress_app;
 mod log_app;
 mod pod_app;
 mod rs_app;
+pub mod sparkline;
 mod stream;
 mod style;
 mod table_ui;

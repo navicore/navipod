@@ -237,6 +237,13 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                         }
                     }
 
+                    // Record metrics in history for trend visualization
+                    crate::cache_manager::record_pod_metrics(
+                        instance_name,
+                        if has_cpu_usage { Some(total_cpu_usage) } else { None },
+                        if has_mem_usage { Some(total_mem_usage) } else { None },
+                    );
+
                     (
                         if has_cpu_usage { Some(format_cpu(total_cpu_usage)) } else { None },
                         if has_mem_usage { Some(format_memory(total_mem_usage)) } else { None },

@@ -156,7 +156,12 @@ fn render_container_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
     render_list_scrollbar(f, app, area, theme);
 }
 
+#[allow(clippy::too_many_lines)]
 fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container, area: Rect, is_selected: bool, theme: &NaviTheme) {
+    use crate::cache_manager::get_metrics_history;
+    use crate::k8s::resources::{parse_cpu, parse_memory};
+    use crate::tui::sparkline::render_sparkline;
+
     // Parse restart count to determine container health
     let restart_count = container.restarts().parse::<i32>().unwrap_or(0);
     let container_status = determine_container_status(restart_count);
@@ -204,6 +209,39 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
         |pct| UiHelpers::health_progress_bar((pct as usize).min(100), 100, 8, theme)
     );
 
+    // Get sparklines and trends from history (compute while holding lock to avoid clone)
+    let (cpu_sparkline, cpu_trend) = get_metrics_history()
+        .and_then(|store| store.read().ok())
+        .and_then(|history| {
+            history.get_container_history(&container.pod_name, &container.name).map(|ts| {
+                let limit_millis = container.cpu_limit.as_ref().and_then(|l| parse_cpu(l));
+                let values = ts.cpu_sparkline_values(limit_millis);
+                let sparkline = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", render_sparkline(&values, Some(8)))
+                };
+                (sparkline, ts.cpu_trend().arrow())
+            })
+        })
+        .unwrap_or_else(|| (String::new(), ""));
+
+    let (memory_sparkline, memory_trend) = get_metrics_history()
+        .and_then(|store| store.read().ok())
+        .and_then(|history| {
+            history.get_container_history(&container.pod_name, &container.name).map(|ts| {
+                let limit_bytes = container.memory_limit.as_ref().and_then(|l| parse_memory(l));
+                let values = ts.memory_sparkline_values(limit_bytes);
+                let sparkline = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", render_sparkline(&values, Some(8)))
+                };
+                (sparkline, ts.memory_trend().arrow())
+            })
+        })
+        .unwrap_or_else(|| (String::new(), ""));
+
     // Create card content as multi-line text
     let mut content = vec![
         Line::from(vec![
@@ -234,6 +272,9 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
             Span::styled(&cpu_display, theme.text_style(TextType::Body)),
             Span::raw(" "),
             Span::styled(cpu_bar, Style::default().fg(cpu_bar_color)),
+            Span::styled(&cpu_sparkline, theme.text_style(TextType::Caption)),
+            Span::raw(if cpu_trend.is_empty() { "" } else { " " }),
+            Span::raw(cpu_trend),
         ]));
     }
 
@@ -244,6 +285,9 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
             Span::styled(&memory_display, theme.text_style(TextType::Body)),
             Span::raw(" "),
             Span::styled(memory_bar, Style::default().fg(memory_bar_color)),
+            Span::styled(&memory_sparkline, theme.text_style(TextType::Caption)),
+            Span::raw(if memory_trend.is_empty() { "" } else { " " }),
+            Span::raw(memory_trend),
         ]));
     }
 

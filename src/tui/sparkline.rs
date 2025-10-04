@@ -18,15 +18,13 @@ pub fn render_sparkline(values: &[u8], max_width: Option<usize>) -> String {
     }
 
     // Downsample if needed
-    let display_values = if let Some(width) = max_width {
+    let display_values = max_width.map_or_else(|| values.to_vec(), |width| {
         if values.len() > width {
             downsample(values, width)
         } else {
             values.to_vec()
         }
-    } else {
-        values.to_vec()
-    };
+    });
 
     display_values
         .iter()
@@ -41,7 +39,8 @@ fn value_to_char(value: u8) -> char {
     SPARKLINE_CHARS[index]
 }
 
-/// Downsample values to fit within max_width by averaging
+/// Downsample values to fit within `max_width` by averaging
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss)]
 fn downsample(values: &[u8], target_len: usize) -> Vec<u8> {
     if values.len() <= target_len {
         return values.to_vec();

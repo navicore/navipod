@@ -68,7 +68,7 @@ impl MetricsTimeSeries {
         self.prune();
     }
 
-    /// Remove samples older than MAX_AGE or beyond MAX_SAMPLES
+    /// Remove samples older than `MAX_AGE` or beyond `MAX_SAMPLES`
     fn prune(&mut self) {
         // Remove old samples
         while let Some(front) = self.samples.front() {
@@ -123,11 +123,13 @@ impl MetricsTimeSeries {
 
     /// Get memory trend (rising, falling, stable)
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn memory_trend(&self) -> Trend {
         self.calculate_trend(|sample| sample.memory_bytes.map(|b| b as f64))
     }
 
     /// Calculate trend for a given metric extractor
+    #[allow(clippy::cast_precision_loss)]
     fn calculate_trend<F>(&self, extractor: F) -> Trend
     where
         F: Fn(&MetricSample) -> Option<f64>,
@@ -166,6 +168,7 @@ impl MetricsTimeSeries {
 
     /// Get memory values for sparkline rendering (normalized 0-100)
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn memory_sparkline_values(&self, limit_bytes: Option<u64>) -> Vec<u8> {
         self.sparkline_values(
             |sample| sample.memory_bytes.map(|b| b as f64),
@@ -174,6 +177,7 @@ impl MetricsTimeSeries {
     }
 
     /// Convert samples to sparkline values (0-100 scale)
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn sparkline_values<F>(&self, extractor: F, limit: Option<f64>) -> Vec<u8>
     where
         F: Fn(&MetricSample) -> Option<f64>,
@@ -187,14 +191,7 @@ impl MetricsTimeSeries {
         }
 
         // If we have a limit, normalize to percentage of limit
-        if let Some(limit_val) = limit {
-            values.iter()
-                .map(|&v| {
-                    let pct = (v / limit_val * 100.0).min(100.0).max(0.0);
-                    pct as u8
-                })
-                .collect()
-        } else {
+        limit.map_or_else(|| {
             // Otherwise normalize to 0-100 based on min/max in this window
             let min = values.iter().copied().fold(f64::INFINITY, f64::min);
             let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
@@ -206,12 +203,19 @@ impl MetricsTimeSeries {
             } else {
                 values.iter()
                     .map(|&v| {
-                        let normalized = ((v - min) / range * 100.0).min(100.0).max(0.0);
+                        let normalized = ((v - min) / range * 100.0).clamp(0.0, 100.0);
                         normalized as u8
                     })
                     .collect()
             }
-        }
+        }, |limit_val| {
+            values.iter()
+                .map(|&v| {
+                    let pct = (v / limit_val * 100.0).clamp(0.0, 100.0);
+                    pct as u8
+                })
+                .collect()
+        })
     }
 }
 
@@ -260,7 +264,7 @@ impl MetricsHistoryStore {
     ) {
         self.pod_metrics
             .entry(pod_name.to_string())
-            .or_insert_with(MetricsTimeSeries::new)
+            .or_default()
             .add_sample(cpu_millis, memory_bytes);
     }
 
@@ -274,7 +278,7 @@ impl MetricsHistoryStore {
     ) {
         self.container_metrics
             .entry((pod_name.to_string(), container_name.to_string()))
-            .or_insert_with(MetricsTimeSeries::new)
+            .or_default()
             .add_sample(cpu_millis, memory_bytes);
     }
 

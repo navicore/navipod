@@ -29,6 +29,8 @@ static WATCHER_HANDLE: OnceLock<WatchManagerHandle> = OnceLock::new();
 static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
 /// Global metrics history store for trend visualization
 static METRICS_HISTORY: OnceLock<Arc<RwLock<MetricsHistoryStore>>> = OnceLock::new();
+/// Metrics history cleanup task shutdown channel
+static METRICS_CLEANUP_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Global counter for active network operations (blocking IO)
 static NETWORK_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 /// Global counter for blocking network operations (cache misses - should be red!)
@@ -43,7 +45,7 @@ static LAST_NETWORK_TIME: std::sync::atomic::AtomicU64 = std::sync::atomic::Atom
 /// # Errors
 ///
 /// Returns an error if cache is already initialized or if initialization fails
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
 pub async fn initialize_cache(namespace: String) -> Result<()> {
     let cache = Arc::new(K8sDataCache::new(DEFAULT_CACHE_SIZE_MB));
     let fetcher = BackgroundFetcher::new(cache.clone(), DEFAULT_CONCURRENT_FETCHERS);
@@ -63,11 +65,41 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
 
     // Initialize metrics history store
     let metrics_history = Arc::new(RwLock::new(MetricsHistoryStore::new()));
-    if METRICS_HISTORY.set(metrics_history).is_err() {
+    if METRICS_HISTORY.set(metrics_history.clone()).is_err() {
         error!("Metrics history already initialized");
         let _ = fetcher_shutdown_tx.send(()).await;
         let _ = watcher_shutdown_tx.send(()).await;
         return Err(already_initialized_error("Metrics history"));
+    }
+
+    // Start periodic cleanup task for metrics history
+    let (cleanup_shutdown_tx, mut cleanup_shutdown_rx) = mpsc::channel::<()>(1);
+    let metrics_history_clone = metrics_history.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(600)); // 10 minutes
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    if let Ok(mut store) = metrics_history_clone.write() {
+                        store.prune_all();
+                        info!("Metrics history cleaned up (removed empty entries)");
+                    } else {
+                        warn!("Failed to acquire write lock for metrics history cleanup");
+                    }
+                }
+                _ = cleanup_shutdown_rx.recv() => {
+                    info!("Metrics history cleanup task shutting down");
+                    break;
+                }
+            }
+        }
+    });
+
+    if METRICS_CLEANUP_SHUTDOWN_TX.set(cleanup_shutdown_tx).is_err() {
+        error!("Metrics cleanup shutdown channel already initialized");
+        let _ = fetcher_shutdown_tx.send(()).await;
+        let _ = watcher_shutdown_tx.send(()).await;
+        return Err(already_initialized_error("Metrics cleanup shutdown channel"));
     }
 
     // Store all global state atomically to prevent race conditions
@@ -76,6 +108,9 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         error!("Namespace already set");
         let _ = fetcher_shutdown_tx.send(()).await;
         let _ = watcher_shutdown_tx.send(()).await;
+        if let Some(cleanup_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {
+            let _ = cleanup_tx.send(()).await;
+        }
         return Err(already_initialized_error("Namespace"));
     }
 
@@ -83,6 +118,9 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         error!("Cache already initialized");
         let _ = fetcher_shutdown_tx.send(()).await;
         let _ = watcher_shutdown_tx.send(()).await;
+        if let Some(cleanup_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {
+            let _ = cleanup_tx.send(()).await;
+        }
         return Err(already_initialized_error("Cache"));
     }
 
@@ -92,6 +130,9 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         error!("Background fetcher already initialized");
         let _ = fetcher_shutdown_tx.send(()).await;
         let _ = watcher_shutdown_tx.send(()).await;
+        if let Some(cleanup_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {
+            let _ = cleanup_tx.send(()).await;
+        }
         return Err(already_initialized_error("Background fetcher"));
     }
 
@@ -330,6 +371,11 @@ pub async fn shutdown_cache() {
     if let Some(watcher_shutdown_tx) = WATCHER_SHUTDOWN_TX.get() {
         let _ = watcher_shutdown_tx.send(()).await;
         info!("Watch manager shutdown requested");
+    }
+
+    if let Some(cleanup_shutdown_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {
+        let _ = cleanup_shutdown_tx.send(()).await;
+        info!("Metrics history cleanup task shutdown requested");
     }
 
     // Note: Task handles are owned by WatchManagerHandle and cannot be directly

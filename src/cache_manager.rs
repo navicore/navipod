@@ -95,8 +95,9 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         }
     });
 
-    if METRICS_CLEANUP_SHUTDOWN_TX.set(cleanup_shutdown_tx).is_err() {
+    if METRICS_CLEANUP_SHUTDOWN_TX.set(cleanup_shutdown_tx.clone()).is_err() {
         error!("Metrics cleanup shutdown channel already initialized");
+        let _ = cleanup_shutdown_tx.send(()).await; // Shutdown the spawned task
         let _ = fetcher_shutdown_tx.send(()).await;
         let _ = watcher_shutdown_tx.send(()).await;
         return Err(already_initialized_error("Metrics cleanup shutdown channel"));

@@ -146,10 +146,25 @@ impl MetricsTimeSeries {
             return Trend::Unknown;
         }
 
-        let first_third: f64 = values.iter().take(values.len() / 3).sum::<f64>() / (values.len() / 3) as f64;
-        let last_third: f64 = values.iter().skip(values.len() * 2 / 3).sum::<f64>() / (values.len() / 3) as f64;
+        let third_size = values.len() / 3;
+        if third_size == 0 {
+            return Trend::Unknown;
+        }
 
-        let change_percent = ((last_third - first_third) / first_third) * 100.0;
+        let first_third: f64 = values.iter().take(third_size).sum::<f64>() / third_size as f64;
+        let last_third: f64 = values.iter().skip(values.len() * 2 / 3).sum::<f64>() / third_size as f64;
+
+        // Avoid division by zero when first_third is 0.0
+        let change_percent = if first_third.abs() < f64::EPSILON {
+            // If starting from ~0, treat any non-zero growth as rising
+            if last_third > f64::EPSILON {
+                100.0 // Treat as significant rise
+            } else {
+                0.0 // Still at ~0, stable
+            }
+        } else {
+            ((last_third - first_third) / first_third) * 100.0
+        };
 
         if change_percent > 20.0 {
             Trend::Rising
@@ -379,5 +394,29 @@ mod tests {
         assert!(store.get_pod_history("pod1").is_some());
         assert!(store.get_container_history("pod1", "container1").is_some());
         assert!(store.get_pod_history("pod2").is_none());
+    }
+
+    #[test]
+    fn test_trend_edge_cases() {
+        // Test with only 2 samples (less than minimum of 3)
+        let mut ts1 = MetricsTimeSeries::new();
+        ts1.add_sample(Some(100.0), None);
+        ts1.add_sample(Some(200.0), None);
+        assert_eq!(ts1.cpu_trend(), Trend::Unknown, "Should be Unknown with only 2 samples");
+
+        // Test with values starting from 0 (division by zero case)
+        let mut ts2 = MetricsTimeSeries::new();
+        for i in 0..12 {
+            ts2.add_sample(Some(i as f64 * 10.0), None);
+        }
+        let trend2 = ts2.cpu_trend();
+        assert_eq!(trend2, Trend::Rising, "Should detect rising trend from 0");
+
+        // Test with all zeros (should be stable)
+        let mut ts3 = MetricsTimeSeries::new();
+        for _ in 0..12 {
+            ts3.add_sample(Some(0.0), None);
+        }
+        assert_eq!(ts3.cpu_trend(), Trend::Stable, "Should be stable with all zeros");
     }
 }

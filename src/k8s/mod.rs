@@ -4,6 +4,7 @@ pub mod client_manager;
 pub mod containers;
 pub mod events;
 pub mod metrics_client;
+pub mod metrics_history;
 pub mod pod_ingress;
 pub mod pods;
 pub mod probes;

@@ -209,34 +209,38 @@ fn render_container_card(f: &mut Frame, container: &crate::tui::data::Container,
         |pct| UiHelpers::health_progress_bar((pct as usize).min(100), 100, 8, theme)
     );
 
-    // Get sparklines and trends from history
+    // Get sparklines and trends from history (compute while holding lock to avoid clone)
     let (cpu_sparkline, cpu_trend) = get_metrics_history()
         .and_then(|store| store.read().ok())
-        .and_then(|history| history.get_container_history(&container.pod_name, &container.name).cloned())
-        .map_or((String::new(), ""), |ts| {
-            let limit_millis = container.cpu_limit.as_ref().and_then(|l| parse_cpu(l));
-            let values = ts.cpu_sparkline_values(limit_millis);
-            let sparkline = if values.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", render_sparkline(&values, Some(8)))
-            };
-            (sparkline, ts.cpu_trend().arrow())
-        });
+        .and_then(|history| {
+            history.get_container_history(&container.pod_name, &container.name).map(|ts| {
+                let limit_millis = container.cpu_limit.as_ref().and_then(|l| parse_cpu(l));
+                let values = ts.cpu_sparkline_values(limit_millis);
+                let sparkline = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", render_sparkline(&values, Some(8)))
+                };
+                (sparkline, ts.cpu_trend().arrow())
+            })
+        })
+        .unwrap_or_else(|| (String::new(), ""));
 
     let (memory_sparkline, memory_trend) = get_metrics_history()
         .and_then(|store| store.read().ok())
-        .and_then(|history| history.get_container_history(&container.pod_name, &container.name).cloned())
-        .map_or((String::new(), ""), |ts| {
-            let limit_bytes = container.memory_limit.as_ref().and_then(|l| parse_memory(l));
-            let values = ts.memory_sparkline_values(limit_bytes);
-            let sparkline = if values.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", render_sparkline(&values, Some(8)))
-            };
-            (sparkline, ts.memory_trend().arrow())
-        });
+        .and_then(|history| {
+            history.get_container_history(&container.pod_name, &container.name).map(|ts| {
+                let limit_bytes = container.memory_limit.as_ref().and_then(|l| parse_memory(l));
+                let values = ts.memory_sparkline_values(limit_bytes);
+                let sparkline = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", render_sparkline(&values, Some(8)))
+                };
+                (sparkline, ts.memory_trend().arrow())
+            })
+        })
+        .unwrap_or_else(|| (String::new(), ""));
 
     // Create card content as multi-line text
     let mut content = vec![

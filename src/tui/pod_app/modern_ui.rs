@@ -189,34 +189,38 @@ fn render_pod_card(f: &mut Frame, pod: &crate::tui::data::RsPod, area: Rect, is_
         |pct| UiHelpers::health_progress_bar((pct as usize).min(100), 100, 10, theme)
     );
 
-    // Get sparklines and trends from history
+    // Get sparklines and trends from history (compute while holding lock to avoid clone)
     let (cpu_sparkline, cpu_trend) = get_metrics_history()
         .and_then(|store| store.read().ok())
-        .and_then(|history| history.get_pod_history(&pod.name).cloned())
-        .map_or((String::new(), ""), |ts| {
-            let limit_millis = pod.cpu_limit.as_ref().and_then(|l| parse_cpu(l));
-            let values = ts.cpu_sparkline_values(limit_millis);
-            let sparkline = if values.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", render_sparkline(&values, Some(10)))
-            };
-            (sparkline, ts.cpu_trend().arrow())
-        });
+        .and_then(|history| {
+            history.get_pod_history(&pod.name).map(|ts| {
+                let limit_millis = pod.cpu_limit.as_ref().and_then(|l| parse_cpu(l));
+                let values = ts.cpu_sparkline_values(limit_millis);
+                let sparkline = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", render_sparkline(&values, Some(10)))
+                };
+                (sparkline, ts.cpu_trend().arrow())
+            })
+        })
+        .unwrap_or_else(|| (String::new(), ""));
 
     let (memory_sparkline, memory_trend) = get_metrics_history()
         .and_then(|store| store.read().ok())
-        .and_then(|history| history.get_pod_history(&pod.name).cloned())
-        .map_or((String::new(), ""), |ts| {
-            let limit_bytes = pod.memory_limit.as_ref().and_then(|l| parse_memory(l));
-            let values = ts.memory_sparkline_values(limit_bytes);
-            let sparkline = if values.is_empty() {
-                String::new()
-            } else {
-                format!(" {}", render_sparkline(&values, Some(10)))
-            };
-            (sparkline, ts.memory_trend().arrow())
-        });
+        .and_then(|history| {
+            history.get_pod_history(&pod.name).map(|ts| {
+                let limit_bytes = pod.memory_limit.as_ref().and_then(|l| parse_memory(l));
+                let values = ts.memory_sparkline_values(limit_bytes);
+                let sparkline = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {}", render_sparkline(&values, Some(10)))
+                };
+                (sparkline, ts.memory_trend().arrow())
+            })
+        })
+        .unwrap_or_else(|| (String::new(), ""));
 
     // Format node info
     let node_display = if let (Some(node_name), Some(cpu_pct), Some(mem_pct)) =

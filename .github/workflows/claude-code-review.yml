@@ -24,12 +24,24 @@ jobs:
       id-token: write
     
     steps:
+      - name: Check if secret exists
+        id: check_secret
+        run: |
+          if [ -z "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" ]; then
+            echo "::notice::Claude Code OAuth token not available. Skipping Claude Code review."
+            echo "has_secret=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_secret=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout repository
+        if: steps.check_secret.outputs.has_secret == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: Run Claude Code Review
+        if: steps.check_secret.outputs.has_secret == 'true'
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:

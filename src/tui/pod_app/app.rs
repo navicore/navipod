@@ -1,6 +1,6 @@
 use crate::impl_tui_table_state;
 use crate::tui::common::base_table_state::BaseTableState;
-use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
+use crate::tui::common::key_handler::{KeyHandlerResult, handle_common_keys};
 use crate::tui::container_app;
 use crate::tui::data::RsPod;
 use crate::tui::ingress_app;
@@ -8,13 +8,11 @@ use crate::tui::pod_app;
 use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{create_container_data_vec, create_ingress_data_vec, AppBehavior, Apps};
+use crate::tui::ui_loop::{AppBehavior, Apps, create_container_data_vec, create_ingress_data_vec};
 use crate::tui::yaml_editor::YamlEditor;
 use crate::{
     cache_manager,
-    k8s::{
-        cache::{DataRequest, FetchResult, PodSelector},
-    },
+    k8s::cache::{DataRequest, FetchResult, PodSelector},
 };
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
@@ -22,8 +20,8 @@ use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
 use std::collections::BTreeMap;
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -49,11 +47,12 @@ impl AppBehavior for pod_app::app::App {
                     if self.base.yaml_editor.is_active {
                         return self.handle_yaml_editor_event(event);
                     }
-                    
+
                     // First try common keys (navigation, quit, color, vim motions)
                     return match handle_common_keys(self, key, |app| Apps::Pod { app }) {
                         KeyHandlerResult::Quit => Ok(None),
-                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::HandledWithUpdate(app_holder)
+                        | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
                         KeyHandlerResult::NotHandled => {
                             // Handle Pod-specific keys
                             self.handle_pod_specific_keys(key).await
@@ -62,9 +61,7 @@ impl AppBehavior for pod_app::app::App {
                 }
                 Ok(Some(Apps::Pod { app: self.clone() }))
             }
-            Message::Pod(data_vec) => {
-                Ok(Some(self.handle_data_update(data_vec)))
-            }
+            Message::Pod(data_vec) => Ok(Some(self.handle_data_update(data_vec))),
             _ => Ok(Some(Apps::Pod { app: self.clone() })),
         }
     }
@@ -134,13 +131,13 @@ impl AppBehavior for pod_app::app::App {
                          None => {
                              // Cache miss - schedule high priority fetch instead of blocking
                              debug!("⚡ CACHE MISS: Scheduling high-priority Pod fetch (no blocking API call)");
-                             
+
                              if let Some(bg_fetcher) = cache_manager::get_background_fetcher() {
                                  // Schedule high-priority fetch for immediate processing
                                  bg_fetcher.schedule_fetch(request.clone(), crate::k8s::cache::fetcher::FetchPriority::High).await;
                                  debug!("📝 HIGH-PRIORITY: Pod fetch scheduled for selectors: {:?}", selector);
                              }
-                             
+
                              // Try to use any stale cache data while we wait for the fresh fetch
                              if let Some(FetchResult::Pods(stale_items)) = cache.get_or_mark_stale(&request).await {
                                  debug!("📦 STALE DATA: Using {} stale pod items while fresh data loads", stale_items.len());
@@ -174,15 +171,18 @@ impl App {
     }
 
     /// Handle Pod-specific key events that aren't covered by common key handler
-    async fn handle_pod_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Result<Option<Apps>, io::Error> {
+    async fn handle_pod_specific_keys(
+        &mut self,
+        key: &crossterm::event::KeyEvent,
+    ) -> Result<Option<Apps>, io::Error> {
         use KeyCode::{Char, Enter, Esc};
-        
+
         match key.code {
             Esc => {
                 // Navigate back to ReplicaSet page
                 debug!("navigating back from pod to rs...");
-                Ok(Some(Apps::Rs { 
-                    app: crate::tui::rs_app::app::App::new(vec![]) 
+                Ok(Some(Apps::Rs {
+                    app: crate::tui::rs_app::app::App::new(vec![]),
                 }))
             }
             Char('i' | 'I') => self.handle_switch_to_ingress().await,
@@ -220,10 +220,7 @@ impl App {
     async fn handle_switch_to_containers(&mut self) -> Result<Option<Apps>, io::Error> {
         if let Some(selection) = self.get_selected_item() {
             if let Some(selectors) = selection.selectors.clone() {
-                let data_vec = create_container_data_vec(
-                    selectors,
-                    selection.name.clone(),
-                ).await?;
+                let data_vec = create_container_data_vec(selectors, selection.name.clone()).await?;
                 debug!("changing app from pod to container...");
                 return Ok(Some(Apps::Container {
                     app: container_app::app::App::new(data_vec),

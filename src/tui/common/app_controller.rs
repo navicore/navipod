@@ -3,22 +3,22 @@ use crate::tui::ui_loop::Apps;
 /// Trait for handling business logic operations separate from UI concerns
 pub trait DomainService<T> {
     /// Handle domain-specific operations for data updates
-    /// 
+    ///
     /// # Errors
     /// Returns error string if data update fails validation or processing
     fn handle_data_update(&mut self, data: Vec<T>) -> Result<(), String>;
-    
+
     /// Get domain-specific actions available for the current selection
     fn get_available_actions(&self) -> Vec<String>;
-    
+
     /// Execute a domain action
-    /// 
+    ///
     /// # Errors
     /// Returns error string if action execution fails or action is invalid
     fn execute_action(&mut self, action: &str) -> Result<Option<Apps>, String>;
-    
+
     /// Validate domain rules
-    /// 
+    ///
     /// # Errors
     /// Returns error string if domain validation fails
     fn validate(&self) -> Result<(), String>;
@@ -27,21 +27,21 @@ pub trait DomainService<T> {
 /// Trait for navigation logic separate from UI and domain concerns
 pub trait NavigationHandler {
     /// Handle navigation to other apps based on current selection
-    /// 
+    ///
     /// # Errors
     /// Returns error string if navigation fails or target is invalid
     fn handle_navigation(&self, target: &str) -> Result<Option<Apps>, String>;
-    
+
     /// Get available navigation targets from current state
     fn get_navigation_targets(&self) -> Vec<String>;
-    
+
     /// Check if navigation target is valid
     fn can_navigate_to(&self, target: &str) -> bool;
 }
 
 /// Generic app controller that orchestrates UI, domain, and navigation concerns
-pub struct AppController<T, D, N> 
-where 
+pub struct AppController<T, D, N>
+where
     D: DomainService<T>,
     N: NavigationHandler,
 {
@@ -51,7 +51,7 @@ where
 }
 
 impl<T, D, N> AppController<T, D, N>
-where 
+where
     D: DomainService<T>,
     N: NavigationHandler,
 {
@@ -64,7 +64,7 @@ where
     }
 
     /// Execute domain action through the service
-    /// 
+    ///
     /// # Errors
     /// Returns error string if domain action execution fails
     pub fn execute_domain_action(&mut self, action: &str) -> Result<Option<Apps>, String> {
@@ -72,7 +72,7 @@ where
     }
 
     /// Handle navigation through the handler  
-    /// 
+    ///
     /// # Errors
     /// Returns error string if navigation fails or target is invalid
     pub fn handle_navigation(&self, target: &str) -> Result<Option<Apps>, String> {
@@ -84,13 +84,13 @@ where
 pub trait UiStateManager {
     /// Get current UI mode (normal, editing, viewing, etc.)
     fn get_ui_mode(&self) -> UiMode;
-    
+
     /// Set UI mode
     fn set_ui_mode(&mut self, mode: UiMode);
-    
+
     /// Check if UI is in interactive mode
     fn is_interactive(&self) -> bool;
-    
+
     /// Get current selection context for UI rendering
     fn get_selection_context(&self) -> SelectionContext;
 }
@@ -121,15 +121,15 @@ mod tests {
         fn handle_data_update(&mut self, _data: Vec<String>) -> Result<(), String> {
             Ok(())
         }
-        
+
         fn get_available_actions(&self) -> Vec<String> {
             vec!["test_action".to_string()]
         }
-        
+
         fn execute_action(&mut self, _action: &str) -> Result<Option<Apps>, String> {
             Ok(None)
         }
-        
+
         fn validate(&self) -> Result<(), String> {
             Ok(())
         }
@@ -140,11 +140,11 @@ mod tests {
         fn handle_navigation(&self, _target: &str) -> Result<Option<Apps>, String> {
             Ok(None)
         }
-        
+
         fn get_navigation_targets(&self) -> Vec<String> {
             vec!["test_target".to_string()]
         }
-        
+
         fn can_navigate_to(&self, _target: &str) -> bool {
             true
         }

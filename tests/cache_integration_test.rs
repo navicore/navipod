@@ -196,13 +196,13 @@ async fn test_prefetch_suggestions() {
     // Get prefetch suggestions - should return empty when no ReplicaSets are cached
     let suggestions = cache.prefetch_related(&request).await;
     assert_eq!(suggestions.len(), 0); // No prefetch when ReplicaSets aren't cached yet
-    
+
     // Now add some ReplicaSet data to cache and test again
     let test_rs_data = FetchResult::ReplicaSets(vec![
         // Add sample data if needed for more comprehensive testing
     ]);
     cache.put(&request, test_rs_data).await.unwrap();
-    
+
     // Now it should suggest prefetch since ReplicaSets are cached
     let suggestions_with_cache = cache.prefetch_related(&request).await;
     // Even with cached empty ReplicaSets, it should return some prefetch suggestions

@@ -12,19 +12,19 @@ use crate::tui::log_app;
 use crate::tui::namespace_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app;
-use crate::tui::stream::{async_key_events, Message};
+use crate::tui::stream::{Message, async_key_events};
 use crate::tui::utils::time::asn1time_to_future_days_string;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use futures::stream::Stream;
 use futures::stream::StreamExt;
 use ratatui::prelude::*;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{error::Error, io};
 
 /// Global flag to indicate immediate quit request (from Q key)
@@ -149,11 +149,17 @@ pub async fn create_namespace_data_vec() -> Result<Vec<data::Namespace>, io::Err
     tracing::debug!("create_namespace_data_vec: fetching namespaces...");
     match list_namespaces().await {
         Ok(namespaces) => {
-            tracing::debug!("create_namespace_data_vec: got {} namespaces", namespaces.len());
+            tracing::debug!(
+                "create_namespace_data_vec: got {} namespaces",
+                namespaces.len()
+            );
             Ok(namespaces)
         }
         Err(e) => {
-            tracing::error!("create_namespace_data_vec: error fetching namespaces: {}", e);
+            tracing::error!(
+                "create_namespace_data_vec: error fetching namespaces: {}",
+                e
+            );
             Err(io::Error::other(e.to_string()))
         }
     }
@@ -172,23 +178,23 @@ where
     A: AppBehavior + Clone,
 {
     use futures::pin_mut;
-    
+
     let data_init_clone = app.clone();
     let data_events = data_init_clone.stream(should_stop.clone());
     let events = futures::stream::select(data_events, key_events);
     pin_mut!(events);
     let mut current_app = app.clone();
-    
+
     #[allow(unused_assignments)]
     let mut old_app_holder = Some(initial_app_holder);
     #[allow(unused_assignments)]
     let mut new_app_holder = None;
-    
+
     loop {
         _ = current_app.draw_ui(terminal);
         if let Some(event) = events.next().await {
             let app_holder = current_app.handle_event(&event).await?;
-            
+
             if let Some(updated_app) = app_updater(&app_holder) {
                 current_app = updated_app;
                 old_app_holder = app_holder;
@@ -198,7 +204,7 @@ where
             }
         }
     }
-    
+
     Ok((old_app_holder, new_app_holder))
 }
 
@@ -228,7 +234,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Pod { app } => {
             run_generic_app_loop(
@@ -244,7 +251,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Container { app } => {
             run_generic_app_loop(
@@ -260,7 +268,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Cert { app } => {
             run_generic_app_loop(
@@ -276,7 +285,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Ingress { app } => {
             run_generic_app_loop(
@@ -292,7 +302,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Log { app } => {
             run_generic_app_loop(
@@ -308,7 +319,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Event { app } => {
             run_generic_app_loop(
@@ -324,7 +336,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
         Apps::Namespace { app } => {
             run_generic_app_loop(
@@ -340,7 +353,8 @@ where
                         None
                     }
                 },
-            ).await
+            )
+            .await
         }
     };
 

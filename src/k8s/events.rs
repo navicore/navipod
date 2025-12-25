@@ -54,17 +54,14 @@ pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
     let mut unfiltered_events: Vec<Event> = api.list(&lp).await?.items;
 
     // Use a consistent fallback timestamp to ensure total order in comparison
-    let fallback_time = chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
-    
+    let fallback_time =
+        chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
+
     unfiltered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
             .map_or(fallback_time, |t| t.0)
-            .cmp(
-                &a.last_timestamp
-                    .clone()
-                    .map_or(fallback_time, |t| t.0),
-            )
+            .cmp(&a.last_timestamp.clone().map_or(fallback_time, |t| t.0))
     });
 
     Ok(unfiltered_events)
@@ -82,17 +79,14 @@ pub async fn list_all() -> NvResult<Vec<ResourceEvent>> {
     let mut unfiltered_events: Vec<Event> = api.list(&lp).await?.items;
 
     // Use a consistent fallback timestamp to ensure total order in comparison
-    let fallback_time = chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
-    
+    let fallback_time =
+        chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
+
     unfiltered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
             .map_or(fallback_time, |t| t.0)
-            .cmp(
-                &a.last_timestamp
-                    .clone()
-                    .map_or(fallback_time, |t| t.0),
-            )
+            .cmp(&a.last_timestamp.clone().map_or(fallback_time, |t| t.0))
     });
 
     let mut resource_events: Vec<ResourceEvent> = unfiltered_events
@@ -128,17 +122,14 @@ pub async fn list_events_for_resource(
         .collect();
 
     // Use a consistent fallback timestamp to ensure total order in comparison
-    let fallback_time = chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
-    
+    let fallback_time =
+        chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
+
     filtered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
             .map_or(fallback_time, |t| t.0)
-            .cmp(
-                &a.last_timestamp
-                    .clone()
-                    .map_or(fallback_time, |t| t.0),
-            )
+            .cmp(&a.last_timestamp.clone().map_or(fallback_time, |t| t.0))
     });
 
     let mut resource_events: Vec<ResourceEvent> = filtered_events

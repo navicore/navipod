@@ -3,24 +3,24 @@ use crate::impl_tui_table_state;
 use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::rs::list_replicas;
 use crate::tui::common::base_table_state::BaseTableState;
-use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
+use crate::tui::common::key_handler::{KeyHandlerResult, handle_common_keys};
 use crate::tui::data::Rs;
 use crate::tui::pod_app;
 // use crate::tui::rs_app::ui; // Unused while testing modern UI
+use crate::tui::rs_app::domain::ReplicaSetDomainService;
 use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{create_ingress_data_vec, create_namespace_data_vec, AppBehavior, Apps};
+use crate::tui::ui_loop::{AppBehavior, Apps, create_ingress_data_vec, create_namespace_data_vec};
 use crate::tui::yaml_editor::YamlEditor;
-use crate::tui::rs_app::domain::ReplicaSetDomainService;
 use crate::tui::{event_app, ingress_app, namespace_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
@@ -28,7 +28,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
-
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -97,7 +96,8 @@ impl AppBehavior for App {
                         // Store in cache
                         let fetch_result = FetchResult::ReplicaSets(new_items.clone());
                         let _ = cache.put(&request, fetch_result).await;
-                        ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE").await;
+                        ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE")
+                            .await;
                         if tx.send(Message::Rs(new_items)).await.is_err() {
                             cache.subscription_manager.unsubscribe(&sub_id).await;
                             return;
@@ -256,7 +256,8 @@ impl App {
                     // First try common keys (navigation, quit, color, vim motions)
                     return match handle_common_keys(self, key, |app| Apps::Rs { app }) {
                         KeyHandlerResult::Quit => Ok(None),
-                        KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                        KeyHandlerResult::HandledWithUpdate(app_holder)
+                        | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
                         KeyHandlerResult::NotHandled => {
                             // Handle RS-specific keys
                             self.handle_rs_specific_keys(key).await
@@ -265,15 +266,16 @@ impl App {
                 }
                 Ok(Some(Apps::Rs { app: self.clone() }))
             }
-            Message::Rs(data_vec) => {
-                Ok(Some(self.handle_data_update(data_vec)))
-            }
+            Message::Rs(data_vec) => Ok(Some(self.handle_data_update(data_vec))),
             _ => Ok(Some(Apps::Rs { app: self.clone() })),
         }
     }
 
     /// Handle RS-specific key events that aren't covered by common key handler
-    async fn handle_rs_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Result<Option<Apps>, io::Error> {
+    async fn handle_rs_specific_keys(
+        &mut self,
+        key: &crossterm::event::KeyEvent,
+    ) -> Result<Option<Apps>, io::Error> {
         use KeyCode::{Char, Enter};
 
         match key.code {
@@ -297,10 +299,10 @@ impl App {
         new_app.base.items = data_vec.to_vec();
         new_app.base.scroll_state =
             ScrollbarState::new(data_vec.len().saturating_sub(1) * ITEM_HEIGHT);
-        
+
         // Update network activity status for UI indicator
         new_app.update_activity_status();
-        
+
         Apps::Rs { app: new_app }
     }
 

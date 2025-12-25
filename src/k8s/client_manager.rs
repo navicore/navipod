@@ -1,9 +1,9 @@
+use super::{USER_AGENT, client::add_user_agent_header};
+use crate::error::Result as NvResult;
 use kube::{Client, Config};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error};
-use crate::error::Result as NvResult;
-use super::{client::add_user_agent_header, USER_AGENT};
 
 /// Singleton Kubernetes client manager that handles client lifecycle,
 /// credential caching, and token refresh automatically.
@@ -20,7 +20,7 @@ impl K8sClientManager {
             config: RwLock::const_new(None),
         }
     }
-    
+
     /// Get or create a Kubernetes client. This method handles:
     /// - Lazy initialization on first call
     /// - Caching of client instance to avoid repeated credential reads
@@ -42,12 +42,12 @@ impl K8sClientManager {
                 return Ok(client.clone());
             }
         }
-        
+
         // No client exists, need to create one
         debug!("🔧 Creating new Kubernetes client");
         self.create_client().await
     }
-    
+
     /// Force refresh the client (e.g., when auth errors occur)
     ///
     /// # Errors
@@ -55,7 +55,7 @@ impl K8sClientManager {
     /// Returns an error if client creation fails
     pub async fn refresh_client(&self) -> NvResult<Arc<Client>> {
         debug!("🔄 Force refreshing Kubernetes client due to auth error");
-        
+
         // Clear existing client and config
         {
             let mut client_guard = self.client.write().await;
@@ -65,11 +65,11 @@ impl K8sClientManager {
             let mut config_guard = self.config.write().await;
             *config_guard = None;
         }
-        
+
         // Create new client
         self.create_client().await
     }
-    
+
     /// Internal method to create a new client
     async fn create_client(&self) -> NvResult<Arc<Client>> {
         // Get or create config
@@ -80,7 +80,7 @@ impl K8sClientManager {
             } else {
                 // Need to create config
                 drop(config_guard); // Release read lock
-                
+
                 debug!("📄 Loading Kubernetes configuration from default sources");
                 let mut new_config = Config::infer().await.map_err(|e| {
                     error!("❌ Failed to infer Kubernetes configuration: {}", e);
@@ -99,25 +99,25 @@ impl K8sClientManager {
                 new_config
             }
         };
-        
+
         // Create client from config
         let client = Client::try_from(config).map_err(|e| {
             error!("❌ Failed to create Kubernetes client: {}", e);
             e
         })?;
-        
+
         let client_arc = Arc::new(client);
-        
+
         // Store the client
         {
             let mut client_guard = self.client.write().await;
             *client_guard = Some(client_arc.clone());
         }
-        
+
         debug!("✅ Successfully created new Kubernetes client");
         Ok(client_arc)
     }
-    
+
     /// Check if we have a cached client
     pub async fn has_client(&self) -> bool {
         let client_guard = self.client.read().await;
@@ -170,21 +170,21 @@ pub const fn should_refresh_client(error: &kube::Error) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_client_manager_singleton() {
         // Initialize crypto provider for rustls
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        
+
         // Test that client manager returns valid clients consistently
         // In test environments, we focus on functionality rather than strict pointer equality
         let result1 = get_client().await;
         let result2 = get_client().await;
-        
+
         // Both calls should succeed
         assert!(result1.is_ok(), "First client creation should succeed");
         assert!(result2.is_ok(), "Second client creation should succeed");
-        
+
         // In production, these should be the same instance
         // In test environments with parallel execution, we're flexible
         if let (Ok(client1), Ok(client2)) = (result1, result2) {
@@ -200,23 +200,23 @@ mod tests {
             }
         }
     }
-    
+
     #[tokio::test]
     async fn test_client_refresh() {
         // Initialize crypto provider for rustls
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-        
+
         // Test that refresh creates a new client
         if let (Ok(client1), Ok(client2)) = (get_client().await, refresh_client().await) {
             // Should be different Arc instances after refresh
             assert!(!Arc::ptr_eq(&client1, &client2));
         }
     }
-    
+
     #[test]
     fn test_should_refresh_client() {
         use kube::error::ErrorResponse;
-        
+
         // Test 401 error should trigger refresh
         let auth_error = kube::Error::Api(ErrorResponse {
             status: "Failure".to_string(),
@@ -225,7 +225,7 @@ mod tests {
             code: 401,
         });
         assert!(should_refresh_client(&auth_error));
-        
+
         // Test 403 error should trigger refresh
         let forbidden_error = kube::Error::Api(ErrorResponse {
             status: "Failure".to_string(),
@@ -234,7 +234,7 @@ mod tests {
             code: 403,
         });
         assert!(should_refresh_client(&forbidden_error));
-        
+
         // Test other errors should not trigger refresh
         let not_found_error = kube::Error::Api(ErrorResponse {
             status: "Failure".to_string(),

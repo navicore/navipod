@@ -1,3 +1,4 @@
+use crate::cache_manager;
 use crate::impl_tui_table_state;
 use crate::tui::common::base_table_state::BaseTableState;
 use crate::tui::common::stream_factory::StreamFactory;
@@ -7,14 +8,13 @@ use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
-use crate::cache_manager;
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tracing::{debug, error};
 
 #[derive(Clone, Debug)]
@@ -98,12 +98,17 @@ impl AppBehavior for namespace_app::app::App {
 
                                 // Don't switch if already on this namespace
                                 if selection.is_current {
-                                    debug!("Already on namespace '{}', returning to RS", selected_name);
+                                    debug!(
+                                        "Already on namespace '{}', returning to RS",
+                                        selected_name
+                                    );
                                 } else {
                                     debug!("Switching to namespace '{}'...", selected_name);
 
                                     // Switch namespace (stops watches, clears cache, starts new watches)
-                                    if let Err(e) = cache_manager::switch_namespace(selected_name.clone()).await {
+                                    if let Err(e) =
+                                        cache_manager::switch_namespace(selected_name.clone()).await
+                                    {
                                         error!("Failed to switch namespace: {}", e);
                                         // Stay on namespace picker on error
                                         app_holder = Some(Apps::Namespace { app: self.clone() });

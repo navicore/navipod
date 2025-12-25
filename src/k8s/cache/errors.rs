@@ -31,7 +31,9 @@ pub fn cache_not_initialized_error(message: &str) -> Error {
 pub fn lock_poisoned_error(message: &str) -> Error {
     Error::Kube(kube::Error::Api(ErrorResponse {
         status: "InternalError".to_string(),
-        message: format!("{message} - this indicates a prior panic, application may be in an inconsistent state"),
+        message: format!(
+            "{message} - this indicates a prior panic, application may be in an inconsistent state"
+        ),
         reason: "LockPoisoned".to_string(),
         code: 500,
     }))

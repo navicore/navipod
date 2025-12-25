@@ -6,7 +6,7 @@ use crate::tui::ingress_app;
 use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{create_cert_data_vec, AppBehavior, Apps};
+use crate::tui::ui_loop::{AppBehavior, Apps, create_cert_data_vec};
 use crate::tui::yaml_editor::YamlEditor;
 use crate::{cache_manager, tui::cert_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
@@ -14,8 +14,8 @@ use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tracing::debug;
 
 #[derive(Clone, Debug)]

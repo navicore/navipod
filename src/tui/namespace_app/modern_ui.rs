@@ -2,26 +2,23 @@ use crate::tui::namespace_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use ratatui::prelude::*;
-use ratatui::widgets::{
-    Block, Borders, Clear, Paragraph, Scrollbar,
-    ScrollbarOrientation, Wrap
-};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap};
 
 /// Modern card-based UI for Namespace picker
 pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
 
     // Set the main background to ensure consistent theming
-    let main_bg = Block::default()
-        .style(Style::default().bg(theme.bg_primary));
+    let main_bg = Block::default().style(Style::default().bg(theme.bg_primary));
     f.render_widget(main_bg, f.area());
 
     // Main layout: header, content, footer
     let main_chunks = Layout::vertical([
-        Constraint::Length(UiConstants::HEADER_HEIGHT),  // Header
-        Constraint::Min(0),     // Content (flexible)
-        Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
-    ]).split(f.area());
+        Constraint::Length(UiConstants::HEADER_HEIGHT), // Header
+        Constraint::Min(0),                             // Content (flexible)
+        Constraint::Length(UiConstants::FOOTER_HEIGHT), // Footer
+    ])
+    .split(f.area());
 
     render_header(f, app, main_chunks[0], &theme);
     render_content(f, app, main_chunks[1], &theme);
@@ -35,10 +32,11 @@ pub fn ui(f: &mut Frame, app: &App) {
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let header_chunks = Layout::horizontal([
-        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
-        Constraint::Min(0),      // Context info (flexible)
-        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH),  // Actions
-    ]).split(area);
+        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH), // Icon + Title
+        Constraint::Min(0),                                 // Context info (flexible)
+        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH), // Actions
+    ])
+    .split(area);
 
     // Title with icon
     let title_text = format!("{} Select Namespace", Symbols::NAMESPACE);
@@ -54,7 +52,8 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let current = namespaces.iter().find(|ns| ns.is_current);
     let current_name = current.map_or("none", |ns| ns.name.as_str());
 
-    let context_text = format!("{total_count} namespaces ({filtered_count} shown) • current: {current_name}");
+    let context_text =
+        format!("{total_count} namespaces ({filtered_count} shown) • current: {current_name}");
 
     let context = Paragraph::new(context_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
@@ -86,7 +85,10 @@ fn render_namespace_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
     let items = app.get_filtered_items();
     let selected_index = app.base.state.selected().unwrap_or(0);
 
-    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
+    let content_area = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
 
     let filter = app.get_filter();
     let title = if filter.is_empty() {
@@ -106,11 +108,12 @@ fn render_namespace_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
 
     // Calculate scroll offset to keep selected item visible
     let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
-    let scroll_offset = if UiHelpers::safe_cast_u16(selected_index, "namespace scroll offset") >= visible_cards {
-        UiHelpers::safe_cast_u16(selected_index, "namespace scroll offset") - visible_cards + 1
-    } else {
-        0
-    };
+    let scroll_offset =
+        if UiHelpers::safe_cast_u16(selected_index, "namespace scroll offset") >= visible_cards {
+            UiHelpers::safe_cast_u16(selected_index, "namespace scroll offset") - visible_cards + 1
+        } else {
+            0
+        };
 
     // Render individual namespace cards with scroll offset
     let mut y_offset = 0;
@@ -135,13 +138,23 @@ fn render_namespace_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
     render_list_scrollbar(f, app, area, theme);
 }
 
-fn render_namespace_card(f: &mut Frame, namespace: &crate::tui::data::Namespace, area: Rect, is_selected: bool, theme: &NaviTheme) {
+fn render_namespace_card(
+    f: &mut Frame,
+    namespace: &crate::tui::data::Namespace,
+    area: Rect,
+    is_selected: bool,
+    theme: &NaviTheme,
+) {
     // Determine namespace status
     let ns_status = determine_namespace_status(namespace);
     let (status_symbol, status_style) = UiHelpers::status_indicator(ns_status, theme);
 
     // Card background - ensure proper contrast
-    let card_bg = if is_selected { theme.bg_accent } else { theme.bg_tertiary };
+    let card_bg = if is_selected {
+        theme.bg_accent
+    } else {
+        theme.bg_tertiary
+    };
     let selection_indicator = if is_selected { "▶ " } else { "  " };
 
     // Current namespace indicator
@@ -157,11 +170,16 @@ fn render_namespace_card(f: &mut Frame, namespace: &crate::tui::data::Namespace,
             Span::raw(selection_indicator),
             Span::styled(status_symbol, status_style),
             Span::raw(" "),
-            Span::styled(&namespace.name, if namespace.is_current {
-                theme.text_style(TextType::Title).add_modifier(Modifier::BOLD)
-            } else {
-                theme.text_style(TextType::Title)
-            }),
+            Span::styled(
+                &namespace.name,
+                if namespace.is_current {
+                    theme
+                        .text_style(TextType::Title)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    theme.text_style(TextType::Title)
+                },
+            ),
             current_indicator,
         ]),
         Line::from(vec![
@@ -174,20 +192,20 @@ fn render_namespace_card(f: &mut Frame, namespace: &crate::tui::data::Namespace,
             // Add spacing line for card separation
             Span::raw(""),
         ]),
-        Line::from(vec![
-            Span::raw(""),
-        ]),
+        Line::from(vec![Span::raw("")]),
     ];
 
-    let card = Paragraph::new(content)
-        .style(Style::default().bg(card_bg));
+    let card = Paragraph::new(content).style(Style::default().bg(card_bg));
 
     f.render_widget(card, area);
 }
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
+    let content_area = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
     let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
 
     // Show scrollbar if we have more items than can fit
@@ -195,8 +213,10 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
         let selected_index = app.base.state.selected().unwrap_or(0);
 
         // Calculate scrollbar position based on selection
-        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(items.len().saturating_sub(visible_cards as usize))
-            .position(selected_index.saturating_sub(visible_cards as usize / 2));
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(
+            items.len().saturating_sub(visible_cards as usize),
+        )
+        .position(selected_index.saturating_sub(visible_cards as usize / 2));
 
         f.render_stateful_widget(
             Scrollbar::default()
@@ -206,7 +226,10 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
                 .end_symbol(Some("↓"))
                 .track_symbol(Some("│"))
                 .thumb_symbol("█"),
-            area.inner(Margin { vertical: 1, horizontal: 0 }),
+            area.inner(Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
             &mut scrollbar_state,
         );
     }
@@ -221,7 +244,7 @@ fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
             Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(theme.divider).bg(theme.bg_primary))
-                .style(Style::default().bg(theme.bg_primary))
+                .style(Style::default().bg(theme.bg_primary)),
         );
 
     f.render_widget(footer, area);
@@ -252,8 +275,13 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
                 .title(format!("{} Filter Namespaces", Symbols::CHEVRON_RIGHT))
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
-                .style(Style::default().bg(theme.bg_secondary))
+                .border_style(
+                    Style::default()
+                        .fg(theme.border_focus)
+                        .bg(theme.bg_secondary)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .style(Style::default().bg(theme.bg_secondary)),
         )
         .wrap(Wrap { trim: true });
 
@@ -261,7 +289,9 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 
     // Set cursor position
     let cursor_pos = Position {
-        x: modal_area.x + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "namespace cursor position") + 1,
+        x: modal_area.x
+            + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "namespace cursor position")
+            + 1,
         y: modal_area.y + 1,
     };
     f.set_cursor_position(cursor_pos);
@@ -299,11 +329,13 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage((100 - percent_y) / 2),
         Constraint::Percentage(percent_y),
         Constraint::Percentage((100 - percent_y) / 2),
-    ]).split(r);
+    ])
+    .split(r);
 
     Layout::horizontal([
         Constraint::Percentage((100 - percent_x) / 2),
         Constraint::Percentage(percent_x),
         Constraint::Percentage((100 - percent_x) / 2),
-    ]).split(popup_layout[1])[1]
+    ])
+    .split(popup_layout[1])[1]
 }

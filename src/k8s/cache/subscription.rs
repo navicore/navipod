@@ -2,7 +2,7 @@ use super::fetcher::FetchResult;
 use crate::tui::data::{Container, Ingress, ResourceEvent, Rs, RsPod};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]

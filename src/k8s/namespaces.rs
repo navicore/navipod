@@ -3,8 +3,8 @@ use crate::error::Result;
 use crate::k8s::events::format_duration;
 use crate::tui::data::Namespace;
 use k8s_openapi::api::core::v1::Namespace as K8sNamespace;
-use kube::api::ListParams;
 use kube::Api;
+use kube::api::ListParams;
 use tracing::{debug, error};
 
 use chrono::{DateTime, Utc};
@@ -37,7 +37,10 @@ pub async fn list_namespaces() -> Result<Vec<Namespace>> {
 
     // Get current namespace to mark it in the list
     let current_namespace = get_current_namespace_or_default();
-    debug!("list_namespaces: current namespace is '{}'", current_namespace);
+    debug!(
+        "list_namespaces: current namespace is '{}'",
+        current_namespace
+    );
 
     // Namespaces are cluster-scoped, so we use Api::all
     let ns_list = {
@@ -64,7 +67,11 @@ pub async fn list_namespaces() -> Result<Vec<Namespace>> {
     let mut namespaces = Vec::new();
 
     for ns in ns_list.items {
-        let name = ns.metadata.name.clone().unwrap_or_else(|| "unknown".to_string());
+        let name = ns
+            .metadata
+            .name
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
         let age = calculate_namespace_age(&ns);
         let status = ns
             .status
@@ -83,12 +90,10 @@ pub async fn list_namespaces() -> Result<Vec<Namespace>> {
     }
 
     // Sort alphabetically, but put current namespace first
-    namespaces.sort_by(|a, b| {
-        match (a.is_current, b.is_current) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    namespaces.sort_by(|a, b| match (a.is_current, b.is_current) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
     Ok(namespaces)

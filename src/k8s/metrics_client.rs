@@ -4,7 +4,10 @@
 //! Kubernetes Metrics Server API (metrics.k8s.io) using direct API calls.
 
 use crate::error::Result;
-use kube::{Client, api::{Api, ApiResource, DynamicObject, ListParams}};
+use kube::{
+    Client,
+    api::{Api, ApiResource, DynamicObject, ListParams},
+};
 use std::collections::HashMap;
 use tracing::{debug, warn};
 
@@ -28,9 +31,9 @@ pub struct PodMetric {
 #[derive(Debug, Clone)]
 pub struct NodeMetric {
     pub node_name: String,
-    pub cpu_usage: Option<f64>,    // millicores
-    pub memory_usage: Option<u64>, // bytes
-    pub cpu_capacity: Option<f64>, // millicores (from node status, not metrics API)
+    pub cpu_usage: Option<f64>,       // millicores
+    pub memory_usage: Option<u64>,    // bytes
+    pub cpu_capacity: Option<f64>,    // millicores (from node status, not metrics API)
     pub memory_capacity: Option<u64>, // bytes (from node status, not metrics API)
 }
 
@@ -45,10 +48,7 @@ pub struct NodeMetric {
 ///
 /// # Errors
 /// Returns error only if there's a client/connection issue, not if metrics server is missing
-pub async fn fetch_pod_metrics(
-    client: Client,
-    namespace: Option<&str>,
-) -> Result<Vec<PodMetric>> {
+pub async fn fetch_pod_metrics(client: Client, namespace: Option<&str>) -> Result<Vec<PodMetric>> {
     debug!("Fetching pod metrics from metrics server");
 
     // Define the PodMetrics API resource
@@ -60,12 +60,15 @@ pub async fn fetch_pod_metrics(
 
     let api: Api<DynamicObject> = namespace.map_or_else(
         || Api::all_with(client.clone(), &ar),
-        |ns| Api::namespaced_with(client.clone(), ns, &ar)
+        |ns| Api::namespaced_with(client.clone(), ns, &ar),
     );
 
     match api.list(&ListParams::default()).await {
         Ok(metrics_list) => {
-            debug!("Successfully fetched {} pod metrics", metrics_list.items.len());
+            debug!(
+                "Successfully fetched {} pod metrics",
+                metrics_list.items.len()
+            );
 
             let pod_metrics: Vec<PodMetric> = metrics_list
                 .items
@@ -174,7 +177,7 @@ pub async fn fetch_node_metrics(client: Client) -> Result<Vec<NodeMetric>> {
                         node_name,
                         cpu_usage,
                         memory_usage,
-                        cpu_capacity: None,    // Will be filled from Node API separately
+                        cpu_capacity: None, // Will be filled from Node API separately
                         memory_capacity: None, // Will be filled from Node API separately
                     })
                 })

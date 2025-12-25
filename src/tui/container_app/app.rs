@@ -5,7 +5,7 @@
 use crate::impl_tui_table_state;
 use crate::k8s::probes::{ProbeExecutor, ProbeResult};
 use crate::tui::common::base_table_state::BaseTableState;
-use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
+use crate::tui::common::key_handler::{KeyHandlerResult, handle_common_keys};
 use crate::tui::common::stream_factory::StreamFactory;
 use crate::tui::container_app;
 use crate::tui::data::Container;
@@ -14,15 +14,15 @@ use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::ui_loop::{AppBehavior, Apps};
-use tracing::debug;
-use std::collections::HashMap;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
+use std::collections::HashMap;
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use tracing::debug;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FocusedPanel {
@@ -62,18 +62,19 @@ impl AppBehavior for container_app::app::App {
                 if key.kind == KeyEventKind::Press {
                     // Handle Container-specific keys FIRST to intercept navigation when panels are focused
                     let container_result = self.handle_container_specific_keys(key);
-                    
+
                     // If container-specific handler didn't handle it, try common keys
-                    if matches!(container_result, Apps::Container { .. }) && !self.key_was_handled_by_container {
+                    if matches!(container_result, Apps::Container { .. })
+                        && !self.key_was_handled_by_container
+                    {
                         return match handle_common_keys(self, key, |app| Apps::Container { app }) {
                             KeyHandlerResult::Quit => Ok(None),
-                            KeyHandlerResult::HandledWithUpdate(app_holder) | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
-                            KeyHandlerResult::NotHandled => {
-                                Ok(Some(container_result))
-                            }
+                            KeyHandlerResult::HandledWithUpdate(app_holder)
+                            | KeyHandlerResult::Handled(app_holder) => Ok(app_holder),
+                            KeyHandlerResult::NotHandled => Ok(Some(container_result)),
                         };
                     }
-                    
+
                     return Ok(Some(container_result));
                 }
                 Ok(Some(Apps::Container { app: self.clone() }))
@@ -86,7 +87,7 @@ impl AppBehavior for container_app::app::App {
                 let new_app_holder = Apps::Container { app: new_app };
                 Ok(Some(new_app_holder))
             }
-            _ => Ok(Some(Apps::Container { app: self.clone() }))
+            _ => Ok(Some(Apps::Container { app: self.clone() })),
         }
     }
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
@@ -117,11 +118,11 @@ impl App {
     /// Handle Container-specific key events that aren't covered by common key handler
     #[allow(clippy::too_many_lines)] // UI event handling is necessarily complex
     fn handle_container_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Apps {
-        use KeyCode::{Enter, Esc, Tab, BackTab, Up, Down};
-        
+        use KeyCode::{BackTab, Down, Enter, Esc, Tab, Up};
+
         // Reset the tracking flag
         self.key_was_handled_by_container = false;
-        
+
         // Handle popup first if it's showing
         if self.show_probe_popup {
             self.key_was_handled_by_container = true;
@@ -165,14 +166,19 @@ impl App {
                         self.probe_popup_scroll = content_lines.saturating_sub(1);
                     }
                 }
-                KeyCode::PageDown | KeyCode::Char('f') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
+                KeyCode::PageDown | KeyCode::Char('f')
+                    if key.modifiers == crossterm::event::KeyModifiers::CONTROL =>
+                {
                     // Page down
                     if let Some(ref result) = self.current_probe_result {
                         let content_lines = self.count_probe_popup_lines(result);
-                        self.probe_popup_scroll = (self.probe_popup_scroll + 10).min(content_lines.saturating_sub(1));
+                        self.probe_popup_scroll =
+                            (self.probe_popup_scroll + 10).min(content_lines.saturating_sub(1));
                     }
                 }
-                KeyCode::PageUp | KeyCode::Char('b') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
+                KeyCode::PageUp | KeyCode::Char('b')
+                    if key.modifiers == crossterm::event::KeyModifiers::CONTROL =>
+                {
                     // Page up
                     self.probe_popup_scroll = self.probe_popup_scroll.saturating_sub(10);
                 }
@@ -180,7 +186,7 @@ impl App {
             }
             return Apps::Container { app: self.clone() };
         }
-        
+
         match key.code {
             Esc => {
                 self.key_was_handled_by_container = true;
@@ -191,8 +197,8 @@ impl App {
                     let data_vec = vec![];
                     return Apps::Pod {
                         app: crate::tui::pod_app::app::App::new(
-                            std::collections::BTreeMap::new(), 
-                            data_vec
+                            std::collections::BTreeMap::new(),
+                            data_vec,
                         ),
                     };
                 }
@@ -275,7 +281,7 @@ impl App {
             }
             _ => {} // Let other keys be handled by common handler
         }
-        
+
         Apps::Container { app: self.clone() }
     }
 
@@ -302,11 +308,11 @@ impl App {
                 .collect()
         })
     }
-    
+
     /// Handle navigation within detail panels
     fn handle_detail_navigation(&mut self, key_code: KeyCode) {
-        use KeyCode::{Up, Down};
-        
+        use KeyCode::{Down, Up};
+
         let max_items = match self.focused_panel {
             FocusedPanel::ContainerList => return, // Handled elsewhere
             FocusedPanel::Mounts => self.get_left_details().len(),
@@ -319,12 +325,12 @@ impl App {
                 }
             }
         };
-        
+
         if max_items == 0 {
             debug!("No items in panel {:?} for navigation", self.focused_panel);
             return;
         }
-        
+
         let old_selection = self.detail_selection;
         match key_code {
             Down => {
@@ -339,11 +345,11 @@ impl App {
             }
             _ => {}
         }
-        
+
         // Update scroll offset to keep selected item visible
         // Match the .take(10) limit used in the UI rendering
         const VISIBLE_ITEMS: usize = 10;
-        
+
         if max_items > VISIBLE_ITEMS {
             if self.detail_selection >= self.detail_scroll_offset + VISIBLE_ITEMS {
                 // Scrolling down - selected item is below visible area
@@ -355,15 +361,25 @@ impl App {
         } else {
             self.detail_scroll_offset = 0;
         }
-        
-        debug!("Detail navigation in {:?}: {} -> {} (max: {}, scroll: {}, visible: {})", 
-            self.focused_panel, old_selection, self.detail_selection, max_items, self.detail_scroll_offset, VISIBLE_ITEMS);
-            
+
+        debug!(
+            "Detail navigation in {:?}: {} -> {} (max: {}, scroll: {}, visible: {})",
+            self.focused_panel,
+            old_selection,
+            self.detail_selection,
+            max_items,
+            self.detail_scroll_offset,
+            VISIBLE_ITEMS
+        );
+
         if old_selection != self.detail_selection {
-            debug!("Selection changed from {} to {}", old_selection, self.detail_selection);
+            debug!(
+                "Selection changed from {} to {}",
+                old_selection, self.detail_selection
+            );
         }
     }
-    
+
     /// Execute the selected probe and show popup with results
     fn execute_selected_probe_sync(&mut self) {
         let (container, probe_index) = if let Some(container) = self.get_selected_item() {
@@ -371,11 +387,14 @@ impl App {
         } else {
             return;
         };
-        
+
         if probe_index < container.probes.len() {
             let probe = &container.probes[probe_index];
-            debug!("Executing probe: {} {}", probe.probe_type, probe.handler_type);
-            
+            debug!(
+                "Executing probe: {} {}",
+                probe.probe_type, probe.handler_type
+            );
+
             // Show a "loading" popup immediately
             self.current_probe_result = Some(ProbeResult {
                 probe_type: probe.probe_type.clone(),
@@ -389,47 +408,46 @@ impl App {
             });
             self.show_probe_popup = true;
             self.probe_popup_scroll = 0; // Reset scroll position
-            
+
             // Execute the probe asynchronously but block for the result
             // This will freeze the UI briefly but provides real probe execution
             let pod_name = container.pod_name.clone();
             let namespace = "default".to_string(); // Use default namespace since that's what the current code assumes
             let probe_clone = probe.clone();
-            
+
             let result = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
                     let executor = ProbeExecutor::new(pod_name, namespace);
                     executor.execute_probe(&probe_clone).await
                 })
             });
-            
+
             // Show the result
             self.current_probe_result = Some(result);
         }
     }
-    
-    
+
     /// Count the number of lines in the probe popup content
     #[allow(clippy::unused_self)] // May use self in future
     fn count_probe_popup_lines(&self, result: &ProbeResult) -> usize {
         let mut lines = 7; // Header, empty line, execution time, timestamp, and possible status code
-        
+
         if result.status_code.is_some() {
             lines += 1;
         }
-        
+
         if result.error_message.is_some() {
             lines += 2; // Empty line + error line
         }
-        
+
         if !result.response_body.is_empty() {
             lines += 2; // Empty line + "Response:" header
             lines += result.response_body.lines().count().min(100); // Limit to 100 lines
         }
-        
+
         lines
     }
-    
+
     /// Get probe results for the selected container
     #[allow(clippy::items_after_statements)] // Const is local to this function
     pub fn get_probe_results(&mut self) -> Vec<(String, String, Option<String>)> {
@@ -438,24 +456,27 @@ impl App {
         } else {
             return vec![];
         };
-        
+
         if let Some(results) = self.probe_results.get(&container_name) {
             return results
                 .iter()
                 .map(|result| {
                     let status_text = match result.status {
                         crate::k8s::probes::ProbeStatus::Success => "✓ SUCCESS",
-                        crate::k8s::probes::ProbeStatus::Failure => "✗ FAILURE", 
+                        crate::k8s::probes::ProbeStatus::Failure => "✗ FAILURE",
                         crate::k8s::probes::ProbeStatus::Timeout => "⏰ TIMEOUT",
                         crate::k8s::probes::ProbeStatus::Error => "❌ ERROR",
                     };
-                    
+
                     let details = if let Some(status_code) = result.status_code {
-                        format!("{} ({}ms) - HTTP {}", status_text, result.response_time_ms, status_code)
+                        format!(
+                            "{} ({}ms) - HTTP {}",
+                            status_text, result.response_time_ms, status_code
+                        )
                     } else {
                         format!("{} ({}ms)", status_text, result.response_time_ms)
                     };
-                    
+
                     (
                         format!("{} {}", result.probe_type, result.handler_type),
                         details,

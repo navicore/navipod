@@ -1,7 +1,7 @@
 use crate::impl_tui_table_state;
 use crate::tui::cert_app;
 use crate::tui::common::base_table_state::BaseTableState;
-use crate::tui::common::key_handler::{handle_common_keys, KeyHandlerResult};
+use crate::tui::common::key_handler::{KeyHandlerResult, handle_common_keys};
 use crate::tui::common::stream_factory::StreamFactory;
 use crate::tui::data::Cert;
 use crate::tui::stream::Message;
@@ -13,8 +13,8 @@ use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 #[derive(Clone, Debug)]
 pub struct App {

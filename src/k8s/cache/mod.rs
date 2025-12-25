@@ -14,4 +14,6 @@ pub use fetcher::{
     DataFetcher, DataRequest, FetchParams, FetchPriority, FetchResult, PodSelector, ResourceRef,
 };
 pub use subscription::{DataUpdate, Subscription, SubscriptionManager};
-pub use watch_manager::{WatchManager, WatchManagerHandle, WatchStats, WatchConnectionStatus, InvalidationEvent};
+pub use watch_manager::{
+    InvalidationEvent, WatchConnectionStatus, WatchManager, WatchManagerHandle, WatchStats,
+};

@@ -3,34 +3,31 @@ use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use crate::tui::yaml_editor;
 use ratatui::prelude::*;
-use ratatui::widgets::{
-    Block, Borders, Clear, Paragraph, Scrollbar, 
-    ScrollbarOrientation, Wrap
-};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap};
 
 /// Modern card-based UI for Ingress view with network routing focus
 pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
-    
+
     // Set the main background to ensure consistent theming
-    let main_bg = Block::default()
-        .style(Style::default().bg(theme.bg_primary));
+    let main_bg = Block::default().style(Style::default().bg(theme.bg_primary));
     f.render_widget(main_bg, f.area());
-    
+
     // Main layout: header, content, footer
     let main_chunks = Layout::vertical([
-        Constraint::Length(UiConstants::HEADER_HEIGHT),  // Header
-        Constraint::Min(0),     // Content (flexible)
-        Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
-    ]).split(f.area());
-    
+        Constraint::Length(UiConstants::HEADER_HEIGHT), // Header
+        Constraint::Min(0),                             // Content (flexible)
+        Constraint::Length(UiConstants::FOOTER_HEIGHT), // Footer
+    ])
+    .split(f.area());
+
     render_header(f, app, main_chunks[0], &theme);
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
-    
+
     // Render YAML editor overlay if active
     yaml_editor::render_yaml_editor(f, &app.base.yaml_editor);
-    
+
     // Handle overlays
     if app.get_show_filter_edit() {
         render_filter_modal(f, app, &theme);
@@ -39,38 +36,42 @@ pub fn ui(f: &mut Frame, app: &App) {
 
 fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let header_chunks = Layout::horizontal([
-        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
-        Constraint::Min(0),      // Context info (flexible)
-        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH),  // Actions
-    ]).split(area);
-    
+        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH), // Icon + Title
+        Constraint::Min(0),                                 // Context info (flexible)
+        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH), // Actions
+    ])
+    .split(area);
+
     // Title with icon
     let title_text = format!("{} Ingress Routes", Symbols::INGRESS);
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(title, header_chunks[0]);
-    
+
     // Context info (route counts and backend analysis)
     let routes = app.get_items();
     let total_count = routes.len();
-    let unique_hosts = routes.iter()
+    let unique_hosts = routes
+        .iter()
         .map(super::super::data::Ingress::host)
         .collect::<std::collections::HashSet<_>>()
         .len();
-    let unique_backends = routes.iter()
+    let unique_backends = routes
+        .iter()
         .map(super::super::data::Ingress::backend_svc)
         .collect::<std::collections::HashSet<_>>()
         .len();
-    
-    let context_text = format!("{total_count} routes • {unique_hosts} hosts • {unique_backends} backends");
-    
+
+    let context_text =
+        format!("{total_count} routes • {unique_hosts} hosts • {unique_backends} backends");
+
     let context = Paragraph::new(context_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(context, header_chunks[1]);
-    
+
     // Actions/shortcuts
     let actions_text = "f: filter • y: yaml • Enter: certificates • c: colors • q: quit";
     let actions = Paragraph::new(actions_text)
@@ -78,7 +79,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
         .alignment(Alignment::Right)
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(actions, header_chunks[2]);
-    
+
     // Divider line
     let divider = Block::default()
         .borders(Borders::BOTTOM)
@@ -94,16 +95,19 @@ fn render_content(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
 fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
     let selected_index = app.base.state.selected().unwrap_or(0);
-    
-    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
-    
+
+    let content_area = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
+
     let filter = app.get_filter();
     let title = if filter.is_empty() {
         "Network Routes".to_string()
     } else {
         format!("Network Routes (filtered: {filter})")
     };
-    
+
     // Render container block
     let block = Block::default()
         .title(title)
@@ -112,22 +116,23 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
         .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
         .style(Style::default().bg(theme.bg_secondary));
     f.render_widget(block, area);
-    
+
     // Calculate scroll offset to keep selected item visible
     let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
-    let scroll_offset = if UiHelpers::safe_cast_u16(selected_index, "ingress scroll offset") >= visible_cards {
-        UiHelpers::safe_cast_u16(selected_index, "ingress scroll offset") - visible_cards + 1
-    } else {
-        0
-    };
-    
+    let scroll_offset =
+        if UiHelpers::safe_cast_u16(selected_index, "ingress scroll offset") >= visible_cards {
+            UiHelpers::safe_cast_u16(selected_index, "ingress scroll offset") - visible_cards + 1
+        } else {
+            0
+        };
+
     // Render individual ingress cards with scroll offset
     let mut y_offset = 0;
     for (index, ingress) in items.iter().enumerate().skip(scroll_offset as usize) {
         if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
-        
+
         let is_selected = index == selected_index;
         let card_area = Rect {
             x: content_area.x,
@@ -135,45 +140,55 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
             width: content_area.width,
             height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
-        
+
         render_ingress_card(f, ingress, card_area, is_selected, theme);
         y_offset += UiConstants::CARD_HEIGHT;
     }
-    
+
     // Render scrollbar
     render_list_scrollbar(f, app, area, theme);
 }
 
-fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area: Rect, is_selected: bool, theme: &NaviTheme) {
+fn render_ingress_card(
+    f: &mut Frame,
+    ingress: &crate::tui::data::Ingress,
+    area: Rect,
+    is_selected: bool,
+    theme: &NaviTheme,
+) {
     // Determine route status based on path and backend configuration
     let route_status = determine_route_status(ingress);
     let (status_symbol, status_style) = UiHelpers::status_indicator(route_status, theme);
-    
+
     // Analyze route configuration
-    let is_secure = ingress.host().starts_with("https://") || 
-                   ingress.host().contains(".tls") ||
-                   ingress.port() == "443";
+    let is_secure = ingress.host().starts_with("https://")
+        || ingress.host().contains(".tls")
+        || ingress.port() == "443";
     let protocol_indicator = if is_secure { "🔒 HTTPS" } else { "🌐 HTTP" };
-    let protocol_style = if is_secure { 
-        theme.text_style(TextType::Success) 
-    } else { 
-        theme.text_style(TextType::Warning) 
+    let protocol_style = if is_secure {
+        theme.text_style(TextType::Success)
+    } else {
+        theme.text_style(TextType::Warning)
     };
-    
+
     // Card background - ensure proper contrast
-    let card_bg = if is_selected { theme.bg_accent } else { theme.bg_tertiary };
+    let card_bg = if is_selected {
+        theme.bg_accent
+    } else {
+        theme.bg_tertiary
+    };
     let selection_indicator = if is_selected { "▶ " } else { "  " };
-    
+
     // Create routing flow visualization
     let host = truncate_text(ingress.host(), 20);
     let backend = truncate_text(ingress.backend_svc(), 15);
-    let port_suffix = if ingress.port().is_empty() { 
-        String::new() 
-    } else { 
-        format!(":{}", ingress.port()) 
+    let port_suffix = if ingress.port().is_empty() {
+        String::new()
+    } else {
+        format!(":{}", ingress.port())
     };
     let routing_flow = format!("{host} {} {backend} {port_suffix}", Symbols::ARROW_RIGHT);
-    
+
     // Create card content as multi-line text
     let content = vec![
         Line::from(vec![
@@ -190,7 +205,10 @@ fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area:
         ]),
         Line::from(vec![
             Span::raw("    Path: "),
-            Span::styled(format!("{} ", ingress.path()), theme.text_style(TextType::Caption)),
+            Span::styled(
+                format!("{} ", ingress.path()),
+                theme.text_style(TextType::Caption),
+            ),
             Span::raw(" Backend: "),
             Span::styled(ingress.backend_svc(), theme.text_style(TextType::Body)),
         ]),
@@ -199,26 +217,30 @@ fn render_ingress_card(f: &mut Frame, ingress: &crate::tui::data::Ingress, area:
             Span::raw(""),
         ]),
     ];
-    
-    let card = Paragraph::new(content)
-        .style(Style::default().bg(card_bg));
-    
+
+    let card = Paragraph::new(content).style(Style::default().bg(card_bg));
+
     f.render_widget(card, area);
 }
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
+    let content_area = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
     let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
-    
+
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {
         let selected_index = app.base.state.selected().unwrap_or(0);
-        
+
         // Calculate scrollbar position based on selection
-        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(items.len().saturating_sub(visible_cards as usize))
-            .position(selected_index.saturating_sub(visible_cards as usize / 2));
-        
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(
+            items.len().saturating_sub(visible_cards as usize),
+        )
+        .position(selected_index.saturating_sub(visible_cards as usize / 2));
+
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
@@ -227,7 +249,10 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
                 .end_symbol(Some("↓"))
                 .track_symbol(Some("│"))
                 .thumb_symbol("█"),
-            area.inner(Margin { vertical: 1, horizontal: 0 }),
+            area.inner(Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
             &mut scrollbar_state,
         );
     }
@@ -242,26 +267,26 @@ fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
             Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(theme.divider).bg(theme.bg_primary))
-                .style(Style::default().bg(theme.bg_primary))
+                .style(Style::default().bg(theme.bg_primary)),
         );
-    
+
     f.render_widget(footer, area);
 }
 
 fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
     let area = f.area();
     let modal_area = centered_rect(60, 20, area);
-    
+
     // Clear background
     f.render_widget(Clear, modal_area);
-    
+
     // Modal content
     let filter_text = if app.get_filter().is_empty() {
         "Enter filter pattern...".to_string()
     } else {
         app.get_filter()
     };
-    
+
     let filter_input = Paragraph::new(filter_text)
         .style(if app.get_filter().is_empty() {
             theme.text_style(TextType::Caption).bg(theme.bg_secondary)
@@ -273,20 +298,27 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
                 .title(format!("{} Filter Ingress Routes", Symbols::CHEVRON_RIGHT))
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
-                .style(Style::default().bg(theme.bg_secondary))
+                .border_style(
+                    Style::default()
+                        .fg(theme.border_focus)
+                        .bg(theme.bg_secondary)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .style(Style::default().bg(theme.bg_secondary)),
         )
         .wrap(Wrap { trim: true });
-    
+
     f.render_widget(filter_input, modal_area);
-    
+
     // Set cursor position
     let cursor_pos = Position {
-        x: modal_area.x + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "ingress cursor position") + 1,
+        x: modal_area.x
+            + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "ingress cursor position")
+            + 1,
         y: modal_area.y + 1,
     };
     f.set_cursor_position(cursor_pos);
-    
+
     // Help text
     let help_area = Rect {
         x: modal_area.x,
@@ -294,13 +326,13 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
         width: modal_area.width,
         height: 1,
     };
-    
+
     let help_text = "ESC: Cancel • Enter: Apply • Examples: 'api-*', '.*prod.*', 'web.*service'";
     let help = Paragraph::new(help_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
         .block(Block::default().style(Style::default().bg(theme.bg_primary)));
-    
+
     f.render_widget(help, help_area);
 }
 
@@ -313,7 +345,7 @@ fn determine_route_status(ingress: &crate::tui::data::Ingress) -> ResourceStatus
     let has_backend = !ingress.backend_svc().is_empty() && ingress.backend_svc() != "-";
     let has_path = !ingress.path().is_empty() && ingress.path() != "-";
     let has_port = !ingress.port().is_empty() && ingress.port() != "-";
-    
+
     // Check for common issues
     if !has_host || !has_backend {
         ResourceStatus::Failed // Missing critical routing info
@@ -342,11 +374,13 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage((100 - percent_y) / 2),
         Constraint::Percentage(percent_y),
         Constraint::Percentage((100 - percent_y) / 2),
-    ]).split(r);
+    ])
+    .split(r);
 
     Layout::horizontal([
         Constraint::Percentage((100 - percent_x) / 2),
         Constraint::Percentage(percent_x),
         Constraint::Percentage((100 - percent_x) / 2),
-    ]).split(popup_layout[1])[1]
+    ])
+    .split(popup_layout[1])[1]
 }

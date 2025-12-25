@@ -6,9 +6,9 @@ It initializes the cache and background fetcher at startup.
 */
 use crate::error::Result;
 use crate::k8s::cache::{
+    BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager, WatchManagerHandle,
     config::{DEFAULT_CACHE_SIZE_MB, DEFAULT_CONCURRENT_FETCHERS},
     errors::already_initialized_error,
-    BackgroundFetcher, DataRequest, FetchResult, K8sDataCache, WatchManager, WatchManagerHandle,
 };
 use crate::k8s::metrics_history::MetricsHistoryStore;
 use std::sync::{Arc, OnceLock, RwLock};
@@ -37,9 +37,11 @@ static METRICS_HISTORY: OnceLock<Arc<RwLock<MetricsHistoryStore>>> = OnceLock::n
 /// Metrics history cleanup task shutdown channel
 static METRICS_CLEANUP_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 /// Global counter for active network operations (blocking IO)
-static NETWORK_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static NETWORK_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 /// Global counter for blocking network operations (cache misses - should be red!)
-static BLOCKING_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static BLOCKING_ACTIVITY_COUNTER: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 /// Last time we had blocking activity (for minimum display time)
 static LAST_BLOCKING_TIME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// Last time we had network activity (for minimum display time)  
@@ -100,12 +102,17 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         }
     });
 
-    if METRICS_CLEANUP_SHUTDOWN_TX.set(cleanup_shutdown_tx.clone()).is_err() {
+    if METRICS_CLEANUP_SHUTDOWN_TX
+        .set(cleanup_shutdown_tx.clone())
+        .is_err()
+    {
         error!("Metrics cleanup shutdown channel already initialized");
         let _ = cleanup_shutdown_tx.send(()).await; // Shutdown the spawned task
         let _ = fetcher_shutdown_tx.send(()).await;
         let _ = watcher_shutdown_tx.send(()).await;
-        return Err(already_initialized_error("Metrics cleanup shutdown channel"));
+        return Err(already_initialized_error(
+            "Metrics cleanup shutdown channel",
+        ));
     }
 
     // Store all global state atomically to prevent race conditions
@@ -211,14 +218,7 @@ pub fn get_cache_or_default() -> Arc<K8sDataCache> {
 /// Returns the namespace that was set during cache initialization or switched to
 #[must_use]
 pub fn get_current_namespace() -> Option<String> {
-    Some(
-        NAMESPACE_STATE
-            .get()?
-            .read()
-            .ok()?
-            .namespace
-            .clone(),
-    )
+    Some(NAMESPACE_STATE.get()?.read().ok()?.namespace.clone())
 }
 
 /// Get the current namespace with fallback to "default"
@@ -249,7 +249,9 @@ pub fn get_current_namespace_or_default() -> String {
 /// - State lock is poisoned (indicates a prior panic)
 pub async fn switch_namespace(new_namespace: String) -> Result<()> {
     let cache = get_cache().ok_or_else(|| {
-        crate::k8s::cache::errors::cache_not_initialized_error("Cache not initialized for namespace switch")
+        crate::k8s::cache::errors::cache_not_initialized_error(
+            "Cache not initialized for namespace switch",
+        )
     })?;
 
     let state_lock = NAMESPACE_STATE.get().ok_or_else(|| {
@@ -260,7 +262,9 @@ pub async fn switch_namespace(new_namespace: String) -> Result<()> {
     let old_namespace = {
         let state = state_lock.read().map_err(|e| {
             error!("Namespace state lock poisoned during read: {}", e);
-            crate::k8s::cache::errors::lock_poisoned_error("Namespace state lock poisoned during read")
+            crate::k8s::cache::errors::lock_poisoned_error(
+                "Namespace state lock poisoned during read",
+            )
         })?;
         state.namespace.clone()
     };
@@ -271,14 +275,20 @@ pub async fn switch_namespace(new_namespace: String) -> Result<()> {
         return Ok(());
     }
 
-    info!("Switching namespace from '{}' to '{}'", old_namespace, new_namespace);
+    info!(
+        "Switching namespace from '{}' to '{}'",
+        old_namespace, new_namespace
+    );
 
     // 1. PREPARE: Create new watch manager BEFORE modifying any state
     // This ensures if creation fails, we haven't touched the existing state
     let watch_manager = match WatchManager::new(cache.clone(), new_namespace.clone()).await {
         Ok(wm) => wm,
         Err(e) => {
-            error!("Failed to create watch manager for namespace '{}': {}", new_namespace, e);
+            error!(
+                "Failed to create watch manager for namespace '{}': {}",
+                new_namespace, e
+            );
             // No state was modified, safe to return error
             return Err(e);
         }
@@ -291,7 +301,9 @@ pub async fn switch_namespace(new_namespace: String) -> Result<()> {
         let mut state = state_lock.write().map_err(|e| {
             error!("Namespace state lock poisoned during write: {}", e);
             // New watch manager will be dropped, cleaning up its resources
-            crate::k8s::cache::errors::lock_poisoned_error("Namespace state lock poisoned during switch")
+            crate::k8s::cache::errors::lock_poisoned_error(
+                "Namespace state lock poisoned during switch",
+            )
         })?;
 
         // Stop existing watches
@@ -331,8 +343,9 @@ pub fn start_network_operation() {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis()
-    ).unwrap_or(u64::MAX);
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
     LAST_NETWORK_TIME.store(now, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -348,8 +361,9 @@ pub fn start_blocking_operation() {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis()
-    ).unwrap_or(u64::MAX);
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
     LAST_BLOCKING_TIME.store(now, std::sync::atomic::Ordering::Relaxed);
     start_network_operation(); // Also count as general network activity
 }
@@ -361,7 +375,7 @@ pub fn end_blocking_operation() {
 }
 
 /// Check if there's any active network IO (what users actually care about).
-/// 
+///
 /// Returns true if there are active network operations happening right now
 /// OR if network activity happened recently (minimum 500ms display time)
 pub fn has_network_activity() -> bool {
@@ -369,21 +383,22 @@ pub fn has_network_activity() -> bool {
     if active_count > 0 {
         return true;
     }
-    
+
     // Show for minimum time even after operation completes
     let now = u64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis()
-    ).unwrap_or(u64::MAX);
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
     let last_activity = LAST_NETWORK_TIME.load(std::sync::atomic::Ordering::Relaxed);
-    
+
     now.saturating_sub(last_activity) < 500 // Show for 500ms minimum
 }
 
 /// Check if there's any blocking network IO (cache misses - should be red!).
-/// 
+///
 /// Returns true if there are blocking operations happening (indicates cache problems)
 /// OR if blocking activity happened recently (minimum 1000ms display time)
 pub fn has_blocking_activity() -> bool {
@@ -391,16 +406,17 @@ pub fn has_blocking_activity() -> bool {
     if active_count > 0 {
         return true;
     }
-    
+
     // Show for minimum time even after operation completes
     let now = u64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis()
-    ).unwrap_or(u64::MAX);
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
     let last_activity = LAST_BLOCKING_TIME.load(std::sync::atomic::Ordering::Relaxed);
-    
+
     now.saturating_sub(last_activity) < 1000 // Show for 1000ms minimum
 }
 

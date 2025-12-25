@@ -178,14 +178,14 @@ impl Cert {
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ContainerProbe {
-    pub probe_type: String,        // "Liveness", "Readiness", "Startup"
-    pub handler_type: String,      // "HTTP", "TCP", "Exec"
-    pub details: String,           // URL path, port, or command details
-    pub initial_delay: i32,        // Initial delay seconds
-    pub period: i32,               // How often to perform the probe
-    pub timeout: i32,              // Timeout seconds
-    pub failure_threshold: i32,    // Consecutive failures before marking failed
-    pub success_threshold: i32,    // Consecutive successes before marking successful
+    pub probe_type: String,     // "Liveness", "Readiness", "Startup"
+    pub handler_type: String,   // "HTTP", "TCP", "Exec"
+    pub details: String,        // URL path, port, or command details
+    pub initial_delay: i32,     // Initial delay seconds
+    pub period: i32,            // How often to perform the probe
+    pub timeout: i32,           // Timeout seconds
+    pub failure_threshold: i32, // Consecutive failures before marking failed
+    pub success_threshold: i32, // Consecutive successes before marking successful
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -197,7 +197,7 @@ pub struct Container {
     pub ports: String,
     pub envvars: Vec<ContainerEnvVar>,
     pub mounts: Vec<ContainerMount>,
-    pub probes: Vec<ContainerProbe>,  // New field for probe configurations
+    pub probes: Vec<ContainerProbe>, // New field for probe configurations
     pub selectors: Option<BTreeMap<String, String>>,
     pub pod_name: String,
     // Resource limits and usage

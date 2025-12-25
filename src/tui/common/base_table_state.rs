@@ -6,7 +6,7 @@ use ratatui::widgets::{ScrollbarState, TableState};
 ///
 /// This struct consolidates the common UI state that every table-based app needs:
 /// - Table navigation and selection state
-/// - Scrolling and visual styling 
+/// - Scrolling and visual styling
 /// - Filter editing functionality
 /// - YAML viewing capability (used by apps that support 'y' key to view K8s resources)
 #[derive(Clone, Debug)]
@@ -86,7 +86,7 @@ macro_rules! impl_tui_table_state {
             fn reset_selection_state(&mut self) {
                 self.base.state = ratatui::widgets::TableState::default().with_selected(0);
                 self.base.scroll_state = ratatui::widgets::ScrollbarState::new(
-                    self.base.items.len().saturating_sub(1) * $crate::tui::style::ITEM_HEIGHT
+                    self.base.items.len().saturating_sub(1) * $crate::tui::style::ITEM_HEIGHT,
                 );
             }
 

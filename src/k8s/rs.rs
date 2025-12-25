@@ -4,9 +4,9 @@ use crate::k8s::events::{format_duration, list_events_for_resource, list_k8seven
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::Rs;
 use k8s_openapi::api::apps::v1::ReplicaSet;
+use kube::Api;
 use kube::api::ListParams;
 use kube::api::ObjectList;
-use kube::Api;
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};

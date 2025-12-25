@@ -72,7 +72,8 @@ pub(super) fn add_user_agent_header_with_mode(
 /// for backward compatibility
 pub(super) fn add_user_agent_header(config: &mut Config, custom_user_agent: Option<&str>) {
     // Ignore the result in lenient mode as it will never error
-    let _ = add_user_agent_header_with_mode(config, custom_user_agent, HeaderValidationMode::Lenient);
+    let _ =
+        add_user_agent_header_with_mode(config, custom_user_agent, HeaderValidationMode::Lenient);
 }
 
 /// Create a new k8s client to interact with k8s cluster api
@@ -166,7 +167,12 @@ mod tests {
 
         // Should return an error in strict mode
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid user-agent"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid user-agent")
+        );
     }
 
     #[test]

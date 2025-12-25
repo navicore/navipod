@@ -11,7 +11,7 @@ use super::config::{
 use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
-use crate::k8s::{client, USER_AGENT};
+use crate::k8s::{USER_AGENT, client};
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
@@ -332,7 +332,7 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
     ) -> Result<()> {
-        use futures::{pin_mut, TryStreamExt};
+        use futures::{TryStreamExt, pin_mut};
 
         let pods: Api<Pod> = Api::namespaced(client, &namespace);
         let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
@@ -382,7 +382,7 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
     ) -> Result<()> {
-        use futures::{pin_mut, TryStreamExt};
+        use futures::{TryStreamExt, pin_mut};
 
         let replicasets: Api<ReplicaSet> = Api::namespaced(client, &namespace);
         let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
@@ -429,7 +429,7 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
     ) -> Result<()> {
-        use futures::{pin_mut, TryStreamExt};
+        use futures::{TryStreamExt, pin_mut};
 
         let events: Api<Event> = Api::namespaced(client, &namespace);
         let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);

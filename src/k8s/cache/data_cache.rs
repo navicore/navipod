@@ -1,7 +1,7 @@
 use super::cached_data::{CachedData, FetchStatus};
+use super::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use super::fetcher::{DataRequest, FetchResult};
 use super::subscription::SubscriptionManager;
-use super::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -290,35 +290,46 @@ impl K8sDataCache {
 
     pub async fn prefetch_related(&self, request: &DataRequest) -> Vec<DataRequest> {
         use super::fetcher::PodSelector;
-        
+
         // Determine what related data should be prefetched
         match request {
             DataRequest::ReplicaSets { namespace, .. } => {
                 // When fetching ReplicaSets, we should prefetch pods for common selectors
                 // This is the core predictive behavior - assume user will drill down
-                let namespace = namespace.clone().unwrap_or_else(|| {
-                    crate::cache_manager::get_current_namespace_or_default()
-                });
-                
-                debug!("🔮 PREFETCH: Generating Pod requests for ReplicaSet namespace: {}", namespace);
-                
+                let namespace = namespace
+                    .clone()
+                    .unwrap_or_else(|| crate::cache_manager::get_current_namespace_or_default());
+
+                debug!(
+                    "🔮 PREFETCH: Generating Pod requests for ReplicaSet namespace: {}",
+                    namespace
+                );
+
                 // Get the current cached ReplicaSets to extract their selectors
-                if let Some(super::fetcher::FetchResult::ReplicaSets(replicasets)) = self.get(request).await {
+                if let Some(super::fetcher::FetchResult::ReplicaSets(replicasets)) =
+                    self.get(request).await
+                {
                     let mut prefetch_requests = Vec::new();
-                    
-                    for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) { // Limit to avoid overwhelming
+
+                    for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
+                        // Limit to avoid overwhelming
                         if let Some(selectors) = &rs.selectors {
                             let pod_request = DataRequest::Pods {
                                 namespace: namespace.clone(),
                                 selector: PodSelector::ByLabels(selectors.clone()),
                             };
                             prefetch_requests.push(pod_request);
-                            debug!("🔮 PREFETCH: Generated Pod request for RS {} with selectors: {:?}", 
-                                   rs.name, selectors);
+                            debug!(
+                                "🔮 PREFETCH: Generated Pod request for RS {} with selectors: {:?}",
+                                rs.name, selectors
+                            );
                         }
                     }
-                    
-                    info!("🔮 PREFETCH: Generated {} Pod requests for ReplicaSet data", prefetch_requests.len());
+
+                    info!(
+                        "🔮 PREFETCH: Generated {} Pod requests for ReplicaSet data",
+                        prefetch_requests.len()
+                    );
                     prefetch_requests
                 } else {
                     // If ReplicaSets not in cache yet, don't prefetch Pods blindly
@@ -327,7 +338,10 @@ impl K8sDataCache {
                     vec![]
                 }
             }
-            DataRequest::Pods { namespace: _, selector: _ } => {
+            DataRequest::Pods {
+                namespace: _,
+                selector: _,
+            } => {
                 // When fetching Pods, consider prefetching events for the namespace
                 vec![DataRequest::Events {
                     resource: super::fetcher::ResourceRef::All,
@@ -340,38 +354,60 @@ impl K8sDataCache {
 
     /// Generate prefetch requests using fresh data instead of cached data
     /// This solves the chicken-and-egg problem where we need cached data to generate prefetch requests
-    pub fn prefetch_related_with_data(&self, request: &DataRequest, data: &super::fetcher::FetchResult) -> Vec<DataRequest> {
+    pub fn prefetch_related_with_data(
+        &self,
+        request: &DataRequest,
+        data: &super::fetcher::FetchResult,
+    ) -> Vec<DataRequest> {
         use super::fetcher::PodSelector;
-        
+
         // Determine what related data should be prefetched based on fresh data
         match (request, data) {
-            (DataRequest::ReplicaSets { namespace, .. }, super::fetcher::FetchResult::ReplicaSets(replicasets)) => {
+            (
+                DataRequest::ReplicaSets { namespace, .. },
+                super::fetcher::FetchResult::ReplicaSets(replicasets),
+            ) => {
                 // When we just fetched ReplicaSets, immediately prefetch pods for their selectors
-                let namespace = namespace.clone().unwrap_or_else(|| {
-                    crate::cache_manager::get_current_namespace_or_default()
-                });
-                
-                debug!("🔮 PREFETCH WITH DATA: Generating Pod requests for {} ReplicaSets in namespace: {}", 
-                       replicasets.len(), namespace);
-                
+                let namespace = namespace
+                    .clone()
+                    .unwrap_or_else(|| crate::cache_manager::get_current_namespace_or_default());
+
+                debug!(
+                    "🔮 PREFETCH WITH DATA: Generating Pod requests for {} ReplicaSets in namespace: {}",
+                    replicasets.len(),
+                    namespace
+                );
+
                 let mut prefetch_requests = Vec::new();
-                
-                for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) { // Limit to avoid overwhelming
+
+                for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
+                    // Limit to avoid overwhelming
                     if let Some(selectors) = &rs.selectors {
                         let pod_request = DataRequest::Pods {
                             namespace: namespace.clone(),
                             selector: PodSelector::ByLabels(selectors.clone()),
                         };
                         prefetch_requests.push(pod_request);
-                        debug!("🔮 PREFETCH WITH DATA: Generated Pod request for RS {} with selectors: {:?}", 
-                               rs.name, selectors);
+                        debug!(
+                            "🔮 PREFETCH WITH DATA: Generated Pod request for RS {} with selectors: {:?}",
+                            rs.name, selectors
+                        );
                     }
                 }
-                
-                info!("🔮 PREFETCH WITH DATA: Generated {} Pod requests for fresh ReplicaSet data", prefetch_requests.len());
+
+                info!(
+                    "🔮 PREFETCH WITH DATA: Generated {} Pod requests for fresh ReplicaSet data",
+                    prefetch_requests.len()
+                );
                 prefetch_requests
             }
-            (DataRequest::Pods { namespace: _, selector: _ }, super::fetcher::FetchResult::Pods(_)) => {
+            (
+                DataRequest::Pods {
+                    namespace: _,
+                    selector: _,
+                },
+                super::fetcher::FetchResult::Pods(_),
+            ) => {
                 // When fetching Pods, consider prefetching events for the namespace
                 vec![DataRequest::Events {
                     resource: super::fetcher::ResourceRef::All,

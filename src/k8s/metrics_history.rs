@@ -338,6 +338,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_precision_loss)]
     fn test_metrics_time_series_prune_by_count() {
         let mut ts = MetricsTimeSeries::new();
 
@@ -354,7 +355,7 @@ mod tests {
         // Rising trend - needs more significant change (>20%)
         let mut ts1 = MetricsTimeSeries::new();
         for i in 0..12 {
-            ts1.add_sample(Some((i * 20) as f64 + 100.0), None);
+            ts1.add_sample(Some(f64::from(i * 20) + 100.0), None);
         }
         let trend1 = ts1.cpu_trend();
         assert_eq!(
@@ -378,7 +379,7 @@ mod tests {
         // Falling trend
         let mut ts3 = MetricsTimeSeries::new();
         for i in 0..12 {
-            ts3.add_sample(Some(300.0 - (i * 20) as f64), None);
+            ts3.add_sample(Some(300.0 - f64::from(i * 20)), None);
         }
         let trend3 = ts3.cpu_trend();
         assert_eq!(
@@ -430,7 +431,7 @@ mod tests {
         // Test with values starting from 0 (division by zero case)
         let mut ts2 = MetricsTimeSeries::new();
         for i in 0..12 {
-            ts2.add_sample(Some(i as f64 * 10.0), None);
+            ts2.add_sample(Some(f64::from(i) * 10.0), None);
         }
         let trend2 = ts2.cpu_trend();
         assert_eq!(trend2, Trend::Rising, "Should detect rising trend from 0");

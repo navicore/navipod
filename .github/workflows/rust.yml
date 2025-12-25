@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -8,30 +8,74 @@ on:
   schedule:
     - cron: "0 8 * * *"
 
+# CI Strategy:
+# IMPORTANT: This workflow ONLY calls `just` commands.
+# The justfile is the source of truth for all build/test/lint logic.
+# This prevents drift between local development and CI.
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  ci:
+    name: CI
     runs-on: ubuntu-latest
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Install Just
+      uses: extractions/setup-just@v2
+
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo build
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: cargo-build-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run CI checks (just ci)
+      run: just ci
+
+  # K8s integration tests run separately (require kind cluster)
+  k8s-integration:
+    name: K8s Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
     - name: Create Cluster
       uses: helm/kind-action@v1.8.0
+
     - name: Set up Helm
       uses: azure/setup-helm@v3
       with:
         version: v3.14.0
+
     - name: Install Navicore Chart 1
-      run :
-        helm install my-navitain https://www.navicore.tech/charts/navitain-0.1.10.tgz
+      run: helm install my-navitain https://www.navicore.tech/charts/navitain-0.1.10.tgz
+
     - name: Install Navicore Chart 2
-      run :
-        helm install echo-secret https://www.navicore.tech/charts/echo-secret-0.1.2.tgz
-    - uses: actions/checkout@v4
+      run: helm install echo-secret https://www.navicore.tech/charts/echo-secret-0.1.2.tgz
+
     - name: Wait for Deployment Readiness
-      run :
-        bash ./tests/scripts/check-test-deployment.sh
-    - name: Build and Test
-      run: make
+      run: bash ./tests/scripts/check-test-deployment.sh
+
+    - name: Run K8s integration tests
+      run: cargo test --test k8s_cache_integration

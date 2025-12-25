@@ -189,6 +189,7 @@ impl BackgroundFetcher {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn spawn_fetch_task(&self, task: FetchTask) {
         let cache_key = task.request.cache_key();
 

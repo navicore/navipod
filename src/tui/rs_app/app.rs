@@ -90,12 +90,13 @@ impl AppBehavior for App {
                 // No cache and starting empty (e.g., after namespace switch) - fetch immediately
                 debug!("RS stream: No cache and empty initial items, fetching immediately");
                 cache_manager::start_blocking_operation();
-                if let Ok(new_items) = list_replicas().await {
-                    cache_manager::end_blocking_operation();
+                let fetch_result = list_replicas().await;
+                cache_manager::end_blocking_operation();
+                if let Ok(new_items) = fetch_result {
                     if !new_items.is_empty() {
                         // Store in cache
-                        let fetch_result = FetchResult::ReplicaSets(new_items.clone());
-                        let _ = cache.put(&request, fetch_result).await;
+                        let cached = FetchResult::ReplicaSets(new_items.clone());
+                        let _ = cache.put(&request, cached).await;
                         ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE")
                             .await;
                         if tx.send(Message::Rs(new_items)).await.is_err() {
@@ -103,8 +104,6 @@ impl AppBehavior for App {
                             return;
                         }
                     }
-                } else {
-                    cache_manager::end_blocking_operation();
                 }
             }
 
@@ -328,7 +327,7 @@ impl App {
     }
 
     /// Switch to Namespace picker app
-    async fn handle_switch_to_namespace(&mut self) -> Result<Option<Apps>, io::Error> {
+    async fn handle_switch_to_namespace(&self) -> Result<Option<Apps>, io::Error> {
         debug!("changing app from rs to namespace...");
         let data_vec = create_namespace_data_vec().await?;
         debug!("namespace picker received {} namespaces", data_vec.len());

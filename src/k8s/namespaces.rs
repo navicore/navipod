@@ -28,6 +28,7 @@ fn calculate_namespace_age(ns: &K8sNamespace) -> String {
 /// # Errors
 ///
 /// Will return `Err` if data cannot be retrieved from k8s cluster API
+#[allow(clippy::cognitive_complexity)]
 pub async fn list_namespaces() -> Result<Vec<Namespace>> {
     debug!("list_namespaces: starting namespace fetch");
     let mut client = get_client().await.map_err(|e| {

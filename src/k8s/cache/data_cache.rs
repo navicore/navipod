@@ -298,7 +298,7 @@ impl K8sDataCache {
                 // This is the core predictive behavior - assume user will drill down
                 let namespace = namespace
                     .clone()
-                    .unwrap_or_else(|| crate::cache_manager::get_current_namespace_or_default());
+                    .unwrap_or_else(crate::cache_manager::get_current_namespace_or_default);
 
                 debug!(
                     "🔮 PREFETCH: Generating Pod requests for ReplicaSet namespace: {}",
@@ -370,7 +370,7 @@ impl K8sDataCache {
                 // When we just fetched ReplicaSets, immediately prefetch pods for their selectors
                 let namespace = namespace
                     .clone()
-                    .unwrap_or_else(|| crate::cache_manager::get_current_namespace_or_default());
+                    .unwrap_or_else(crate::cache_manager::get_current_namespace_or_default);
 
                 debug!(
                     "🔮 PREFETCH WITH DATA: Generating Pod requests for {} ReplicaSets in namespace: {}",

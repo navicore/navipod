@@ -36,10 +36,7 @@ impl AppBehavior for namespace_app::app::App {
                     // Handle filter editing mode
                     if self.get_show_filter_edit() {
                         match key.code {
-                            Esc => {
-                                self.set_show_filter_edit(false);
-                            }
-                            Enter => {
+                            Esc | Enter => {
                                 self.set_show_filter_edit(false);
                             }
                             KeyCode::Backspace => {

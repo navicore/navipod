@@ -29,8 +29,8 @@ struct NamespaceState {
     watcher_handle: WatchManagerHandle,
 }
 
-/// Namespace and watcher state (mutable via RwLock for namespace switching)
-/// Using std::sync::RwLock since we need sync access from various contexts
+/// Namespace and watcher state (mutable via `RwLock` for namespace switching)
+/// Using `std::sync::RwLock` since we need sync access from various contexts
 static NAMESPACE_STATE: OnceLock<std::sync::RwLock<NamespaceState>> = OnceLock::new();
 /// Global metrics history store for trend visualization
 static METRICS_HISTORY: OnceLock<Arc<RwLock<MetricsHistoryStore>>> = OnceLock::new();
@@ -237,7 +237,7 @@ pub fn get_current_namespace_or_default() -> String {
 /// # Concurrency Safety
 ///
 /// The implementation minimizes the window where state is inconsistent by:
-/// - Preparing the new WatchManager before acquiring the write lock
+/// - Preparing the new `WatchManager` before acquiring the write lock
 /// - Performing the state swap atomically while holding the lock
 /// - Only clearing the cache after the swap is complete
 ///
@@ -311,7 +311,7 @@ pub async fn switch_namespace(new_namespace: String) -> Result<()> {
         state.watcher_handle.shutdown_in_place();
 
         // Install new state atomically
-        state.namespace = new_namespace.clone();
+        state.namespace.clone_from(&new_namespace);
         state.watcher_shutdown_tx = new_shutdown_tx;
         state.watcher_handle = new_handle;
     }

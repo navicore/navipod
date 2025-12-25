@@ -745,6 +745,7 @@ impl Namespace {
         &self.age
     }
 
+    #[allow(dead_code)]
     pub(crate) const fn is_current(&self) -> bool {
         self.is_current
     }

@@ -1,5 +1,6 @@
 #![allow(clippy::cognitive_complexity)] // Some functions handle complex k8s data
 
+use crate::cache_manager::get_current_namespace_or_default;
 use crate::error::Result;
 use crate::k8s::client_manager::{get_client, refresh_client, should_refresh_client};
 use crate::k8s::utils::format_label_selector;
@@ -254,12 +255,13 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
     use tracing::debug;
 
     let mut client = get_client().await?;
+    let namespace = get_current_namespace_or_default();
     let label_selector = format_label_selector(&selector);
     let lp = ListParams::default().labels(&label_selector);
 
     // Try the operation, with one retry on auth error
     // Fetch pod list and metrics in parallel to reduce latency
-    let pods_api: Api<Pod> = Api::default_namespaced((*client).clone());
+    let pods_api: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
 
     let (pod_list_result, pod_metrics_result) = tokio::join!(
         pods_api.list(&lp),
@@ -272,7 +274,7 @@ pub async fn list(selector: BTreeMap<String, String>, pod_name: String) -> Resul
             // Auth error - try refreshing client and retry once
             client = refresh_client().await?;
             // Fetch again in parallel after client refresh
-            let retry_pods_api: Api<Pod> = Api::default_namespaced((*client).clone());
+            let retry_pods_api: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
             let (retry_list, retry_metrics) = tokio::join!(
                 retry_pods_api.list(&lp),
                 fetch_pod_metrics((*client).clone(), None)
@@ -500,18 +502,19 @@ pub async fn logs(
     container_name: String,
 ) -> Result<Vec<LogRec>> {
     let mut client = get_client().await?;
+    let namespace = get_current_namespace_or_default();
     let label_selector = format_label_selector(&selector);
     let lp = ListParams::default().labels(&label_selector);
 
     // Try the operation, with one retry on auth error
     let pod_list: ObjectList<Pod> = {
-        let pods = Api::default_namespaced((*client).clone());
+        let pods: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
         match pods.list(&lp).await {
             Ok(result) => result,
             Err(e) if should_refresh_client(&e) => {
                 // Auth error - try refreshing client and retry once
                 client = refresh_client().await?;
-                let pods = Api::default_namespaced((*client).clone());
+                let pods: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
                 pods.list(&lp).await?
             }
             Err(e) => return Err(e.into()),
@@ -533,13 +536,13 @@ pub async fn logs(
         };
 
         // Fetch logs for the specified container, with retry on auth error
-        let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+        let pods: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
         let logs = match pods.logs(&pod.name_any(), &log_params).await {
             Ok(result) => result,
             Err(e) if should_refresh_client(&e) => {
                 // Auth error - try refreshing client and retry once
                 client = refresh_client().await?;
-                let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+                let pods: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
                 pods.logs(&pod.name_any(), &log_params).await?
             }
             Err(e) => return Err(e.into()),
@@ -577,7 +580,8 @@ pub async fn logs_enhanced(
     tail_lines: Option<i64>,
 ) -> Result<Vec<LogRec>> {
     let mut client = get_client().await?;
-    
+    let namespace = get_current_namespace_or_default();
+
     let log_params = LogParams {
         container: Some(container_name.clone()),
         follow,
@@ -587,14 +591,14 @@ pub async fn logs_enhanced(
     };
 
     // Get logs with retry on auth error
-    let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+    let pods: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
     let logs_string = match pods.logs(&pod_name, &log_params).await {
         Ok(logs) => logs,
         Err(e) if should_refresh_client(&e) => {
             // Auth error - try refreshing client and retry once
             debug!("Auth error getting logs, refreshing client and retrying...");
             client = refresh_client().await?;
-            let pods: Api<Pod> = Api::default_namespaced((*client).clone());
+            let pods: Api<Pod> = Api::namespaced((*client).clone(), &namespace);
             pods.logs(&pod_name, &log_params).await?
         }
         Err(e) => {

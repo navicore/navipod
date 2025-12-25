@@ -1,3 +1,4 @@
+use crate::cache_manager::get_current_namespace_or_default;
 use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use crate::k8s::utils::format_label_selector;
@@ -30,16 +31,17 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
 #[allow(clippy::significant_drop_tightening)]
 pub async fn list_replicas() -> Result<Vec<Rs>> {
     let mut client = get_client().await?;
+    let namespace = get_current_namespace_or_default();
 
     // Try the operation, with one retry on auth error
     let rs_list: ObjectList<ReplicaSet> = {
-        let api = Api::default_namespaced((*client).clone());
+        let api: Api<ReplicaSet> = Api::namespaced((*client).clone(), &namespace);
         match api.list(&ListParams::default()).await {
             Ok(result) => result,
             Err(e) if should_refresh_client(&e) => {
                 // Auth error - try refreshing client and retry once
                 client = refresh_client().await?;
-                let api = Api::default_namespaced((*client).clone());
+                let api: Api<ReplicaSet> = Api::namespaced((*client).clone(), &namespace);
                 api.list(&ListParams::default()).await?
             }
             Err(e) => return Err(e.into()),
@@ -98,12 +100,14 @@ pub async fn list_replicas() -> Result<Vec<Rs>> {
 /// Will return `Err` if data can not be retrieved from k8s cluster api
 pub async fn get_replicaset(selector: BTreeMap<String, String>) -> Result<Option<ReplicaSet>> {
     let client = get_client().await?;
+    let namespace = get_current_namespace_or_default();
 
     let label_selector = format_label_selector(&selector);
 
     let lp = ListParams::default().labels(&label_selector);
 
-    let rs_list: ObjectList<ReplicaSet> = Api::default_namespaced((*client).clone()).list(&lp).await?;
+    let api: Api<ReplicaSet> = Api::namespaced((*client).clone(), &namespace);
+    let rs_list: ObjectList<ReplicaSet> = api.list(&lp).await?;
 
     let rs = rs_list.into_iter().next();
     Ok(rs)

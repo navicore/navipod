@@ -1,4 +1,5 @@
 use crate::k8s::containers::list as list_containers;
+use crate::k8s::namespaces::list_namespaces;
 use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs_ingress::list_ingresses;
 use crate::net::analyze_tls_certificate;
@@ -8,6 +9,7 @@ use crate::tui::data;
 use crate::tui::event_app;
 use crate::tui::ingress_app;
 use crate::tui::log_app;
+use crate::tui::namespace_app;
 use crate::tui::pod_app;
 use crate::tui::rs_app;
 use crate::tui::stream::{async_key_events, Message};
@@ -85,6 +87,7 @@ pub enum Apps {
     Cert { app: cert_app::app::App },
     Log { app: log_app::app::App },
     Event { app: event_app::app::App },
+    Namespace { app: namespace_app::app::App },
 }
 
 /// # Errors
@@ -135,6 +138,23 @@ pub async fn create_cert_data_vec(host: &str) -> Result<Vec<data::Cert>, io::Err
         Err(e) => {
             let emsg = format!("host: {host} error: {e}");
             Err(io::Error::other(emsg))
+        }
+    }
+}
+
+/// # Errors
+///
+/// Will return `Err` if function cannot access the k8s api
+pub async fn create_namespace_data_vec() -> Result<Vec<data::Namespace>, io::Error> {
+    tracing::debug!("create_namespace_data_vec: fetching namespaces...");
+    match list_namespaces().await {
+        Ok(namespaces) => {
+            tracing::debug!("create_namespace_data_vec: got {} namespaces", namespaces.len());
+            Ok(namespaces)
+        }
+        Err(e) => {
+            tracing::error!("create_namespace_data_vec: error fetching namespaces: {}", e);
+            Err(io::Error::other(e.to_string()))
         }
     }
 }
@@ -299,6 +319,22 @@ where
                 key_events,
                 |app_holder| {
                     if let Some(Apps::Event { app }) = app_holder {
+                        Some(app.clone())
+                    } else {
+                        None
+                    }
+                },
+            ).await
+        }
+        Apps::Namespace { app } => {
+            run_generic_app_loop(
+                terminal,
+                app.clone(),
+                apps_app.clone(),
+                should_stop.clone(),
+                key_events,
+                |app_holder| {
+                    if let Some(Apps::Namespace { app }) = app_holder {
                         Some(app.clone())
                     } else {
                         None

@@ -21,12 +21,17 @@ static CACHE: OnceLock<Arc<K8sDataCache>> = OnceLock::new();
 static BACKGROUND_FETCHER: OnceLock<Arc<BackgroundFetcher>> = OnceLock::new();
 /// Background fetcher shutdown channel
 static FETCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
-/// Watch manager shutdown channel
-static WATCHER_SHUTDOWN_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
-/// Watch manager task handle
-static WATCHER_HANDLE: OnceLock<WatchManagerHandle> = OnceLock::new();
-/// Current namespace context
-static CURRENT_NAMESPACE: OnceLock<String> = OnceLock::new();
+
+/// Mutable namespace state (namespace + watcher state that changes on namespace switch)
+struct NamespaceState {
+    namespace: String,
+    watcher_shutdown_tx: mpsc::Sender<()>,
+    watcher_handle: WatchManagerHandle,
+}
+
+/// Namespace and watcher state (mutable via RwLock for namespace switching)
+/// Using std::sync::RwLock since we need sync access from various contexts
+static NAMESPACE_STATE: OnceLock<std::sync::RwLock<NamespaceState>> = OnceLock::new();
 /// Global metrics history store for trend visualization
 static METRICS_HISTORY: OnceLock<Arc<RwLock<MetricsHistoryStore>>> = OnceLock::new();
 /// Metrics history cleanup task shutdown channel
@@ -105,15 +110,6 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
 
     // Store all global state atomically to prevent race conditions
     // If any step fails, we need to clean up properly
-    if CURRENT_NAMESPACE.set(namespace.clone()).is_err() {
-        error!("Namespace already set");
-        let _ = fetcher_shutdown_tx.send(()).await;
-        let _ = watcher_shutdown_tx.send(()).await;
-        if let Some(cleanup_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {
-            let _ = cleanup_tx.send(()).await;
-        }
-        return Err(already_initialized_error("Namespace"));
-    }
 
     if CACHE.set(cache.clone()).is_err() {
         error!("Cache already initialized");
@@ -142,14 +138,18 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         return Err(already_initialized_error("Fetcher shutdown channel"));
     }
 
-    if WATCHER_SHUTDOWN_TX.set(watcher_shutdown_tx).is_err() {
-        error!("Watcher shutdown channel already initialized");
-        return Err(already_initialized_error("Watcher shutdown channel"));
-    }
-
-    if WATCHER_HANDLE.set(watcher_handle).is_err() {
-        error!("Watcher handle already initialized");
-        return Err(already_initialized_error("Watcher handle"));
+    // Store namespace state (namespace + watcher) in a single RwLock for atomic updates
+    let namespace_state = NamespaceState {
+        namespace: namespace.clone(),
+        watcher_shutdown_tx,
+        watcher_handle,
+    };
+    if NAMESPACE_STATE
+        .set(std::sync::RwLock::new(namespace_state))
+        .is_err()
+    {
+        error!("Namespace state already initialized");
+        return Err(already_initialized_error("Namespace state"));
     }
 
     info!(
@@ -208,16 +208,84 @@ pub fn get_cache_or_default() -> Arc<K8sDataCache> {
 
 /// Get the current namespace context
 ///
-/// Returns the namespace that was set during cache initialization
+/// Returns the namespace that was set during cache initialization or switched to
 #[must_use]
 pub fn get_current_namespace() -> Option<String> {
-    CURRENT_NAMESPACE.get().cloned()
+    Some(
+        NAMESPACE_STATE
+            .get()?
+            .read()
+            .ok()?
+            .namespace
+            .clone(),
+    )
 }
 
 /// Get the current namespace with fallback to "default"
 #[must_use]
 pub fn get_current_namespace_or_default() -> String {
     get_current_namespace().unwrap_or_else(|| "default".to_string())
+}
+
+/// Switch to a new namespace at runtime
+///
+/// This will:
+/// 1. Stop existing watch streams
+/// 2. Clear the cache
+/// 3. Start new watch streams for the new namespace
+/// 4. Update the stored namespace
+///
+/// # Errors
+///
+/// Returns an error if watch manager initialization fails for the new namespace
+pub async fn switch_namespace(new_namespace: String) -> Result<()> {
+    let cache = get_cache().ok_or_else(|| {
+        crate::k8s::cache::errors::already_initialized_error("Cache not initialized")
+    })?;
+
+    let state_lock = NAMESPACE_STATE.get().ok_or_else(|| {
+        crate::k8s::cache::errors::already_initialized_error("Namespace state not initialized")
+    })?;
+
+    // Get old namespace for logging, stop watches
+    let old_namespace = {
+        let mut state = state_lock.write().map_err(|_| {
+            crate::k8s::cache::errors::already_initialized_error("Namespace state lock poisoned")
+        })?;
+
+        let old_ns = state.namespace.clone();
+        info!("Switching namespace from '{}' to '{}'", old_ns, new_namespace);
+
+        // 1. Stop existing watches
+        let _ = state.watcher_shutdown_tx.try_send(());
+        state.watcher_handle.shutdown_in_place();
+
+        old_ns
+    };
+
+    // 2. Clear cache (all namespace-scoped data is now stale)
+    cache.clear().await;
+
+    // 3. Start new watches for new namespace
+    let watch_manager = WatchManager::new(cache, new_namespace.clone()).await?;
+    let (new_shutdown_tx, new_handle) = watch_manager.start();
+
+    // 4. Update state with new namespace and watchers
+    {
+        let mut state = state_lock.write().map_err(|_| {
+            crate::k8s::cache::errors::already_initialized_error("Namespace state lock poisoned")
+        })?;
+        state.namespace = new_namespace.clone();
+        state.watcher_shutdown_tx = new_shutdown_tx;
+        state.watcher_handle = new_handle;
+    }
+
+    info!(
+        "Successfully switched namespace from '{}' to '{}'",
+        old_namespace, new_namespace
+    );
+
+    Ok(())
 }
 
 /// Get the global background fetcher instance
@@ -369,20 +437,23 @@ pub async fn shutdown_cache() {
         info!("Background fetcher shutdown requested");
     }
 
-    if let Some(watcher_shutdown_tx) = WATCHER_SHUTDOWN_TX.get() {
-        let _ = watcher_shutdown_tx.send(()).await;
-        info!("Watch manager shutdown requested");
+    // Shutdown watch manager via namespace state
+    if let Some(state_lock) = NAMESPACE_STATE.get() {
+        if let Ok(state) = state_lock.read() {
+            let _ = state.watcher_shutdown_tx.try_send(());
+            info!(
+                "Watch manager shutdown requested (namespace: {})",
+                state.namespace
+            );
+            info!(
+                "Watch manager has {} active tasks that will be cleaned up via shutdown signal",
+                state.watcher_handle.task_count()
+            );
+        }
     }
 
     if let Some(cleanup_shutdown_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {
         let _ = cleanup_shutdown_tx.send(()).await;
         info!("Metrics history cleanup task shutdown requested");
-    }
-
-    // Note: Task handles are owned by WatchManagerHandle and cannot be directly
-    // accessed from OnceLock. They will be cleaned up when shutdown signals are received.
-    if let Some(watcher_handle) = WATCHER_HANDLE.get() {
-        info!("Watch manager has {} active tasks that will be cleaned up via shutdown signal",
-              watcher_handle.task_count());
     }
 }

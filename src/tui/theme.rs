@@ -172,6 +172,7 @@ impl Symbols {
     pub const CONTAINER: &'static str = "▢";
     pub const SERVICE: &'static str = "🌐";
     pub const INGRESS: &'static str = "→";
+    pub const NAMESPACE: &'static str = "📦";
     
     // UI elements
     pub const ARROW_RIGHT: &'static str = "→";

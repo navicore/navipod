@@ -10,10 +10,10 @@ use crate::tui::pod_app;
 use crate::tui::stream::Message;
 use crate::tui::style::ITEM_HEIGHT;
 use crate::tui::table_ui::TuiTableState;
-use crate::tui::ui_loop::{create_ingress_data_vec, AppBehavior, Apps};
+use crate::tui::ui_loop::{create_ingress_data_vec, create_namespace_data_vec, AppBehavior, Apps};
 use crate::tui::yaml_editor::YamlEditor;
 use crate::tui::rs_app::domain::ReplicaSetDomainService;
-use crate::tui::{event_app, ingress_app};
+use crate::tui::{event_app, ingress_app, namespace_app};
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
@@ -78,7 +78,7 @@ impl AppBehavior for App {
                 .subscribe("rs:*".to_string())
                 .await;
 
-            // Start with cached data if available
+            // Start with cached data if available, or fetch immediately if starting empty
             if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
                 if !cached_items.is_empty()
                     && cached_items != initial_items
@@ -86,6 +86,25 @@ impl AppBehavior for App {
                 {
                     cache.subscription_manager.unsubscribe(&sub_id).await;
                     return;
+                }
+            } else if initial_items.is_empty() {
+                // No cache and starting empty (e.g., after namespace switch) - fetch immediately
+                debug!("RS stream: No cache and empty initial items, fetching immediately");
+                cache_manager::start_blocking_operation();
+                if let Ok(new_items) = list_replicas().await {
+                    cache_manager::end_blocking_operation();
+                    if !new_items.is_empty() {
+                        // Store in cache
+                        let fetch_result = FetchResult::ReplicaSets(new_items.clone());
+                        let _ = cache.put(&request, fetch_result).await;
+                        ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE").await;
+                        if tx.send(Message::Rs(new_items)).await.is_err() {
+                            cache.subscription_manager.unsubscribe(&sub_id).await;
+                            return;
+                        }
+                    }
+                } else {
+                    cache_manager::end_blocking_operation();
                 }
             }
 
@@ -256,13 +275,14 @@ impl App {
     /// Handle RS-specific key events that aren't covered by common key handler
     async fn handle_rs_specific_keys(&mut self, key: &crossterm::event::KeyEvent) -> Result<Option<Apps>, io::Error> {
         use KeyCode::{Char, Enter};
-        
+
         match key.code {
             Char('e') => {
                 debug!("changing app from rs to event...");
                 Ok(Some(Self::handle_switch_to_events()))
             }
             Char('i' | 'I') => self.handle_switch_to_ingress().await,
+            Char('n') => self.handle_switch_to_namespace().await,
             Enter => Ok(Some(self.handle_switch_to_pods())),
             Char('/') => Ok(Some(self.handle_filter_mode())),
             Char('y' | 'Y') => Ok(Some(self.handle_yaml_view())),
@@ -303,6 +323,16 @@ impl App {
             }
         }
         Ok(Some(Apps::Rs { app: self.clone() }))
+    }
+
+    /// Switch to Namespace picker app
+    async fn handle_switch_to_namespace(&mut self) -> Result<Option<Apps>, io::Error> {
+        debug!("changing app from rs to namespace...");
+        let data_vec = create_namespace_data_vec().await?;
+        debug!("namespace picker received {} namespaces", data_vec.len());
+        Ok(Some(Apps::Namespace {
+            app: namespace_app::app::App::new(data_vec),
+        }))
     }
 
     /// Switch to Pods app

@@ -1,3 +1,4 @@
+use crate::cache_manager::get_current_namespace_or_default;
 use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
 use crate::k8s::metrics_client::{fetch_pod_metrics, fetch_node_metrics, create_metrics_lookup};
@@ -72,7 +73,8 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
     let lp = ListParams::default().labels(&label_selector);
 
     // Fetch all data in parallel to reduce latency
-    let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
+    let namespace = get_current_namespace_or_default();
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let nodes_api: Api<Node> = Api::all(client.clone());
     let node_lp = ListParams::default();
 

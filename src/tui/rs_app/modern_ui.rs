@@ -57,7 +57,8 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_ne
     f.render_widget(title, header_chunks[0]);
     
     // Namespace context
-    let namespace_text = format!("namespace: default • {} items", app.get_items().len());
+    let current_ns = cache_manager::get_current_namespace_or_default();
+    let namespace_text = format!("namespace: {current_ns} • {} items", app.get_items().len());
     let namespace = Paragraph::new(namespace_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)

@@ -717,6 +717,62 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u1
     )
 }
 
+/// Kubernetes namespace for namespace picker
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Namespace {
+    pub name: String,
+    pub status: String,
+    pub age: String,
+    pub is_current: bool,
+}
+
+impl Filterable for Namespace {
+    fn filter_by(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+impl Namespace {
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn status(&self) -> &str {
+        &self.status
+    }
+
+    pub(crate) fn age(&self) -> &str {
+        &self.age
+    }
+
+    pub(crate) const fn is_current(&self) -> bool {
+        self.is_current
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn namespace_constraint_len_calculator(items: &[Namespace]) -> (u16, u16, u16) {
+    let name_len = items
+        .iter()
+        .map(Namespace::name)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let status_len = items
+        .iter()
+        .map(Namespace::status)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let age_len = items
+        .iter()
+        .map(Namespace::age)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    (name_len as u16, status_len as u16, age_len as u16)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::tui::data::{

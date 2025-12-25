@@ -1,3 +1,4 @@
+use crate::cache_manager;
 use crate::tui::pod_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
@@ -57,7 +58,8 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let pods = app.get_items();
     let running_count = pods.iter().filter(|p| p.status() == "Running").count();
     let total_count = pods.len();
-    let context_text = format!("namespace: default • {running_count}/{total_count} running");
+    let current_ns = cache_manager::get_current_namespace_or_default();
+    let context_text = format!("namespace: {current_ns} • {running_count}/{total_count} running");
     let context = Paragraph::new(context_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)

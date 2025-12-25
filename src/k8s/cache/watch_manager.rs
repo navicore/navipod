@@ -508,13 +508,28 @@ pub struct WatchManagerHandle {
 }
 
 impl WatchManagerHandle {
-    /// Shutdown all watch manager tasks
+    /// Shutdown all watch manager tasks (consuming self)
     pub fn shutdown(self) {
         info!(
             "🛑 Shutting down {} watch manager tasks",
             self.task_handles.len()
         );
         for (i, handle) in self.task_handles.into_iter().enumerate() {
+            if !handle.is_finished() {
+                debug!("Aborting watch task {}", i);
+                handle.abort();
+            }
+        }
+        info!("✅ Watch manager shutdown complete");
+    }
+
+    /// Shutdown all watch manager tasks (in-place, for namespace switching)
+    pub fn shutdown_in_place(&mut self) {
+        info!(
+            "🛑 Shutting down {} watch manager tasks (in-place)",
+            self.task_handles.len()
+        );
+        for (i, handle) in self.task_handles.drain(..).enumerate() {
             if !handle.is_finished() {
                 debug!("Aborting watch task {}", i);
                 handle.abort();

@@ -1,3 +1,4 @@
+use crate::cache_manager::get_current_namespace_or_default;
 use crate::error::Result as NvResult;
 use crate::tui::data::ResourceEvent;
 use k8s_openapi::api::core::v1::Event;
@@ -47,8 +48,10 @@ fn convert_event_to_resource_event(event: &Event, rs_name: &str) -> ResourceEven
 /// Will return `Err` if events cannot be retrieved from k8s cluster api
 pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
     let lp = ListParams::default();
+    let namespace = get_current_namespace_or_default();
 
-    let mut unfiltered_events: Vec<Event> = Api::default_namespaced(client).list(&lp).await?.items;
+    let api: Api<Event> = Api::namespaced(client, &namespace);
+    let mut unfiltered_events: Vec<Event> = api.list(&lp).await?.items;
 
     // Use a consistent fallback timestamp to ensure total order in comparison
     let fallback_time = chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);
@@ -72,12 +75,11 @@ pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
 /// Will return `Err` if events cannot be retrieved from k8s cluster api
 pub async fn list_all() -> NvResult<Vec<ResourceEvent>> {
     let lp = ListParams::default();
+    let namespace = get_current_namespace_or_default();
+    let client = super::client::new(Some(super::USER_AGENT)).await?;
 
-    let mut unfiltered_events: Vec<Event> =
-        Api::default_namespaced(super::client::new(Some(super::USER_AGENT)).await?)
-            .list(&lp)
-            .await?
-            .items;
+    let api: Api<Event> = Api::namespaced(client, &namespace);
+    let mut unfiltered_events: Vec<Event> = api.list(&lp).await?.items;
 
     // Use a consistent fallback timestamp to ensure total order in comparison
     let fallback_time = chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap_or_else(chrono::Utc::now);

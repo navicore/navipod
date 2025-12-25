@@ -138,9 +138,7 @@ impl MetricsTimeSeries {
             return Trend::Unknown;
         }
 
-        let values: Vec<f64> = self.samples.iter()
-            .filter_map(&extractor)
-            .collect();
+        let values: Vec<f64> = self.samples.iter().filter_map(&extractor).collect();
 
         if values.len() < 3 {
             return Trend::Unknown;
@@ -152,7 +150,8 @@ impl MetricsTimeSeries {
         }
 
         let first_third: f64 = values.iter().take(third_size).sum::<f64>() / third_size as f64;
-        let last_third: f64 = values.iter().skip(values.len() * 2 / 3).sum::<f64>() / third_size as f64;
+        let last_third: f64 =
+            values.iter().skip(values.len() * 2 / 3).sum::<f64>() / third_size as f64;
 
         // Avoid division by zero when first_third is 0.0
         let change_percent = if first_third.abs() < f64::EPSILON {
@@ -197,40 +196,43 @@ impl MetricsTimeSeries {
     where
         F: Fn(&MetricSample) -> Option<f64>,
     {
-        let values: Vec<f64> = self.samples.iter()
-            .filter_map(&extractor)
-            .collect();
+        let values: Vec<f64> = self.samples.iter().filter_map(&extractor).collect();
 
         if values.is_empty() {
             return Vec::new();
         }
 
         // If we have a limit, normalize to percentage of limit
-        limit.map_or_else(|| {
-            // Otherwise normalize to 0-100 based on min/max in this window
-            let min = values.iter().copied().fold(f64::INFINITY, f64::min);
-            let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-            let range = max - min;
+        limit.map_or_else(
+            || {
+                // Otherwise normalize to 0-100 based on min/max in this window
+                let min = values.iter().copied().fold(f64::INFINITY, f64::min);
+                let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let range = max - min;
 
-            if range < 0.01 {
-                // All values essentially the same
-                vec![50; values.len()]
-            } else {
-                values.iter()
+                if range < 0.01 {
+                    // All values essentially the same
+                    vec![50; values.len()]
+                } else {
+                    values
+                        .iter()
+                        .map(|&v| {
+                            let normalized = ((v - min) / range * 100.0).clamp(0.0, 100.0);
+                            normalized as u8
+                        })
+                        .collect()
+                }
+            },
+            |limit_val| {
+                values
+                    .iter()
                     .map(|&v| {
-                        let normalized = ((v - min) / range * 100.0).clamp(0.0, 100.0);
-                        normalized as u8
+                        let pct = (v / limit_val * 100.0).clamp(0.0, 100.0);
+                        pct as u8
                     })
                     .collect()
-            }
-        }, |limit_val| {
-            values.iter()
-                .map(|&v| {
-                    let pct = (v / limit_val * 100.0).clamp(0.0, 100.0);
-                    pct as u8
-                })
-                .collect()
-        })
+            },
+        )
     }
 }
 
@@ -305,8 +307,13 @@ impl MetricsHistoryStore {
 
     /// Get container metrics history
     #[must_use]
-    pub fn get_container_history(&self, pod_name: &str, container_name: &str) -> Option<&MetricsTimeSeries> {
-        self.container_metrics.get(&(pod_name.to_string(), container_name.to_string()))
+    pub fn get_container_history(
+        &self,
+        pod_name: &str,
+        container_name: &str,
+    ) -> Option<&MetricsTimeSeries> {
+        self.container_metrics
+            .get(&(pod_name.to_string(), container_name.to_string()))
     }
 
     /// Prune all old entries
@@ -350,7 +357,11 @@ mod tests {
             ts1.add_sample(Some((i * 20) as f64 + 100.0), None);
         }
         let trend1 = ts1.cpu_trend();
-        assert_eq!(trend1, Trend::Rising, "Expected rising trend for values 100, 120, 140...");
+        assert_eq!(
+            trend1,
+            Trend::Rising,
+            "Expected rising trend for values 100, 120, 140..."
+        );
 
         // Stable trend - all same values
         let mut ts2 = MetricsTimeSeries::new();
@@ -358,7 +369,11 @@ mod tests {
             ts2.add_sample(Some(100.0), None);
         }
         let trend2 = ts2.cpu_trend();
-        assert_eq!(trend2, Trend::Stable, "Expected stable trend for constant values");
+        assert_eq!(
+            trend2,
+            Trend::Stable,
+            "Expected stable trend for constant values"
+        );
 
         // Falling trend
         let mut ts3 = MetricsTimeSeries::new();
@@ -366,7 +381,11 @@ mod tests {
             ts3.add_sample(Some(300.0 - (i * 20) as f64), None);
         }
         let trend3 = ts3.cpu_trend();
-        assert_eq!(trend3, Trend::Falling, "Expected falling trend for values 300, 280, 260...");
+        assert_eq!(
+            trend3,
+            Trend::Falling,
+            "Expected falling trend for values 300, 280, 260..."
+        );
     }
 
     #[test]
@@ -402,7 +421,11 @@ mod tests {
         let mut ts1 = MetricsTimeSeries::new();
         ts1.add_sample(Some(100.0), None);
         ts1.add_sample(Some(200.0), None);
-        assert_eq!(ts1.cpu_trend(), Trend::Unknown, "Should be Unknown with only 2 samples");
+        assert_eq!(
+            ts1.cpu_trend(),
+            Trend::Unknown,
+            "Should be Unknown with only 2 samples"
+        );
 
         // Test with values starting from 0 (division by zero case)
         let mut ts2 = MetricsTimeSeries::new();
@@ -417,6 +440,10 @@ mod tests {
         for _ in 0..12 {
             ts3.add_sample(Some(0.0), None);
         }
-        assert_eq!(ts3.cpu_trend(), Trend::Stable, "Should be stable with all zeros");
+        assert_eq!(
+            ts3.cpu_trend(),
+            Trend::Stable,
+            "Should be stable with all zeros"
+        );
     }
 }

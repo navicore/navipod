@@ -6,7 +6,7 @@ use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client};
 
-use super::{client::new, USER_AGENT};
+use super::{USER_AGENT, client::new};
 
 /// # Errors
 ///

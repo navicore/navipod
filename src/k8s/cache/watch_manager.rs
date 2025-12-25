@@ -11,7 +11,7 @@ use super::config::{
 use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
-use crate::k8s::{client, USER_AGENT};
+use crate::k8s::{USER_AGENT, client};
 use k8s_openapi::api::apps::v1::ReplicaSet;
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
@@ -332,7 +332,7 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
     ) -> Result<()> {
-        use futures::{pin_mut, TryStreamExt};
+        use futures::{TryStreamExt, pin_mut};
 
         let pods: Api<Pod> = Api::namespaced(client, &namespace);
         let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
@@ -382,7 +382,7 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
     ) -> Result<()> {
-        use futures::{pin_mut, TryStreamExt};
+        use futures::{TryStreamExt, pin_mut};
 
         let replicasets: Api<ReplicaSet> = Api::namespaced(client, &namespace);
         let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
@@ -429,7 +429,7 @@ impl WatchManager {
         invalidation_tx: mpsc::Sender<InvalidationEvent>,
         namespace: String,
     ) -> Result<()> {
-        use futures::{pin_mut, TryStreamExt};
+        use futures::{TryStreamExt, pin_mut};
 
         let events: Api<Event> = Api::namespaced(client, &namespace);
         let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
@@ -508,13 +508,28 @@ pub struct WatchManagerHandle {
 }
 
 impl WatchManagerHandle {
-    /// Shutdown all watch manager tasks
+    /// Shutdown all watch manager tasks (consuming self)
     pub fn shutdown(self) {
         info!(
             "🛑 Shutting down {} watch manager tasks",
             self.task_handles.len()
         );
         for (i, handle) in self.task_handles.into_iter().enumerate() {
+            if !handle.is_finished() {
+                debug!("Aborting watch task {}", i);
+                handle.abort();
+            }
+        }
+        info!("✅ Watch manager shutdown complete");
+    }
+
+    /// Shutdown all watch manager tasks (in-place, for namespace switching)
+    pub fn shutdown_in_place(&mut self) {
+        info!(
+            "🛑 Shutting down {} watch manager tasks (in-place)",
+            self.task_handles.len()
+        );
+        for (i, handle) in self.task_handles.drain(..).enumerate() {
             if !handle.is_finished() {
                 debug!("Aborting watch task {}", i);
                 handle.abort();

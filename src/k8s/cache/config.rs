@@ -73,12 +73,36 @@ impl Default for PredictiveCacheConfig {
 
 /// Validate configuration constants at compile time
 const _: () = {
-    assert!(MAX_WATCH_RESTARTS > 0, "MAX_WATCH_RESTARTS must be greater than 0");
-    assert!(MAX_BACKOFF_SECONDS > 0, "MAX_BACKOFF_SECONDS must be greater than 0");
-    assert!(INITIAL_BACKOFF_SECONDS > 0, "INITIAL_BACKOFF_SECONDS must be greater than 0");
-    assert!(WATCH_TIMEOUT_SECONDS > 0, "WATCH_TIMEOUT_SECONDS must be greater than 0");
-    assert!(INVALIDATION_CHANNEL_CAPACITY > 0, "INVALIDATION_CHANNEL_CAPACITY must be greater than 0");
-    assert!(DEFAULT_CACHE_SIZE_MB > 0, "DEFAULT_CACHE_SIZE_MB must be greater than 0");
-    assert!(DEFAULT_CONCURRENT_FETCHERS > 0, "DEFAULT_CONCURRENT_FETCHERS must be greater than 0");
-    assert!(RESTART_DELAY_SECONDS > 0, "RESTART_DELAY_SECONDS must be greater than 0");
+    assert!(
+        MAX_WATCH_RESTARTS > 0,
+        "MAX_WATCH_RESTARTS must be greater than 0"
+    );
+    assert!(
+        MAX_BACKOFF_SECONDS > 0,
+        "MAX_BACKOFF_SECONDS must be greater than 0"
+    );
+    assert!(
+        INITIAL_BACKOFF_SECONDS > 0,
+        "INITIAL_BACKOFF_SECONDS must be greater than 0"
+    );
+    assert!(
+        WATCH_TIMEOUT_SECONDS > 0,
+        "WATCH_TIMEOUT_SECONDS must be greater than 0"
+    );
+    assert!(
+        INVALIDATION_CHANNEL_CAPACITY > 0,
+        "INVALIDATION_CHANNEL_CAPACITY must be greater than 0"
+    );
+    assert!(
+        DEFAULT_CACHE_SIZE_MB > 0,
+        "DEFAULT_CACHE_SIZE_MB must be greater than 0"
+    );
+    assert!(
+        DEFAULT_CONCURRENT_FETCHERS > 0,
+        "DEFAULT_CONCURRENT_FETCHERS must be greater than 0"
+    );
+    assert!(
+        RESTART_DELAY_SECONDS > 0,
+        "RESTART_DELAY_SECONDS must be greater than 0"
+    );
 };

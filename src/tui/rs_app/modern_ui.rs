@@ -1,100 +1,123 @@
+use crate::cache_manager;
 use crate::tui::rs_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
 use crate::tui::yaml_editor;
-use crate::cache_manager;
 use ratatui::prelude::*;
-use ratatui::widgets::{
-    Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, 
-    ScrollbarOrientation, Wrap
-};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{
+    Block, Borders, Clear, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, Wrap,
+};
 
 /// Modern card-based UI for `ReplicaSet` view
 pub fn ui(f: &mut Frame, app: &mut App) {
     let theme = NaviTheme::default();
-    
+
     // Set the main background to ensure consistent theming
-    let main_bg = Block::default()
-        .style(Style::default().bg(theme.bg_primary));
+    let main_bg = Block::default().style(Style::default().bg(theme.bg_primary));
     f.render_widget(main_bg, f.area());
-    
+
     // Main layout: header, content, footer
     let main_chunks = Layout::vertical([
-        Constraint::Length(UiConstants::HEADER_HEIGHT),  // Header
-        Constraint::Min(0),     // Content (flexible)
-        Constraint::Length(UiConstants::FOOTER_HEIGHT),  // Footer
-    ]).split(f.area());
-    
+        Constraint::Length(UiConstants::HEADER_HEIGHT), // Header
+        Constraint::Min(0),                             // Content (flexible)
+        Constraint::Length(UiConstants::FOOTER_HEIGHT), // Footer
+    ])
+    .split(f.area());
+
     // Check current activity status directly (not from app state)
     let has_network_activity = cache_manager::has_network_activity();
     let has_blocking_activity = cache_manager::has_blocking_activity();
-    render_header(f, app, main_chunks[0], &theme, has_network_activity, has_blocking_activity);
+    render_header(
+        f,
+        app,
+        main_chunks[0],
+        &theme,
+        has_network_activity,
+        has_blocking_activity,
+    );
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
-    
+
     // Render YAML editor overlay if active
     yaml_editor::render_yaml_editor(f, &app.base.yaml_editor);
-    
+
     // Handle overlays
     if app.get_show_filter_edit() {
         render_filter_modal(f, app, &theme);
     }
 }
 
-fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_network_activity: bool, has_blocking_activity: bool) {
+fn render_header(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    theme: &NaviTheme,
+    has_network_activity: bool,
+    has_blocking_activity: bool,
+) {
     let header_chunks = Layout::horizontal([
-        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH),  // Icon + Title
-        Constraint::Min(0),      // Namespace info (flexible)
-        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH),  // Status/Actions
-    ]).split(area);
-    
+        Constraint::Length(UiConstants::ICON_COLUMN_WIDTH), // Icon + Title
+        Constraint::Min(0),                                 // Namespace info (flexible)
+        Constraint::Length(UiConstants::ACTIONS_COLUMN_WIDTH), // Status/Actions
+    ])
+    .split(area);
+
     // Title with icon
     let title_text = format!("{} ReplicaSets", Symbols::REPLICASET);
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(title, header_chunks[0]);
-    
+
     // Namespace context
-    let namespace_text = format!("namespace: default • {} items", app.get_items().len());
+    let current_ns = cache_manager::get_current_namespace_or_default();
+    let namespace_text = format!("namespace: {current_ns} • {} items", app.get_items().len());
     let namespace = Paragraph::new(namespace_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(namespace, header_chunks[1]);
-    
+
     // Actions/shortcuts with colored activity indicator
     let actions_text = if has_blocking_activity {
         // Red spinner for blocking operations (cache misses)
         vec![
-            Span::styled(format!("{} ", Symbols::FETCH_ACTIVITY), 
-                        Style::default().fg(theme.error)),
-            Span::styled("f: filter • y: yaml • c: colors • q: quit", 
-                        theme.text_style(TextType::Caption))
+            Span::styled(
+                format!("{} ", Symbols::FETCH_ACTIVITY),
+                Style::default().fg(theme.error),
+            ),
+            Span::styled(
+                "f: filter • y: yaml • c: colors • q: quit",
+                theme.text_style(TextType::Caption),
+            ),
         ]
     } else if has_network_activity {
-        // Blue spinner for background operations 
+        // Blue spinner for background operations
         vec![
-            Span::styled(format!("{} ", Symbols::FETCH_ACTIVITY), 
-                        Style::default().fg(theme.info)),
-            Span::styled("f: filter • y: yaml • c: colors • q: quit", 
-                        theme.text_style(TextType::Caption))
+            Span::styled(
+                format!("{} ", Symbols::FETCH_ACTIVITY),
+                Style::default().fg(theme.info),
+            ),
+            Span::styled(
+                "f: filter • y: yaml • c: colors • q: quit",
+                theme.text_style(TextType::Caption),
+            ),
         ]
     } else {
         // No spinner
-        vec![
-            Span::styled("f: filter • y: yaml • c: colors • q: quit", 
-                        theme.text_style(TextType::Caption))
-        ]
+        vec![Span::styled(
+            "f: filter • y: yaml • c: colors • q: quit",
+            theme.text_style(TextType::Caption),
+        )]
     };
-    
+
     let actions = Paragraph::new(Line::from(actions_text))
         .style(Style::default().bg(theme.bg_primary))
         .alignment(Alignment::Right)
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(actions, header_chunks[2]);
-    
+
     // Divider line
     let divider = Block::default()
         .borders(Borders::BOTTOM)
@@ -105,10 +128,11 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme, has_ne
 
 fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let content_chunks = Layout::horizontal([
-        Constraint::Min(60),    // Main list (flexible, minimum 60 cols)
+        Constraint::Min(60), // Main list (flexible, minimum 60 cols)
         Constraint::Length(UiConstants::DETAILS_PANEL_WIDTH), // Details panel
-    ]).split(area);
-    
+    ])
+    .split(area);
+
     render_replicaset_list(f, app, content_chunks[0], theme);
     render_details_panel(f, app, content_chunks[1], theme);
 }
@@ -116,16 +140,19 @@ fn render_content(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
 fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
     let selected_index = app.base.state.selected().unwrap_or(0);
-    
-    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
-    
+
+    let content_area = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
+
     let filter = app.get_filter();
     let title = if filter.is_empty() {
         "ReplicaSets".to_string()
     } else {
         format!("ReplicaSets (filtered: {filter})")
     };
-    
+
     // Render container block
     let block = Block::default()
         .title(title)
@@ -134,8 +161,8 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
         .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
         .style(Style::default().bg(theme.bg_secondary));
     f.render_widget(block, area);
-    
-    // Calculate scroll offset to keep selected item visible  
+
+    // Calculate scroll offset to keep selected item visible
     let card_height = UiConstants::CARD_HEIGHT;
     let visible_cards = content_area.height / card_height;
     let selected_index_u16 = UiHelpers::safe_cast_u16(selected_index, "rs_scroll_offset");
@@ -144,14 +171,14 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
     } else {
         0
     };
-    
+
     // Render individual cards with scroll offset
     let mut y_offset = 0;
     for (index, rs) in items.iter().enumerate().skip(scroll_offset as usize) {
         if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
-        
+
         let is_selected = index == selected_index;
         let card_area = Rect {
             x: content_area.x,
@@ -159,19 +186,25 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
             width: content_area.width,
             height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
-        
+
         render_replicaset_card(f, rs, card_area, is_selected, theme);
         y_offset += UiConstants::CARD_HEIGHT;
     }
-    
+
     // Render scrollbar
     render_list_scrollbar(f, app, area, theme);
 }
 
-fn render_replicaset_card(f: &mut Frame, rs: &crate::tui::data::Rs, area: Rect, is_selected: bool, theme: &NaviTheme) {
+fn render_replicaset_card(
+    f: &mut Frame,
+    rs: &crate::tui::data::Rs,
+    area: Rect,
+    is_selected: bool,
+    theme: &NaviTheme,
+) {
     // Parse replica counts from the "P" field (e.g., "2/3")
     let (current_replicas, desired_replicas) = parse_replica_count(&rs.pods);
-    
+
     // Determine status based on replica count
     let status = if current_replicas == desired_replicas && desired_replicas > 0 {
         ResourceStatus::Running
@@ -182,20 +215,24 @@ fn render_replicaset_card(f: &mut Frame, rs: &crate::tui::data::Rs, area: Rect, 
     } else {
         ResourceStatus::Running
     };
-    
+
     let (status_symbol, status_style) = UiHelpers::status_indicator(status, theme);
-    
+
     // Create health-based progress bar for replica status
     let (progress_bar, progress_color) = if desired_replicas > 0 {
         UiHelpers::health_progress_bar(current_replicas, desired_replicas, 10, theme)
     } else {
         ("──────────".to_string(), theme.text_muted)
     };
-    
+
     // Card background - ensure proper contrast
-    let card_bg = if is_selected { theme.bg_accent } else { theme.bg_tertiary };
+    let card_bg = if is_selected {
+        theme.bg_accent
+    } else {
+        theme.bg_tertiary
+    };
     let selection_indicator = if is_selected { "▶ " } else { "  " };
-    
+
     // Create card content as multi-line text
     let content = vec![
         Line::from(vec![
@@ -208,43 +245,48 @@ fn render_replicaset_card(f: &mut Frame, rs: &crate::tui::data::Rs, area: Rect, 
         ]),
         Line::from(vec![
             Span::raw("    Replicas: "),
-            Span::styled(format!("{current_replicas}/{desired_replicas} "), 
-                        theme.text_style(TextType::Body)),
+            Span::styled(
+                format!("{current_replicas}/{desired_replicas} "),
+                theme.text_style(TextType::Body),
+            ),
             Span::styled(progress_bar, Style::default().fg(progress_color)),
         ]),
         Line::from(vec![
             Span::raw("    "),
-            Span::styled(truncate_text(&rs.description, 50), theme.text_style(TextType::Caption)),
+            Span::styled(
+                truncate_text(&rs.description, 50),
+                theme.text_style(TextType::Caption),
+            ),
         ]),
     ];
-    
-    let card = Paragraph::new(content)
-        .style(Style::default().bg(card_bg));
-    
+
+    let card = Paragraph::new(content).style(Style::default().bg(card_bg));
+
     f.render_widget(card, area);
 }
 
 fn render_details_panel(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let detail_chunks = Layout::vertical([
-        Constraint::Min(0),     // Labels section (flexible)
-        Constraint::Length(1),  // Divider
-        Constraint::Min(0),     // Events section (flexible)
-    ]).split(area);
-    
+        Constraint::Min(0),    // Labels section (flexible)
+        Constraint::Length(1), // Divider
+        Constraint::Min(0),    // Events section (flexible)
+    ])
+    .split(area);
+
     render_labels_section(f, app, detail_chunks[0], theme);
-    
+
     // Horizontal divider
     let divider = Block::default()
         .borders(Borders::BOTTOM)
         .border_style(Style::default().fg(theme.divider));
     f.render_widget(divider, detail_chunks[1]);
-    
+
     render_events_section(f, app, detail_chunks[2], theme);
 }
 
 fn render_labels_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let labels = app.get_left_details();
-    
+
     let label_items: Vec<ListItem> = labels
         .iter()
         .map(|(key, value, _)| {
@@ -255,23 +297,22 @@ fn render_labels_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
             ListItem::new(content)
         })
         .collect();
-    
-    let labels_list = List::new(label_items)
-        .block(
-            Block::default()
-                .title(format!("{} Labels", Symbols::BULLET))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
-                .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
-                .style(Style::default().bg(theme.bg_tertiary))
-        );
-    
+
+    let labels_list = List::new(label_items).block(
+        Block::default()
+            .title(format!("{} Labels", Symbols::BULLET))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
+            .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
+            .style(Style::default().bg(theme.bg_tertiary)),
+    );
+
     f.render_widget(labels_list, area);
 }
 
 fn render_events_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviTheme) {
     let events = app.get_event_details();
-    
+
     let event_items: Vec<ListItem> = events
         .iter()
         .map(|(event_type, message, age)| {
@@ -280,50 +321,56 @@ fn render_events_section(f: &mut Frame, app: &mut App, area: Rect, theme: &NaviT
                 "Error" => theme.text_style(TextType::Error),
                 _ => theme.text_style(TextType::Success),
             };
-            
+
             let content = vec![
                 Line::from(vec![
                     Span::styled(event_type, type_style),
                     Span::raw(" "),
-                    Span::styled(age.as_ref().map_or("", |s| s), 
-                               theme.text_style(TextType::Caption)),
+                    Span::styled(
+                        age.as_ref().map_or("", |s| s),
+                        theme.text_style(TextType::Caption),
+                    ),
                 ]),
                 Line::from(vec![
                     Span::raw("  "),
                     Span::styled(truncate_text(message, 35), theme.text_style(TextType::Body)),
                 ]),
             ];
-            
+
             ListItem::new(content)
         })
         .collect();
-    
-    let events_list = List::new(event_items)
-        .block(
-            Block::default()
-                .title(format!("{} Events", Symbols::WARNING))
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
-                .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
-                .style(Style::default().bg(theme.bg_tertiary))
-        );
-    
+
+    let events_list = List::new(event_items).block(
+        Block::default()
+            .title(format!("{} Events", Symbols::WARNING))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.border).bg(theme.bg_tertiary))
+            .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_tertiary))
+            .style(Style::default().bg(theme.bg_tertiary)),
+    );
+
     f.render_widget(events_list, area);
 }
 
 fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
-    let content_area = area.inner(Margin { vertical: 1, horizontal: 1 });
+    let content_area = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
     let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
-    
+
     // Show scrollbar if we have more items than can fit
     if items.len() > visible_cards as usize {
         let selected_index = app.base.state.selected().unwrap_or(0);
-        
+
         // Calculate scrollbar position based on selection
-        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(items.len().saturating_sub(visible_cards as usize))
-            .position(selected_index.saturating_sub(visible_cards as usize / 2));
-        
+        let mut scrollbar_state = ratatui::widgets::ScrollbarState::new(
+            items.len().saturating_sub(visible_cards as usize),
+        )
+        .position(selected_index.saturating_sub(visible_cards as usize / 2));
+
         f.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
@@ -332,7 +379,10 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
                 .end_symbol(Some("↓"))
                 .track_symbol(Some("│"))
                 .thumb_symbol("█"),
-            area.inner(Margin { vertical: 1, horizontal: 0 }),
+            area.inner(Margin {
+                vertical: 1,
+                horizontal: 0,
+            }),
             &mut scrollbar_state,
         );
     }
@@ -347,26 +397,26 @@ fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
             Block::default()
                 .borders(Borders::TOP)
                 .border_style(Style::default().fg(theme.divider).bg(theme.bg_primary))
-                .style(Style::default().bg(theme.bg_primary))
+                .style(Style::default().bg(theme.bg_primary)),
         );
-    
+
     f.render_widget(footer, area);
 }
 
 fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
     let area = f.area();
     let modal_area = centered_rect(60, 20, area);
-    
+
     // Clear background
     f.render_widget(Clear, modal_area);
-    
+
     // Modal content
     let filter_text = if app.get_filter().is_empty() {
         "Enter filter pattern...".to_string()
     } else {
         app.get_filter()
     };
-    
+
     let filter_input = Paragraph::new(filter_text)
         .style(if app.get_filter().is_empty() {
             theme.text_style(TextType::Caption).bg(theme.bg_secondary)
@@ -378,20 +428,25 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
                 .title(format!("{} Filter ReplicaSets", Symbols::CHEVRON_RIGHT))
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.border_focus).bg(theme.bg_secondary).add_modifier(Modifier::BOLD))
-                .style(Style::default().bg(theme.bg_secondary))
+                .border_style(
+                    Style::default()
+                        .fg(theme.border_focus)
+                        .bg(theme.bg_secondary)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .style(Style::default().bg(theme.bg_secondary)),
         )
         .wrap(Wrap { trim: true });
-    
+
     f.render_widget(filter_input, modal_area);
-    
+
     // Set cursor position
     let cursor_pos = Position {
         x: modal_area.x + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "rs cursor position") + 1,
         y: modal_area.y + 1,
     };
     f.set_cursor_position(cursor_pos);
-    
+
     // Help text
     let help_area = Rect {
         x: modal_area.x,
@@ -399,13 +454,13 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
         width: modal_area.width,
         height: 1,
     };
-    
+
     let help_text = "ESC: Cancel • Enter: Apply • Examples: 'web', '(api|frontend)', 'prod.*db'";
     let help = Paragraph::new(help_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
         .block(Block::default().style(Style::default().bg(theme.bg_primary)));
-    
+
     f.render_widget(help, help_area);
 }
 
@@ -432,11 +487,13 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage((100 - percent_y) / 2),
         Constraint::Percentage(percent_y),
         Constraint::Percentage((100 - percent_y) / 2),
-    ]).split(r);
+    ])
+    .split(r);
 
     Layout::horizontal([
         Constraint::Percentage((100 - percent_x) / 2),
         Constraint::Percentage(percent_x),
         Constraint::Percentage((100 - percent_x) / 2),
-    ]).split(popup_layout[1])[1]
+    ])
+    .split(popup_layout[1])[1]
 }

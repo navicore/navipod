@@ -1,5 +1,5 @@
 use crate::tui::data::Filterable;
-use crate::tui::style::{TableColors, ITEM_HEIGHT, PALETTES};
+use crate::tui::style::{ITEM_HEIGHT, PALETTES, TableColors};
 use ratatui::widgets::{Block, Borders, ScrollbarState, TableState};
 use ratatui::{prelude::*, widgets::Paragraph};
 use regex::Regex;
@@ -118,7 +118,7 @@ where
         let pos = self.get_state().selected().unwrap_or(0);
         let len = self.get_filtered_items().len();
         let page_size = 10; // or some configurable page size
-        
+
         if len > 0 {
             let new_pos = (pos + page_size).min(len - 1);
             self.get_state().select(Some(new_pos));
@@ -130,7 +130,7 @@ where
     fn page_backward(&mut self) {
         let pos = self.get_state().selected().unwrap_or(0);
         let page_size = 10; // or some configurable page size
-        
+
         let new_pos = pos.saturating_sub(page_size);
         self.get_state().select(Some(new_pos));
         let new_scroll_state = self.get_scroll_state().position(new_pos * ITEM_HEIGHT);
@@ -141,7 +141,7 @@ where
         let new_color_index = (self.get_color_index() + 1) % PALETTES.len();
         self.set_color_index(new_color_index);
     }
-    
+
     /// Jump to top (vim 'g' for beginning)
     fn jump_to_top(&mut self) {
         if !self.get_filtered_items().is_empty() {
@@ -149,7 +149,7 @@ where
             self.set_scroll_state(self.get_scroll_state().position(0));
         }
     }
-    
+
     /// Jump to bottom (vim 'G')
     fn jump_to_bottom(&mut self) {
         let len = self.get_filtered_items().len();

@@ -178,14 +178,14 @@ impl Cert {
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct ContainerProbe {
-    pub probe_type: String,        // "Liveness", "Readiness", "Startup"
-    pub handler_type: String,      // "HTTP", "TCP", "Exec"
-    pub details: String,           // URL path, port, or command details
-    pub initial_delay: i32,        // Initial delay seconds
-    pub period: i32,               // How often to perform the probe
-    pub timeout: i32,              // Timeout seconds
-    pub failure_threshold: i32,    // Consecutive failures before marking failed
-    pub success_threshold: i32,    // Consecutive successes before marking successful
+    pub probe_type: String,     // "Liveness", "Readiness", "Startup"
+    pub handler_type: String,   // "HTTP", "TCP", "Exec"
+    pub details: String,        // URL path, port, or command details
+    pub initial_delay: i32,     // Initial delay seconds
+    pub period: i32,            // How often to perform the probe
+    pub timeout: i32,           // Timeout seconds
+    pub failure_threshold: i32, // Consecutive failures before marking failed
+    pub success_threshold: i32, // Consecutive successes before marking successful
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -197,7 +197,7 @@ pub struct Container {
     pub ports: String,
     pub envvars: Vec<ContainerEnvVar>,
     pub mounts: Vec<ContainerMount>,
-    pub probes: Vec<ContainerProbe>,  // New field for probe configurations
+    pub probes: Vec<ContainerProbe>, // New field for probe configurations
     pub selectors: Option<BTreeMap<String, String>>,
     pub pod_name: String,
     // Resource limits and usage
@@ -715,6 +715,62 @@ pub fn container_constraint_len_calculator(items: &[Container]) -> (u16, u16, u1
         image_len as u16,
         ports_len as u16,
     )
+}
+
+/// Kubernetes namespace for namespace picker
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct Namespace {
+    pub name: String,
+    pub status: String,
+    pub age: String,
+    pub is_current: bool,
+}
+
+impl Filterable for Namespace {
+    fn filter_by(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
+impl Namespace {
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn status(&self) -> &str {
+        &self.status
+    }
+
+    pub(crate) fn age(&self) -> &str {
+        &self.age
+    }
+
+    pub(crate) const fn is_current(&self) -> bool {
+        self.is_current
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+pub fn namespace_constraint_len_calculator(items: &[Namespace]) -> (u16, u16, u16) {
+    let name_len = items
+        .iter()
+        .map(Namespace::name)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let status_len = items
+        .iter()
+        .map(Namespace::status)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let age_len = items
+        .iter()
+        .map(Namespace::age)
+        .map(UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    (name_len as u16, status_len as u16, age_len as u16)
 }
 
 #[cfg(test)]

@@ -1,17 +1,18 @@
+use crate::cache_manager::get_current_namespace_or_default;
 use crate::error::Result;
 use crate::k8s::events::{format_duration, list_events_for_resource, list_k8sevents};
-use crate::k8s::metrics_client::{fetch_pod_metrics, fetch_node_metrics, create_metrics_lookup};
+use crate::k8s::metrics_client::{create_metrics_lookup, fetch_node_metrics, fetch_pod_metrics};
 use crate::k8s::resources::{format_cpu, format_memory, parse_cpu, parse_memory};
 use crate::k8s::utils::format_label_selector;
 use crate::tui::data::RsPod;
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::core::v1::{Pod, Node};
+use k8s_openapi::api::core::v1::{Node, Pod};
 use kube::Api;
 use kube::api::ListParams;
 use std::collections::{BTreeMap, HashMap};
 use tracing::debug;
 
-use super::{client::new, USER_AGENT};
+use super::{USER_AGENT, client::new};
 
 fn calculate_pod_age(pod: &Pod) -> String {
     pod.metadata.creation_timestamp.as_ref().map_or_else(
@@ -72,7 +73,8 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
     let lp = ListParams::default().labels(&label_selector);
 
     // Fetch all data in parallel to reduce latency
-    let pods_api: Api<Pod> = Api::default_namespaced(client.clone());
+    let namespace = get_current_namespace_or_default();
+    let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let nodes_api: Api<Node> = Api::all(client.clone());
     let node_lp = ListParams::default();
 
@@ -106,7 +108,9 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
     for node in &node_list.items {
         if let Some(node_name) = &node.metadata.name {
             // Get capacity from node spec
-            let (cpu_capacity, mem_capacity) = node.status.as_ref()
+            let (cpu_capacity, mem_capacity) = node
+                .status
+                .as_ref()
                 .and_then(|status| status.capacity.as_ref())
                 .map_or((None, None), |capacity| {
                     let cpu = capacity.get("cpu").and_then(|q| parse_cpu(&q.0));
@@ -115,7 +119,8 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                 });
 
             // Get usage from metrics
-            let (cpu_usage, mem_usage) = node_metrics.iter()
+            let (cpu_usage, mem_usage) = node_metrics
+                .iter()
                 .find(|nm| nm.node_name == *node_name)
                 .map_or((None, None), |nm| (nm.cpu_usage, nm.memory_usage));
 
@@ -126,7 +131,9 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
             };
             #[allow(clippy::cast_precision_loss)]
             let mem_pct = match (mem_usage, mem_capacity) {
-                (Some(usage), Some(capacity)) if capacity > 0 => Some((usage as f64 / capacity as f64) * 100.0),
+                (Some(usage), Some(capacity)) if capacity > 0 => {
+                    Some((usage as f64 / capacity as f64) * 100.0)
+                }
                 _ => None,
             };
 
@@ -168,91 +175,128 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     list_events_for_resource(events.clone(), instance_name).await?;
 
                 // Aggregate resource requests and limits from all containers
-                let (cpu_request, cpu_limit, memory_request, memory_limit) = pod.spec.as_ref().map_or((None, None, None, None), |spec| {
-                    let mut total_cpu_req = 0.0;
-                    let mut total_cpu_lim = 0.0;
-                    let mut total_mem_req = 0u64;
-                    let mut total_mem_lim = 0u64;
-                    let mut has_cpu_req = false;
-                    let mut has_cpu_lim = false;
-                    let mut has_mem_req = false;
-                    let mut has_mem_lim = false;
+                let (cpu_request, cpu_limit, memory_request, memory_limit) =
+                    pod.spec.as_ref().map_or((None, None, None, None), |spec| {
+                        let mut total_cpu_req = 0.0;
+                        let mut total_cpu_lim = 0.0;
+                        let mut total_mem_req = 0u64;
+                        let mut total_mem_lim = 0u64;
+                        let mut has_cpu_req = false;
+                        let mut has_cpu_lim = false;
+                        let mut has_mem_req = false;
+                        let mut has_mem_lim = false;
 
-                    for container in &spec.containers {
-                        if let Some(ref resources) = container.resources {
-                            if let Some(ref requests) = resources.requests {
-                                if let Some(cpu) = requests.get("cpu") {
-                                    if let Some(val) = parse_cpu(&cpu.0) {
-                                        total_cpu_req += val;
-                                        has_cpu_req = true;
+                        for container in &spec.containers {
+                            if let Some(ref resources) = container.resources {
+                                if let Some(ref requests) = resources.requests {
+                                    if let Some(cpu) = requests.get("cpu") {
+                                        if let Some(val) = parse_cpu(&cpu.0) {
+                                            total_cpu_req += val;
+                                            has_cpu_req = true;
+                                        }
+                                    }
+                                    if let Some(mem) = requests.get("memory") {
+                                        if let Some(val) = parse_memory(&mem.0) {
+                                            total_mem_req += val;
+                                            has_mem_req = true;
+                                        }
                                     }
                                 }
-                                if let Some(mem) = requests.get("memory") {
-                                    if let Some(val) = parse_memory(&mem.0) {
-                                        total_mem_req += val;
-                                        has_mem_req = true;
+                                if let Some(ref limits) = resources.limits {
+                                    if let Some(cpu) = limits.get("cpu") {
+                                        if let Some(val) = parse_cpu(&cpu.0) {
+                                            total_cpu_lim += val;
+                                            has_cpu_lim = true;
+                                        }
                                     }
-                                }
-                            }
-                            if let Some(ref limits) = resources.limits {
-                                if let Some(cpu) = limits.get("cpu") {
-                                    if let Some(val) = parse_cpu(&cpu.0) {
-                                        total_cpu_lim += val;
-                                        has_cpu_lim = true;
-                                    }
-                                }
-                                if let Some(mem) = limits.get("memory") {
-                                    if let Some(val) = parse_memory(&mem.0) {
-                                        total_mem_lim += val;
-                                        has_mem_lim = true;
+                                    if let Some(mem) = limits.get("memory") {
+                                        if let Some(val) = parse_memory(&mem.0) {
+                                            total_mem_lim += val;
+                                            has_mem_lim = true;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    (
-                        if has_cpu_req { Some(format_cpu(total_cpu_req)) } else { None },
-                        if has_cpu_lim { Some(format_cpu(total_cpu_lim)) } else { None },
-                        if has_mem_req { Some(format_memory(total_mem_req)) } else { None },
-                        if has_mem_lim { Some(format_memory(total_mem_lim)) } else { None },
-                    )
-                });
+                        (
+                            if has_cpu_req {
+                                Some(format_cpu(total_cpu_req))
+                            } else {
+                                None
+                            },
+                            if has_cpu_lim {
+                                Some(format_cpu(total_cpu_lim))
+                            } else {
+                                None
+                            },
+                            if has_mem_req {
+                                Some(format_memory(total_mem_req))
+                            } else {
+                                None
+                            },
+                            if has_mem_lim {
+                                Some(format_memory(total_mem_lim))
+                            } else {
+                                None
+                            },
+                        )
+                    });
 
                 // Get actual usage from metrics
-                let (cpu_usage, memory_usage) = metrics_lookup.get(instance_name).map_or((None, None), |container_metrics| {
-                    let mut total_cpu_usage = 0.0;
-                    let mut total_mem_usage = 0u64;
-                    let mut has_cpu_usage = false;
-                    let mut has_mem_usage = false;
+                let (cpu_usage, memory_usage) =
+                    metrics_lookup
+                        .get(instance_name)
+                        .map_or((None, None), |container_metrics| {
+                            let mut total_cpu_usage = 0.0;
+                            let mut total_mem_usage = 0u64;
+                            let mut has_cpu_usage = false;
+                            let mut has_mem_usage = false;
 
-                    for metric in container_metrics.values() {
-                        if let Some(cpu) = metric.cpu_usage {
-                            total_cpu_usage += cpu;
-                            has_cpu_usage = true;
-                        }
-                        if let Some(mem) = metric.memory_usage {
-                            total_mem_usage += mem;
-                            has_mem_usage = true;
-                        }
-                    }
+                            for metric in container_metrics.values() {
+                                if let Some(cpu) = metric.cpu_usage {
+                                    total_cpu_usage += cpu;
+                                    has_cpu_usage = true;
+                                }
+                                if let Some(mem) = metric.memory_usage {
+                                    total_mem_usage += mem;
+                                    has_mem_usage = true;
+                                }
+                            }
 
-                    // Record metrics in history for trend visualization
-                    crate::cache_manager::record_pod_metrics(
-                        instance_name,
-                        if has_cpu_usage { Some(total_cpu_usage) } else { None },
-                        if has_mem_usage { Some(total_mem_usage) } else { None },
-                    );
+                            // Record metrics in history for trend visualization
+                            crate::cache_manager::record_pod_metrics(
+                                instance_name,
+                                if has_cpu_usage {
+                                    Some(total_cpu_usage)
+                                } else {
+                                    None
+                                },
+                                if has_mem_usage {
+                                    Some(total_mem_usage)
+                                } else {
+                                    None
+                                },
+                            );
 
-                    (
-                        if has_cpu_usage { Some(format_cpu(total_cpu_usage)) } else { None },
-                        if has_mem_usage { Some(format_memory(total_mem_usage)) } else { None },
-                    )
-                });
+                            (
+                                if has_cpu_usage {
+                                    Some(format_cpu(total_cpu_usage))
+                                } else {
+                                    None
+                                },
+                                if has_mem_usage {
+                                    Some(format_memory(total_mem_usage))
+                                } else {
+                                    None
+                                },
+                            )
+                        });
 
                 // Get node info for this pod
                 let node_name = pod.spec.as_ref().and_then(|spec| spec.node_name.clone());
-                let (node_cpu_percent, node_memory_percent) = node_name.as_ref()
+                let (node_cpu_percent, node_memory_percent) = node_name
+                    .as_ref()
                     .and_then(|name| node_info.get(name))
                     .map_or((None, None), |(cpu, mem)| (Some(*cpu), Some(*mem)));
 

@@ -270,7 +270,7 @@ impl ContainerResources {
                 let limit_str = format_cpu(limit);
                 self.cpu_usage_percent().map_or_else(
                     || format!("{usage_str}/{limit_str}"),
-                    |pct| format!("{usage_str}/{limit_str} [{pct:.0}%]")
+                    |pct| format!("{usage_str}/{limit_str} [{pct:.0}%]"),
                 )
             }
             (Some(usage), None) => format!("{}/∞", format_cpu(usage)),
@@ -288,7 +288,7 @@ impl ContainerResources {
                 let limit_str = format_memory(limit);
                 self.memory_usage_percent().map_or_else(
                     || format!("{usage_str}/{limit_str}"),
-                    |pct| format!("{usage_str}/{limit_str} [{pct:.0}%]")
+                    |pct| format!("{usage_str}/{limit_str} [{pct:.0}%]"),
                 )
             }
             (Some(usage), None) => format!("{}/∞", format_memory(usage)),
@@ -390,7 +390,10 @@ mod tests {
         assert_eq!(determine_status(Some(80.0)), ResourceStatus::Critical);
         assert_eq!(determine_status(Some(65.0)), ResourceStatus::Warning);
         assert_eq!(determine_status(Some(50.0)), ResourceStatus::Healthy);
-        assert_eq!(determine_status(Some(10.0)), ResourceStatus::OverProvisioned);
+        assert_eq!(
+            determine_status(Some(10.0)),
+            ResourceStatus::OverProvisioned
+        );
         assert_eq!(determine_status(None), ResourceStatus::Unknown);
     }
 
@@ -419,23 +422,29 @@ mod tests {
     fn test_aggregate_resources() {
         let mut containers = HashMap::new();
 
-        containers.insert("container1".to_string(), ContainerResources {
-            cpu_request: Some(100.0),
-            cpu_limit: Some(500.0),
-            cpu_usage: Some(250.0),
-            memory_request: Some(128 * 1024 * 1024),
-            memory_limit: Some(512 * 1024 * 1024),
-            memory_usage: Some(256 * 1024 * 1024),
-        });
+        containers.insert(
+            "container1".to_string(),
+            ContainerResources {
+                cpu_request: Some(100.0),
+                cpu_limit: Some(500.0),
+                cpu_usage: Some(250.0),
+                memory_request: Some(128 * 1024 * 1024),
+                memory_limit: Some(512 * 1024 * 1024),
+                memory_usage: Some(256 * 1024 * 1024),
+            },
+        );
 
-        containers.insert("container2".to_string(), ContainerResources {
-            cpu_request: Some(200.0),
-            cpu_limit: Some(1000.0),
-            cpu_usage: Some(500.0),
-            memory_request: Some(256 * 1024 * 1024),
-            memory_limit: Some(1024 * 1024 * 1024),
-            memory_usage: Some(512 * 1024 * 1024),
-        });
+        containers.insert(
+            "container2".to_string(),
+            ContainerResources {
+                cpu_request: Some(200.0),
+                cpu_limit: Some(1000.0),
+                cpu_usage: Some(500.0),
+                memory_request: Some(256 * 1024 * 1024),
+                memory_limit: Some(1024 * 1024 * 1024),
+                memory_usage: Some(512 * 1024 * 1024),
+            },
+        );
 
         let total = aggregate_container_resources(&containers);
 

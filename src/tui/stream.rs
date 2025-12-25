@@ -23,6 +23,8 @@ pub enum Message {
     Log(Vec<data::LogRec>),
     #[allow(dead_code)]
     Event(Vec<data::ResourceEvent>),
+    #[allow(dead_code)]
+    Namespace(Vec<data::Namespace>),
 }
 
 pub fn async_key_events(should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {

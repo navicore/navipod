@@ -5,6 +5,7 @@ pub mod data;
 mod event_app;
 mod ingress_app;
 mod log_app;
+mod namespace_app;
 mod pod_app;
 mod rs_app;
 pub mod sparkline;

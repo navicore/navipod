@@ -1,12 +1,12 @@
+use super::config::{
+    DEFAULT_CONTAINER_TTL_SECS, DEFAULT_EVENT_TTL_SECS, DEFAULT_INGRESS_TTL_SECS,
+    DEFAULT_POD_TTL_SECS, DEFAULT_REPLICASET_TTL_SECS,
+};
 use crate::error::Result;
 use crate::tui::data::{Container, Ingress, Rs, RsPod};
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::time::Duration;
-use super::config::{
-    DEFAULT_REPLICASET_TTL_SECS, DEFAULT_POD_TTL_SECS, DEFAULT_EVENT_TTL_SECS,
-    DEFAULT_CONTAINER_TTL_SECS, DEFAULT_INGRESS_TTL_SECS
-};
 
 #[derive(Debug, Clone, Default)]
 pub struct FetchParams {

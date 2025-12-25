@@ -1,11 +1,10 @@
-use crate::tui::ingress_app::app::App;
+use crate::tui::namespace_app::app::App;
 use crate::tui::table_ui::TuiTableState;
 use crate::tui::theme::{NaviTheme, ResourceStatus, Symbols, TextType, UiConstants, UiHelpers};
-use crate::tui::yaml_editor;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, Wrap};
 
-/// Modern card-based UI for Ingress view with network routing focus
+/// Modern card-based UI for Namespace picker
 pub fn ui(f: &mut Frame, app: &App) {
     let theme = NaviTheme::default();
 
@@ -25,9 +24,6 @@ pub fn ui(f: &mut Frame, app: &App) {
     render_content(f, app, main_chunks[1], &theme);
     render_footer(f, main_chunks[2], &theme);
 
-    // Render YAML editor overlay if active
-    yaml_editor::render_yaml_editor(f, &app.base.yaml_editor);
-
     // Handle overlays
     if app.get_show_filter_edit() {
         render_filter_modal(f, app, &theme);
@@ -43,28 +39,21 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     .split(area);
 
     // Title with icon
-    let title_text = format!("{} Ingress Routes", Symbols::INGRESS);
+    let title_text = format!("{} Select Namespace", Symbols::NAMESPACE);
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));
     f.render_widget(title, header_chunks[0]);
 
-    // Context info (route counts and backend analysis)
-    let routes = app.get_items();
-    let total_count = routes.len();
-    let unique_hosts = routes
-        .iter()
-        .map(super::super::data::Ingress::host)
-        .collect::<std::collections::HashSet<_>>()
-        .len();
-    let unique_backends = routes
-        .iter()
-        .map(super::super::data::Ingress::backend_svc)
-        .collect::<std::collections::HashSet<_>>()
-        .len();
+    // Context info - also show filtered count for debugging
+    let namespaces = app.get_items();
+    let total_count = namespaces.len();
+    let filtered_count = app.get_filtered_items().len();
+    let current = namespaces.iter().find(|ns| ns.is_current);
+    let current_name = current.map_or("none", |ns| ns.name.as_str());
 
     let context_text =
-        format!("{total_count} routes • {unique_hosts} hosts • {unique_backends} backends");
+        format!("{total_count} namespaces ({filtered_count} shown) • current: {current_name}");
 
     let context = Paragraph::new(context_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
@@ -73,7 +62,7 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     f.render_widget(context, header_chunks[1]);
 
     // Actions/shortcuts
-    let actions_text = "f: filter • y: yaml • Enter: certificates • c: colors • q: quit";
+    let actions_text = "/: filter • Enter: select • Esc: cancel • c: colors • q: quit";
     let actions = Paragraph::new(actions_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Right)
@@ -89,10 +78,10 @@ fn render_header(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
 }
 
 fn render_content(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
-    render_ingress_list(f, app, area, theme);
+    render_namespace_list(f, app, area, theme);
 }
 
-fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
+fn render_namespace_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) {
     let items = app.get_filtered_items();
     let selected_index = app.base.state.selected().unwrap_or(0);
 
@@ -103,9 +92,9 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
 
     let filter = app.get_filter();
     let title = if filter.is_empty() {
-        "Network Routes".to_string()
+        "Namespaces".to_string()
     } else {
-        format!("Network Routes (filtered: {filter})")
+        format!("Namespaces (filtered: {filter})")
     };
 
     // Render container block
@@ -120,15 +109,15 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
     // Calculate scroll offset to keep selected item visible
     let visible_cards = content_area.height / UiConstants::CARD_HEIGHT;
     let scroll_offset =
-        if UiHelpers::safe_cast_u16(selected_index, "ingress scroll offset") >= visible_cards {
-            UiHelpers::safe_cast_u16(selected_index, "ingress scroll offset") - visible_cards + 1
+        if UiHelpers::safe_cast_u16(selected_index, "namespace scroll offset") >= visible_cards {
+            UiHelpers::safe_cast_u16(selected_index, "namespace scroll offset") - visible_cards + 1
         } else {
             0
         };
 
-    // Render individual ingress cards with scroll offset
+    // Render individual namespace cards with scroll offset
     let mut y_offset = 0;
-    for (index, ingress) in items.iter().enumerate().skip(scroll_offset as usize) {
+    for (index, namespace) in items.iter().enumerate().skip(scroll_offset as usize) {
         if y_offset + UiConstants::CARD_HEIGHT > content_area.height {
             break; // Don't render beyond visible area
         }
@@ -141,7 +130,7 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
             height: UiConstants::CARD_HEIGHT.min(content_area.height - y_offset),
         };
 
-        render_ingress_card(f, ingress, card_area, is_selected, theme);
+        render_namespace_card(f, namespace, card_area, is_selected, theme);
         y_offset += UiConstants::CARD_HEIGHT;
     }
 
@@ -149,27 +138,16 @@ fn render_ingress_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme) 
     render_list_scrollbar(f, app, area, theme);
 }
 
-fn render_ingress_card(
+fn render_namespace_card(
     f: &mut Frame,
-    ingress: &crate::tui::data::Ingress,
+    namespace: &crate::tui::data::Namespace,
     area: Rect,
     is_selected: bool,
     theme: &NaviTheme,
 ) {
-    // Determine route status based on path and backend configuration
-    let route_status = determine_route_status(ingress);
-    let (status_symbol, status_style) = UiHelpers::status_indicator(route_status, theme);
-
-    // Analyze route configuration
-    let is_secure = ingress.host().starts_with("https://")
-        || ingress.host().contains(".tls")
-        || ingress.port() == "443";
-    let protocol_indicator = if is_secure { "🔒 HTTPS" } else { "🌐 HTTP" };
-    let protocol_style = if is_secure {
-        theme.text_style(TextType::Success)
-    } else {
-        theme.text_style(TextType::Warning)
-    };
+    // Determine namespace status
+    let ns_status = determine_namespace_status(namespace);
+    let (status_symbol, status_style) = UiHelpers::status_indicator(ns_status, theme);
 
     // Card background - ensure proper contrast
     let card_bg = if is_selected {
@@ -179,15 +157,12 @@ fn render_ingress_card(
     };
     let selection_indicator = if is_selected { "▶ " } else { "  " };
 
-    // Create routing flow visualization
-    let host = truncate_text(ingress.host(), 20);
-    let backend = truncate_text(ingress.backend_svc(), 15);
-    let port_suffix = if ingress.port().is_empty() {
-        String::new()
+    // Current namespace indicator
+    let current_indicator = if namespace.is_current {
+        Span::styled(" (current)", theme.text_style(TextType::Success))
     } else {
-        format!(":{}", ingress.port())
+        Span::raw("")
     };
-    let routing_flow = format!("{host} {} {backend} {port_suffix}", Symbols::ARROW_RIGHT);
 
     // Create card content as multi-line text
     let content = vec![
@@ -195,27 +170,29 @@ fn render_ingress_card(
             Span::raw(selection_indicator),
             Span::styled(status_symbol, status_style),
             Span::raw(" "),
-            Span::styled(&ingress.name, theme.text_style(TextType::Title)),
-            Span::raw("  "),
-            Span::styled(protocol_indicator, protocol_style),
-        ]),
-        Line::from(vec![
-            Span::raw("    Route: "),
-            Span::styled(routing_flow, theme.text_style(TextType::Body)),
-        ]),
-        Line::from(vec![
-            Span::raw("    Path: "),
             Span::styled(
-                format!("{} ", ingress.path()),
-                theme.text_style(TextType::Caption),
+                &namespace.name,
+                if namespace.is_current {
+                    theme
+                        .text_style(TextType::Title)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    theme.text_style(TextType::Title)
+                },
             ),
-            Span::raw(" Backend: "),
-            Span::styled(ingress.backend_svc(), theme.text_style(TextType::Body)),
+            current_indicator,
+        ]),
+        Line::from(vec![
+            Span::raw("    Status: "),
+            Span::styled(&namespace.status, status_style),
+            Span::raw("  •  Age: "),
+            Span::styled(&namespace.age, theme.text_style(TextType::Caption)),
         ]),
         Line::from(vec![
             // Add spacing line for card separation
             Span::raw(""),
         ]),
+        Line::from(vec![Span::raw("")]),
     ];
 
     let card = Paragraph::new(content).style(Style::default().bg(card_bg));
@@ -259,7 +236,7 @@ fn render_list_scrollbar(f: &mut Frame, app: &App, area: Rect, theme: &NaviTheme
 }
 
 fn render_footer(f: &mut Frame, area: Rect, theme: &NaviTheme) {
-    let footer_text = "Enter: Check SSL certificates • r: Route details • ↑↓: Navigate • G: Bottom • g: Top • Ctrl+F/B: Page Up/Down";
+    let footer_text = "Enter: Switch to namespace • Esc: Cancel • ↑↓: Navigate • G: Bottom • g: Top • Ctrl+F/B: Page";
     let footer = Paragraph::new(footer_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
@@ -295,7 +272,7 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
         })
         .block(
             Block::default()
-                .title(format!("{} Filter Ingress Routes", Symbols::CHEVRON_RIGHT))
+                .title(format!("{} Filter Namespaces", Symbols::CHEVRON_RIGHT))
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
                 .borders(Borders::ALL)
                 .border_style(
@@ -313,7 +290,7 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
     // Set cursor position
     let cursor_pos = Position {
         x: modal_area.x
-            + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "ingress cursor position")
+            + UiHelpers::safe_cast_u16(app.get_cursor_pos(), "namespace cursor position")
             + 1,
         y: modal_area.y + 1,
     };
@@ -327,7 +304,7 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
         height: 1,
     };
 
-    let help_text = "ESC: Cancel • Enter: Apply • Examples: 'api-*', '.*prod.*', 'web.*service'";
+    let help_text = "ESC: Cancel • Enter: Apply • Examples: 'prod*', '.*dev.*', 'kube-*'";
     let help = Paragraph::new(help_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)
@@ -338,34 +315,12 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
 
 // Helper functions
 
-/// Determine route status based on ingress configuration
-fn determine_route_status(ingress: &crate::tui::data::Ingress) -> ResourceStatus {
-    // Analyze route configuration to determine health
-    let has_host = !ingress.host().is_empty() && ingress.host() != "-";
-    let has_backend = !ingress.backend_svc().is_empty() && ingress.backend_svc() != "-";
-    let has_path = !ingress.path().is_empty() && ingress.path() != "-";
-    let has_port = !ingress.port().is_empty() && ingress.port() != "-";
-
-    // Check for common issues
-    if !has_host || !has_backend {
-        ResourceStatus::Failed // Missing critical routing info
-    } else if !has_path {
-        ResourceStatus::Pending // Missing path configuration  
-    } else if !has_port {
-        ResourceStatus::Unknown // Port might be optional
-    } else if ingress.host().starts_with("https://") || ingress.port() == "443" {
-        ResourceStatus::Running // Secure route configured properly
-    } else {
-        ResourceStatus::Ready // Basic HTTP route configured
-    }
-}
-
-fn truncate_text(text: &str, max_len: usize) -> String {
-    if text.len() <= max_len {
-        text.to_string()
-    } else {
-        let truncated = &text[..max_len.saturating_sub(1)];
-        format!("{truncated}…")
+/// Determine namespace status based on phase
+fn determine_namespace_status(namespace: &crate::tui::data::Namespace) -> ResourceStatus {
+    match namespace.status.as_str() {
+        "Active" => ResourceStatus::Running,
+        "Terminating" => ResourceStatus::Pending,
+        _ => ResourceStatus::Unknown,
     }
 }
 

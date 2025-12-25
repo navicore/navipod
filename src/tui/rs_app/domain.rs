@@ -1,6 +1,6 @@
 use crate::cache_manager;
-use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::k8s::cache::DataRequest;
+use crate::k8s::cache::config::DEFAULT_MAX_PREFETCH_REPLICASETS;
 use crate::tui::common::app_controller::{DomainService, NavigationHandler};
 use crate::tui::data::Rs;
 use crate::tui::ui_loop::Apps;
@@ -32,7 +32,7 @@ impl ReplicaSetDomainService {
     }
 
     /// Triggers prefetch of Pod data for the given `ReplicaSets`
-    /// 
+    ///
     /// This function generates prefetch requests for `Pod` data based on the selectors
     /// from the provided `ReplicaSets`. It respects the configured limits for the number
     /// of `ReplicaSets` to process to avoid overwhelming the system.
@@ -82,10 +82,10 @@ impl DomainService<Rs> for ReplicaSetDomainService {
         // Validate selection is still valid
         if let Some(index) = self.selected_index {
             if index >= self.current_data.len() {
-                self.selected_index = if self.current_data.is_empty() { 
-                    None 
-                } else { 
-                    Some(0) 
+                self.selected_index = if self.current_data.is_empty() {
+                    None
+                } else {
+                    Some(0)
                 };
             }
         }
@@ -112,31 +112,25 @@ impl DomainService<Rs> for ReplicaSetDomainService {
 
     fn execute_action(&mut self, action: &str) -> Result<Option<Apps>, String> {
         match action {
-            "view_pods" => {
-                self.get_selected_replicaset().map_or_else(
-                    || Err("No ReplicaSet selected".into()),
-                    |selected_rs| {
-                        selected_rs.selectors.as_ref().map_or_else(
-                            || Err("No selectors available for selected ReplicaSet".into()),
-                            |selectors| {
-                                Ok(Some(Apps::Pod { 
-                                    app: pod_app::app::App::new(selectors.clone(), Vec::new()) 
-                                }))
-                            }
-                        )
-                    }
-                )
-            }
-            "view_ingress" => {
-                Ok(Some(Apps::Ingress { 
-                    app: ingress_app::app::App::new(Vec::new()) 
-                }))
-            }
-            "view_events" => {
-                Ok(Some(Apps::Event { 
-                    app: event_app::app::App::new() 
-                }))
-            }
+            "view_pods" => self.get_selected_replicaset().map_or_else(
+                || Err("No ReplicaSet selected".into()),
+                |selected_rs| {
+                    selected_rs.selectors.as_ref().map_or_else(
+                        || Err("No selectors available for selected ReplicaSet".into()),
+                        |selectors| {
+                            Ok(Some(Apps::Pod {
+                                app: pod_app::app::App::new(selectors.clone(), Vec::new()),
+                            }))
+                        },
+                    )
+                },
+            ),
+            "view_ingress" => Ok(Some(Apps::Ingress {
+                app: ingress_app::app::App::new(Vec::new()),
+            })),
+            "view_events" => Ok(Some(Apps::Event {
+                app: event_app::app::App::new(),
+            })),
             "refresh" => {
                 // Trigger data refresh - this would be handled by the stream
                 debug!("Refresh action triggered");
@@ -187,14 +181,18 @@ impl NavigationHandler for ReplicaSetNavigationHandler {
     fn get_navigation_targets(&self) -> Vec<String> {
         vec![
             "view_pods".to_string(),
-            "view_ingress".to_string(), 
+            "view_ingress".to_string(),
             "view_events".to_string(),
         ]
     }
 
     fn can_navigate_to(&self, target: &str) -> bool {
         match target {
-            "view_pods" => self.domain_service.borrow().get_selected_replicaset().is_some(),
+            "view_pods" => self
+                .domain_service
+                .borrow()
+                .get_selected_replicaset()
+                .is_some(),
             "view_ingress" | "view_events" => true,
             _ => false,
         }
@@ -216,7 +214,7 @@ mod tests {
     fn test_data_update_validation() {
         let mut service = ReplicaSetDomainService::new();
         let test_data = vec![]; // Empty data should be fine
-        
+
         let result = service.handle_data_update(test_data);
         assert!(result.is_ok());
     }
@@ -225,7 +223,7 @@ mod tests {
     fn test_available_actions() {
         let service = ReplicaSetDomainService::new();
         let actions = service.get_available_actions();
-        
+
         assert!(actions.contains(&"view_pods".to_string()));
         assert!(actions.contains(&"view_yaml".to_string()));
         assert!(actions.contains(&"refresh".to_string()));

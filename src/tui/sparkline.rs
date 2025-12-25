@@ -18,18 +18,18 @@ pub fn render_sparkline(values: &[u8], max_width: Option<usize>) -> String {
     }
 
     // Downsample if needed
-    let display_values = max_width.map_or_else(|| values.to_vec(), |width| {
-        if values.len() > width {
-            downsample(values, width)
-        } else {
-            values.to_vec()
-        }
-    });
+    let display_values = max_width.map_or_else(
+        || values.to_vec(),
+        |width| {
+            if values.len() > width {
+                downsample(values, width)
+            } else {
+                values.to_vec()
+            }
+        },
+    );
 
-    display_values
-        .iter()
-        .map(|&v| value_to_char(v))
-        .collect()
+    display_values.iter().map(|&v| value_to_char(v)).collect()
 }
 
 /// Convert a 0-100 value to a sparkline character
@@ -40,7 +40,11 @@ fn value_to_char(value: u8) -> char {
 }
 
 /// Downsample values to fit within `max_width` by averaging
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
 fn downsample(values: &[u8], target_len: usize) -> Vec<u8> {
     if values.len() <= target_len {
         return values.to_vec();
@@ -154,13 +158,8 @@ mod tests {
 
     #[test]
     fn test_render_resource_with_sparkline() {
-        let result = render_resource_with_sparkline(
-            "250m",
-            "1000m",
-            25.0,
-            &[10, 20, 30, 40, 50],
-            "↗️",
-        );
+        let result =
+            render_resource_with_sparkline("250m", "1000m", 25.0, &[10, 20, 30, 40, 50], "↗️");
         assert!(result.contains("250m/1000m"));
         assert!(result.contains("[25%]"));
         assert!(result.contains("↗️"));

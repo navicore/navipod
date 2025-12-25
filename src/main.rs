@@ -1,6 +1,6 @@
 use clap::{CommandFactory, Parser};
-use clap_complete::{generate, Shell};
-use kube::{config::KubeConfigOptions, Config};
+use clap_complete::{Shell, generate};
+use kube::{Config, config::KubeConfigOptions};
 
 use navipod::k8s::pod_ingress;
 use navipod::k8s::scan::db;

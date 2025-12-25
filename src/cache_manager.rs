@@ -229,56 +229,84 @@ pub fn get_current_namespace_or_default() -> String {
 
 /// Switch to a new namespace at runtime
 ///
-/// This will:
-/// 1. Stop existing watch streams
-/// 2. Clear the cache
-/// 3. Start new watch streams for the new namespace
-/// 4. Update the stored namespace
+/// This function performs an atomic namespace switch with rollback on failure:
+/// 1. Prepare new watch streams for the new namespace (before modifying state)
+/// 2. Atomically stop old watches and swap to new state
+/// 3. Clear stale cache data
+///
+/// # Concurrency Safety
+///
+/// The implementation minimizes the window where state is inconsistent by:
+/// - Preparing the new WatchManager before acquiring the write lock
+/// - Performing the state swap atomically while holding the lock
+/// - Only clearing the cache after the swap is complete
 ///
 /// # Errors
 ///
-/// Returns an error if watch manager initialization fails for the new namespace
+/// Returns an error if:
+/// - Cache or namespace state is not initialized
+/// - Watch manager initialization fails for the new namespace (no state change occurs)
+/// - State lock is poisoned (indicates a prior panic)
 pub async fn switch_namespace(new_namespace: String) -> Result<()> {
     let cache = get_cache().ok_or_else(|| {
-        crate::k8s::cache::errors::already_initialized_error("Cache not initialized")
+        crate::k8s::cache::errors::cache_not_initialized_error("Cache not initialized for namespace switch")
     })?;
 
     let state_lock = NAMESPACE_STATE.get().ok_or_else(|| {
-        crate::k8s::cache::errors::already_initialized_error("Namespace state not initialized")
+        crate::k8s::cache::errors::cache_not_initialized_error("Namespace state not initialized")
     })?;
 
-    // Get old namespace for logging, stop watches
+    // Get old namespace for logging (read-only, brief lock)
     let old_namespace = {
-        let mut state = state_lock.write().map_err(|_| {
-            crate::k8s::cache::errors::already_initialized_error("Namespace state lock poisoned")
+        let state = state_lock.read().map_err(|e| {
+            error!("Namespace state lock poisoned during read: {}", e);
+            crate::k8s::cache::errors::lock_poisoned_error("Namespace state lock poisoned during read")
+        })?;
+        state.namespace.clone()
+    };
+
+    // Skip if already on this namespace
+    if old_namespace == new_namespace {
+        info!("Already on namespace '{}', skipping switch", new_namespace);
+        return Ok(());
+    }
+
+    info!("Switching namespace from '{}' to '{}'", old_namespace, new_namespace);
+
+    // 1. PREPARE: Create new watch manager BEFORE modifying any state
+    // This ensures if creation fails, we haven't touched the existing state
+    let watch_manager = match WatchManager::new(cache.clone(), new_namespace.clone()).await {
+        Ok(wm) => wm,
+        Err(e) => {
+            error!("Failed to create watch manager for namespace '{}': {}", new_namespace, e);
+            // No state was modified, safe to return error
+            return Err(e);
+        }
+    };
+    let (new_shutdown_tx, new_handle) = watch_manager.start();
+
+    // 2. SWAP: Atomically stop old watches and install new state
+    // Hold the write lock for the entire swap operation
+    {
+        let mut state = state_lock.write().map_err(|e| {
+            error!("Namespace state lock poisoned during write: {}", e);
+            // New watch manager will be dropped, cleaning up its resources
+            crate::k8s::cache::errors::lock_poisoned_error("Namespace state lock poisoned during switch")
         })?;
 
-        let old_ns = state.namespace.clone();
-        info!("Switching namespace from '{}' to '{}'", old_ns, new_namespace);
-
-        // 1. Stop existing watches
+        // Stop existing watches
         let _ = state.watcher_shutdown_tx.try_send(());
         state.watcher_handle.shutdown_in_place();
 
-        old_ns
-    };
-
-    // 2. Clear cache (all namespace-scoped data is now stale)
-    cache.clear().await;
-
-    // 3. Start new watches for new namespace
-    let watch_manager = WatchManager::new(cache, new_namespace.clone()).await?;
-    let (new_shutdown_tx, new_handle) = watch_manager.start();
-
-    // 4. Update state with new namespace and watchers
-    {
-        let mut state = state_lock.write().map_err(|_| {
-            crate::k8s::cache::errors::already_initialized_error("Namespace state lock poisoned")
-        })?;
+        // Install new state atomically
         state.namespace = new_namespace.clone();
         state.watcher_shutdown_tx = new_shutdown_tx;
         state.watcher_handle = new_handle;
     }
+    // Lock released here - state is now consistent with new namespace
+
+    // 3. CLEANUP: Clear stale cache data (safe to do outside lock)
+    cache.clear().await;
 
     info!(
         "Successfully switched namespace from '{}' to '{}'",

@@ -557,17 +557,8 @@ impl WatchManagerHandle {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_cache_key_parsing() {
-        let _ = rustls::crypto::CryptoProvider::install_default(
-            rustls::crypto::ring::default_provider(),
-        );
-
-        let cache = Arc::new(K8sDataCache::new(10));
-        let _manager = WatchManager::new(cache, "default".to_string())
-            .await
-            .unwrap();
-
+    #[test]
+    fn test_cache_key_parsing() {
         // Test ReplicaSet key parsing
         let rs_key = "rs:all:{}";
         let parsed = WatchManager::parse_cache_key(rs_key);

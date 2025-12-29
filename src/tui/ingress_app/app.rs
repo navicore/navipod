@@ -158,7 +158,9 @@ impl AppBehavior for ingress_app::app::App {
         Ok(app_holder)
     }
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
-        terminal.draw(|f| super::modern_ui::ui(f, self))?; // Use modern UI
+        terminal
+            .draw(|f| super::modern_ui::ui(f, self))
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(())
     }
 

@@ -22,7 +22,7 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 crossterm = "0.29"
 csv = "1.4"
-derive_more = { version="2.1.0", features = ["from"] }
+derive_more = { version="2.1.1", features = ["from"] }
 fakeit = "1.4"
 futures = "0.3"
 hyper = "1.7.0"

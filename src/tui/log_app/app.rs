@@ -63,7 +63,7 @@ impl AppBehavior for log_app::app::App {
     fn draw_ui<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<(), std::io::Error> {
         terminal
             .draw(|f| super::modern_ui::ui(f, self))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
         Ok(())
     }
 
@@ -205,7 +205,7 @@ impl App {
     }
 
     /// Enable/disable auto-tailing
-    pub fn set_tailing(&mut self, enabled: bool) {
+    pub const fn set_tailing(&mut self, enabled: bool) {
         self.is_tailing = enabled;
         if enabled {
             // Jump to bottom when re-enabling tailing
@@ -215,7 +215,7 @@ impl App {
     }
 
     /// Jump to the bottom of the logs
-    pub fn jump_to_bottom(&mut self) {
+    pub const fn jump_to_bottom(&mut self) {
         if !self.base.items.is_empty() {
             let last_index = self.base.items.len() - 1;
             self.base.state.select(Some(last_index));

@@ -1,3 +1,7 @@
+[![Publish-Crate](https://github.com/navicore/navipod/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/navipod/actions/workflows/publish-crates.yml)
+[![CI](https://github.com/navicore/navipod/actions/workflows/rust.yml/badge.svg)](https://github.com/navicore/navipod/actions/workflows/rust.yml)
+[![Dependabot Updates](https://github.com/navicore/navipod/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/navipod/actions/workflows/dependabot/dependabot-updates)
+
 # NaviPod
 
 A comprehensive TUI and CLI for inspecting containers in Kubernetes clusters.

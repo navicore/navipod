@@ -1,3 +1,5 @@
+[![Crates.io](https://img.shields.io/crates/v/navipod.svg)](https://crates.io/crates/navipod)
+[![Docs.rs](https://docs.rs/navipod/badge.svg)](https://docs.rs/navipod)
 [![Publish-Crate](https://github.com/navicore/navipod/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/navipod/actions/workflows/publish-crates.yml)
 [![CI](https://github.com/navicore/navipod/actions/workflows/rust.yml/badge.svg)](https://github.com/navicore/navipod/actions/workflows/rust.yml)
 [![Dependabot Updates](https://github.com/navicore/navipod/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/navicore/navipod/actions/workflows/dependabot/dependabot-updates)

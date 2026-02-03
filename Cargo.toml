@@ -16,7 +16,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.100"
 async-trait = "0.1"
-bytes = "1.11.0"
+bytes = "1.11.1"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"

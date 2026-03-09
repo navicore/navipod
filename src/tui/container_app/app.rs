@@ -261,16 +261,16 @@ impl App {
                 match self.focused_panel {
                     FocusedPanel::ContainerList => {
                         // Enter logs for selected container
-                        if let Some(selection) = self.get_selected_item() {
-                            if let Some(selectors) = selection.selectors.clone() {
-                                return Apps::Log {
-                                    app: log_app::app::App::new(
-                                        selectors,
-                                        selection.pod_name.clone(),
-                                        selection.name.clone(),
-                                    ),
-                                };
-                            }
+                        if let Some(selection) = self.get_selected_item()
+                            && let Some(selectors) = selection.selectors.clone()
+                        {
+                            return Apps::Log {
+                                app: log_app::app::App::new(
+                                    selectors,
+                                    selection.pod_name.clone(),
+                                    selection.name.clone(),
+                                ),
+                            };
                         }
                     }
                     FocusedPanel::Probes => {

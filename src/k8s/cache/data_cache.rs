@@ -176,11 +176,9 @@ impl K8sDataCache {
                 matches_all
             };
 
-            if matches {
-                if let Some(entry) = cache.get_mut(&key) {
-                    entry.metadata.mark_stale();
-                    debug!("🔄 Pattern invalidated: {}", key);
-                }
+            if matches && let Some(entry) = cache.get_mut(&key) {
+                entry.metadata.mark_stale();
+                debug!("🔄 Pattern invalidated: {}", key);
             }
         }
     }
@@ -221,16 +219,18 @@ impl K8sDataCache {
     }
 
     async fn evict_lru(&self) -> Result<()> {
-        let mut cache = self.cache.write().await;
-
-        // Find the least recently used entry
-        let oldest_key = cache
+        // Find the least recently used entry key
+        let oldest_key = self
+            .cache
+            .read()
+            .await
             .iter()
             .min_by_key(|(_, entry)| entry.metadata.last_updated)
             .map(|(key, _)| key.clone());
 
         if let Some(key) = oldest_key {
-            if let Some(entry) = cache.remove(&key) {
+            let removed = self.cache.write().await.remove(&key);
+            if let Some(entry) = removed {
                 let mut current_size = self.current_memory_bytes.write().await;
                 *current_size = current_size.saturating_sub(entry.size_bytes);
             }

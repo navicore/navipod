@@ -94,14 +94,13 @@ impl AppBehavior for pod_app::app::App {
                 .await;
 
             // Start with cached data if available
-            if let Some(FetchResult::Pods(cached_items)) = cache.get(&request).await {
-                if !cached_items.is_empty()
-                    && cached_items != initial_items
-                    && tx.send(Message::Pod(cached_items)).await.is_err()
-                {
-                    cache.subscription_manager.unsubscribe(&sub_id).await;
-                    return;
-                }
+            if let Some(FetchResult::Pods(cached_items)) = cache.get(&request).await
+                && !cached_items.is_empty()
+                && cached_items != initial_items
+                && tx.send(Message::Pod(cached_items)).await.is_err()
+            {
+                cache.subscription_manager.unsubscribe(&sub_id).await;
+                return;
             }
 
             // Listen for cache updates or fallback to direct polling
@@ -109,11 +108,10 @@ impl AppBehavior for pod_app::app::App {
                 tokio::select! {
                  // Try to get updates from cache first
                  update = cache_rx.recv() => {
-                     if let Some(crate::k8s::cache::DataUpdate::Pods(new_items)) = update {
-                         if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Pod(new_items)).await.is_err() {
+                     if let Some(crate::k8s::cache::DataUpdate::Pods(new_items)) = update
+                         && !new_items.is_empty() && new_items != initial_items && tx.send(Message::Pod(new_items)).await.is_err() {
                              break;
                          }
-                     }
                  }
                  // Fallback: check cache periodically and refresh if needed
                  () = sleep(Duration::from_millis(POLL_MS)) => {
@@ -206,28 +204,28 @@ impl App {
 
     /// Switch to Ingress app
     async fn handle_switch_to_ingress(&mut self) -> Result<Option<Apps>, io::Error> {
-        if let Some(selection) = self.get_selected_item() {
-            if let Some(selector) = selection.selectors.clone() {
-                let data_vec = create_ingress_data_vec(selector.clone()).await?;
-                debug!("changing app from pod to ingress...");
-                return Ok(Some(Apps::Ingress {
-                    app: ingress_app::app::App::new(data_vec),
-                }));
-            }
+        if let Some(selection) = self.get_selected_item()
+            && let Some(selector) = selection.selectors.clone()
+        {
+            let data_vec = create_ingress_data_vec(selector.clone()).await?;
+            debug!("changing app from pod to ingress...");
+            return Ok(Some(Apps::Ingress {
+                app: ingress_app::app::App::new(data_vec),
+            }));
         }
         Ok(Some(Apps::Pod { app: self.clone() }))
     }
 
     /// Switch to Containers app
     async fn handle_switch_to_containers(&mut self) -> Result<Option<Apps>, io::Error> {
-        if let Some(selection) = self.get_selected_item() {
-            if let Some(selectors) = selection.selectors.clone() {
-                let data_vec = create_container_data_vec(selectors, selection.name.clone()).await?;
-                debug!("changing app from pod to container...");
-                return Ok(Some(Apps::Container {
-                    app: container_app::app::App::new(data_vec),
-                }));
-            }
+        if let Some(selection) = self.get_selected_item()
+            && let Some(selectors) = selection.selectors.clone()
+        {
+            let data_vec = create_container_data_vec(selectors, selection.name.clone()).await?;
+            debug!("changing app from pod to container...");
+            return Ok(Some(Apps::Container {
+                app: container_app::app::App::new(data_vec),
+            }));
         }
         Ok(Some(Apps::Pod { app: self.clone() }))
     }
@@ -249,38 +247,38 @@ impl App {
 
     /// Handle YAML editor events
     fn handle_yaml_editor_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        if let Message::Key(Event::Key(key)) = event {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Esc, Up};
+        if let Message::Key(Event::Key(key)) = event
+            && key.kind == KeyEventKind::Press
+        {
+            use KeyCode::{Char, Down, Esc, Up};
 
-                match key.code {
-                    Char('q') | Esc => {
-                        // Close YAML editor
-                        self.base.yaml_editor.close();
-                    }
-                    Char('r' | 'R') => {
-                        // Refresh YAML content
-                        self.base.yaml_editor.fetch_yaml()?;
-                    }
-                    // Removed mode switching - now read-only viewer only
-                    Up | Char('k') => {
-                        // Scroll up (vim-like navigation)
-                        self.base.yaml_editor.scroll_up(3);
-                    }
-                    Down | Char('j') => {
-                        // Scroll down (vim-like navigation)
-                        self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
-                    }
-                    Char('G') => {
-                        // Jump to bottom (vim motion)
-                        self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
-                    }
-                    Char('g') => {
-                        // Jump to top (vim motion)
-                        self.base.yaml_editor.jump_to_top();
-                    }
-                    _ => {}
+            match key.code {
+                Char('q') | Esc => {
+                    // Close YAML editor
+                    self.base.yaml_editor.close();
                 }
+                Char('r' | 'R') => {
+                    // Refresh YAML content
+                    self.base.yaml_editor.fetch_yaml()?;
+                }
+                // Removed mode switching - now read-only viewer only
+                Up | Char('k') => {
+                    // Scroll up (vim-like navigation)
+                    self.base.yaml_editor.scroll_up(3);
+                }
+                Down | Char('j') => {
+                    // Scroll down (vim-like navigation)
+                    self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
+                }
+                Char('G') => {
+                    // Jump to bottom (vim motion)
+                    self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
+                }
+                Char('g') => {
+                    // Jump to top (vim motion)
+                    self.base.yaml_editor.jump_to_top();
+                }
+                _ => {}
             }
         }
 
@@ -307,7 +305,7 @@ impl App {
             pod.selectors.clone().map_or_else(Vec::new, |labels| {
                 let mut r = Vec::new();
                 for (name, value) in &labels {
-                    r.push((name.to_string(), value.to_string(), None));
+                    r.push((name.clone(), value.clone(), None));
                 }
                 r
             })

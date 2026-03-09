@@ -17,7 +17,11 @@ fn calculate_rs_age(rs: &ReplicaSet) -> String {
     rs.metadata.creation_timestamp.as_ref().map_or_else(
         || "Unk".to_string(),
         |creation_timestamp| {
-            let ts: DateTime<_> = creation_timestamp.0;
+            let ts: DateTime<Utc> = DateTime::from_timestamp(
+                creation_timestamp.0.as_second(),
+                creation_timestamp.0.subsec_nanosecond().cast_unsigned(),
+            )
+            .unwrap_or_default();
             let now = Utc::now();
             let duration = now.signed_duration_since(ts);
             format_duration(duration)
@@ -75,10 +79,10 @@ pub async fn list_replicas() -> Result<Vec<Rs>> {
                 let resource_events =
                     list_events_for_resource(events.clone(), &f_instance_name).await?;
                 let data = Rs {
-                    name: instance_name.to_string(),
+                    name: instance_name.clone(),
                     pods: format!("{ready_replicas}/{desired_replicas}"),
                     age,
-                    description: kind.to_string(),
+                    description: kind.clone(),
                     owner: owner_name.to_owned(),
                     selectors,
                     events: resource_events,

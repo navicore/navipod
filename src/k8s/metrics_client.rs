@@ -242,19 +242,19 @@ pub fn create_metrics_lookup(
 /// CPU in millicores, or None if parsing fails
 fn parse_cpu_quantity(quantity_str: &str) -> Option<f64> {
     // Handle nanocores (e.g., "12345678n")
-    if let Some(nanos_str) = quantity_str.strip_suffix('n') {
-        if let Ok(nanos) = nanos_str.parse::<f64>() {
-            // Convert nanocores to millicores: nanocores / 1_000_000
-            return Some(nanos / 1_000_000.0);
-        }
+    if let Some(nanos_str) = quantity_str.strip_suffix('n')
+        && let Ok(nanos) = nanos_str.parse::<f64>()
+    {
+        // Convert nanocores to millicores: nanocores / 1_000_000
+        return Some(nanos / 1_000_000.0);
     }
 
     // Handle microcores (e.g., "12345u")
-    if let Some(micros_str) = quantity_str.strip_suffix('u') {
-        if let Ok(micros) = micros_str.parse::<f64>() {
-            // Convert microcores to millicores: microcores / 1000
-            return Some(micros / 1000.0);
-        }
+    if let Some(micros_str) = quantity_str.strip_suffix('u')
+        && let Ok(micros) = micros_str.parse::<f64>()
+    {
+        // Convert microcores to millicores: microcores / 1000
+        return Some(micros / 1000.0);
     }
 
     // Handle millicores (e.g., "123m")

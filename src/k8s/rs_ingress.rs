@@ -130,7 +130,7 @@ pub(crate) fn get_rs_ingress_info(
             name: ingress_name.to_string(),
             host: host.unwrap_or("").to_string(),
             path: path_txt,
-            backend_svc: backend_service_name.name.to_string(),
+            backend_svc: backend_service_name.name.clone(),
             port: port_txt,
         })
     } else {

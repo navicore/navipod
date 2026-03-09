@@ -81,12 +81,11 @@ impl YamlEditor {
             return Ok(());
         }
 
-        if let Some(namespace) = &self.namespace {
-            if !Self::is_safe_kubectl_arg(namespace) {
-                self.error_message =
-                    Some("Invalid namespace: contains unsafe characters".to_string());
-                return Ok(());
-            }
+        if let Some(namespace) = &self.namespace
+            && !Self::is_safe_kubectl_arg(namespace)
+        {
+            self.error_message = Some("Invalid namespace: contains unsafe characters".to_string());
+            return Ok(());
         }
 
         let mut cmd = Command::new("kubectl");

@@ -322,8 +322,8 @@ fn render_block_with_title_and_details(
                 background_color,
                 foreground_color,
                 *chunk,
-                formatted_name.to_string(),
-                value.to_string(),
+                formatted_name.clone(),
+                value.clone(),
                 age.clone(),
             );
         }

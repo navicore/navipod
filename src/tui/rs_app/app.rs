@@ -94,17 +94,16 @@ impl AppBehavior for App {
                 cache_manager::start_blocking_operation();
                 let fetch_result = list_replicas().await;
                 cache_manager::end_blocking_operation();
-                if let Ok(new_items) = fetch_result {
-                    if !new_items.is_empty() {
-                        // Store in cache
-                        let cached = FetchResult::ReplicaSets(new_items.clone());
-                        let _ = cache.put(&request, cached).await;
-                        ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE")
-                            .await;
-                        if tx.send(Message::Rs(new_items)).await.is_err() {
-                            cache.subscription_manager.unsubscribe(&sub_id).await;
-                            return;
-                        }
+                if let Ok(new_items) = fetch_result
+                    && !new_items.is_empty()
+                {
+                    // Store in cache
+                    let cached = FetchResult::ReplicaSets(new_items.clone());
+                    let _ = cache.put(&request, cached).await;
+                    ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE").await;
+                    if tx.send(Message::Rs(new_items)).await.is_err() {
+                        cache.subscription_manager.unsubscribe(&sub_id).await;
+                        return;
                     }
                 }
             }
@@ -159,11 +158,10 @@ impl AppBehavior for App {
                              Err(_e) => {
 
                                  // Still try to use stale cache data
-                                 if let Some(FetchResult::ReplicaSets(stale_items)) = cache.get_or_mark_stale(&request).await {
-                                     if !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Rs(stale_items)).await.is_err() {
+                                 if let Some(FetchResult::ReplicaSets(stale_items)) = cache.get_or_mark_stale(&request).await
+                                     && !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Rs(stale_items)).await.is_err() {
                                          break;
                                      }
-                                 }
                              }
                          }
                      }
@@ -316,14 +314,14 @@ impl App {
 
     /// Switch to Ingress app
     async fn handle_switch_to_ingress(&mut self) -> Result<Option<Apps>, io::Error> {
-        if let Some(selection) = self.get_selected_item() {
-            if let Some(selector) = selection.selectors.clone() {
-                let data_vec = create_ingress_data_vec(selector.clone()).await?;
-                debug!("changing app from rs to ingress...");
-                return Ok(Some(Apps::Ingress {
-                    app: ingress_app::app::App::new(data_vec),
-                }));
-            }
+        if let Some(selection) = self.get_selected_item()
+            && let Some(selector) = selection.selectors.clone()
+        {
+            let data_vec = create_ingress_data_vec(selector.clone()).await?;
+            debug!("changing app from rs to ingress...");
+            return Ok(Some(Apps::Ingress {
+                app: ingress_app::app::App::new(data_vec),
+            }));
         }
         Ok(Some(Apps::Rs { app: self.clone() }))
     }
@@ -340,14 +338,14 @@ impl App {
 
     /// Switch to Pods app
     fn handle_switch_to_pods(&mut self) -> Apps {
-        if let Some(selection) = self.get_selected_item() {
-            if let Some(selectors) = selection.selectors.clone() {
-                let data_vec = vec![];
-                debug!("changing app from rs to pod...");
-                return Apps::Pod {
-                    app: pod_app::app::App::new(selectors, data_vec),
-                };
-            }
+        if let Some(selection) = self.get_selected_item()
+            && let Some(selectors) = selection.selectors.clone()
+        {
+            let data_vec = vec![];
+            debug!("changing app from rs to pod...");
+            return Apps::Pod {
+                app: pod_app::app::App::new(selectors, data_vec),
+            };
         }
         Apps::Rs { app: self.clone() }
     }
@@ -407,7 +405,7 @@ impl App {
             pod.selectors.clone().map_or_else(Vec::new, |labels| {
                 let mut r = Vec::new();
                 for (name, value) in &labels {
-                    r.push((name.to_string(), value.to_string(), None));
+                    r.push((name.clone(), value.clone(), None));
                 }
                 r
             })
@@ -416,38 +414,38 @@ impl App {
 
     /// Handle YAML editor events
     fn handle_yaml_editor_event(&mut self, event: &Message) -> Result<Option<Apps>, io::Error> {
-        if let Message::Key(Event::Key(key)) = event {
-            if key.kind == KeyEventKind::Press {
-                use KeyCode::{Char, Down, Esc, Up};
+        if let Message::Key(Event::Key(key)) = event
+            && key.kind == KeyEventKind::Press
+        {
+            use KeyCode::{Char, Down, Esc, Up};
 
-                match key.code {
-                    Char('q') | Esc => {
-                        // Close YAML editor
-                        self.base.yaml_editor.close();
-                    }
-                    Char('r' | 'R') => {
-                        // Refresh YAML content
-                        self.base.yaml_editor.fetch_yaml()?;
-                    }
-                    // Removed mode switching - now read-only viewer only
-                    Up | Char('k') => {
-                        // Scroll up (vim-like navigation)
-                        self.base.yaml_editor.scroll_up(3);
-                    }
-                    Down | Char('j') => {
-                        // Scroll down (vim-like navigation)
-                        self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
-                    }
-                    Char('G') => {
-                        // Jump to bottom (vim motion)
-                        self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
-                    }
-                    Char('g') => {
-                        // Jump to top (vim motion)
-                        self.base.yaml_editor.jump_to_top();
-                    }
-                    _ => {}
+            match key.code {
+                Char('q') | Esc => {
+                    // Close YAML editor
+                    self.base.yaml_editor.close();
                 }
+                Char('r' | 'R') => {
+                    // Refresh YAML content
+                    self.base.yaml_editor.fetch_yaml()?;
+                }
+                // Removed mode switching - now read-only viewer only
+                Up | Char('k') => {
+                    // Scroll up (vim-like navigation)
+                    self.base.yaml_editor.scroll_up(3);
+                }
+                Down | Char('j') => {
+                    // Scroll down (vim-like navigation)
+                    self.base.yaml_editor.scroll_down(3, None); // Use dynamic height calculation
+                }
+                Char('G') => {
+                    // Jump to bottom (vim motion)
+                    self.base.yaml_editor.jump_to_bottom(None); // Use dynamic height calculation
+                }
+                Char('g') => {
+                    // Jump to top (vim motion)
+                    self.base.yaml_editor.jump_to_top();
+                }
+                _ => {}
             }
         }
 

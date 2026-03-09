@@ -64,19 +64,19 @@ impl StreamFactory {
                 .await;
 
             // Start with cached data if available
-            if let Some(fetch_result) = cache.get(&request).await {
-                if let Some(cached_items) = extractor(fetch_result) {
-                    if !cached_items.is_empty() && cached_items != initial_data {
-                        // Trigger prefetch if configured
-                        if let Some(prefetch_fn) = prefetch_trigger.as_ref() {
-                            prefetch_fn(&cached_items, "INITIAL").await;
-                        }
+            if let Some(fetch_result) = cache.get(&request).await
+                && let Some(cached_items) = extractor(fetch_result)
+                && !cached_items.is_empty()
+                && cached_items != initial_data
+            {
+                // Trigger prefetch if configured
+                if let Some(prefetch_fn) = prefetch_trigger.as_ref() {
+                    prefetch_fn(&cached_items, "INITIAL").await;
+                }
 
-                        if tx.send(message_constructor(cached_items)).await.is_err() {
-                            cache.subscription_manager.unsubscribe(&sub_id).await;
-                            return;
-                        }
-                    }
+                if tx.send(message_constructor(cached_items)).await.is_err() {
+                    cache.subscription_manager.unsubscribe(&sub_id).await;
+                    return;
                 }
             }
 
@@ -91,9 +91,9 @@ impl StreamFactory {
                             debug!("Received cache update: {:?}", data_update);
                             // For now, we'll trigger a cache check since we can't easily
                             // extract the data generically from DataUpdate
-                            if let Some(fetch_result) = cache.get(&request).await {
-                                if let Some(new_items) = extractor(fetch_result) {
-                                    if !new_items.is_empty() && new_items != initial_data {
+                            if let Some(fetch_result) = cache.get(&request).await
+                                && let Some(new_items) = extractor(fetch_result)
+                                    && !new_items.is_empty() && new_items != initial_data {
                                         // Trigger prefetch if configured
                                         if let Some(prefetch_fn) = prefetch_trigger.as_ref() {
                                             prefetch_fn(&new_items, "UPDATE").await;
@@ -103,8 +103,6 @@ impl StreamFactory {
                                             break;
                                         }
                                     }
-                                }
-                            }
                         }
                     }
                     // Fallback: check cache periodically and refresh if needed
@@ -124,13 +122,11 @@ impl StreamFactory {
                             }
                         } else {
                             // Cache miss - try stale data while background fetcher works
-                            if let Some(fetch_result) = cache.get_or_mark_stale(&request).await {
-                                if let Some(stale_items) = extractor(fetch_result) {
-                                    if !stale_items.is_empty() && stale_items != initial_data && tx.send(message_constructor(stale_items)).await.is_err() {
+                            if let Some(fetch_result) = cache.get_or_mark_stale(&request).await
+                                && let Some(stale_items) = extractor(fetch_result)
+                                    && !stale_items.is_empty() && stale_items != initial_data && tx.send(message_constructor(stale_items)).await.is_err() {
                                         break;
                                     }
-                                }
-                            }
                         }
                     }
                 }

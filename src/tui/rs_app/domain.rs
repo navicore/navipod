@@ -80,14 +80,14 @@ impl DomainService<Rs> for ReplicaSetDomainService {
     fn handle_data_update(&mut self, data: Vec<Rs>) -> Result<(), String> {
         self.current_data = data;
         // Validate selection is still valid
-        if let Some(index) = self.selected_index {
-            if index >= self.current_data.len() {
-                self.selected_index = if self.current_data.is_empty() {
-                    None
-                } else {
-                    Some(0)
-                };
-            }
+        if let Some(index) = self.selected_index
+            && index >= self.current_data.len()
+        {
+            self.selected_index = if self.current_data.is_empty() {
+                None
+            } else {
+                Some(0)
+            };
         }
         Ok(())
     }

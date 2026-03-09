@@ -450,10 +450,10 @@ pub fn get_metrics_history() -> Option<&'static Arc<RwLock<MetricsHistoryStore>>
 
 /// Record pod metrics in history
 pub fn record_pod_metrics(pod_name: &str, cpu_millis: Option<f64>, memory_bytes: Option<u64>) {
-    if let Some(store) = METRICS_HISTORY.get() {
-        if let Ok(mut history) = store.write() {
-            history.record_pod_metrics(pod_name, cpu_millis, memory_bytes);
-        }
+    if let Some(store) = METRICS_HISTORY.get()
+        && let Ok(mut history) = store.write()
+    {
+        history.record_pod_metrics(pod_name, cpu_millis, memory_bytes);
     }
 }
 
@@ -464,10 +464,10 @@ pub fn record_container_metrics(
     cpu_millis: Option<f64>,
     memory_bytes: Option<u64>,
 ) {
-    if let Some(store) = METRICS_HISTORY.get() {
-        if let Ok(mut history) = store.write() {
-            history.record_container_metrics(pod_name, container_name, cpu_millis, memory_bytes);
-        }
+    if let Some(store) = METRICS_HISTORY.get()
+        && let Ok(mut history) = store.write()
+    {
+        history.record_container_metrics(pod_name, container_name, cpu_millis, memory_bytes);
     }
 }
 
@@ -482,18 +482,18 @@ pub async fn shutdown_cache() {
     }
 
     // Shutdown watch manager via namespace state
-    if let Some(state_lock) = NAMESPACE_STATE.get() {
-        if let Ok(state) = state_lock.read() {
-            let _ = state.watcher_shutdown_tx.try_send(());
-            info!(
-                "Watch manager shutdown requested (namespace: {})",
-                state.namespace
-            );
-            info!(
-                "Watch manager has {} active tasks that will be cleaned up via shutdown signal",
-                state.watcher_handle.task_count()
-            );
-        }
+    if let Some(state_lock) = NAMESPACE_STATE.get()
+        && let Ok(state) = state_lock.read()
+    {
+        let _ = state.watcher_shutdown_tx.try_send(());
+        info!(
+            "Watch manager shutdown requested (namespace: {})",
+            state.namespace
+        );
+        info!(
+            "Watch manager has {} active tasks that will be cleaned up via shutdown signal",
+            state.watcher_handle.task_count()
+        );
     }
 
     if let Some(cleanup_shutdown_tx) = METRICS_CLEANUP_SHUTDOWN_TX.get() {

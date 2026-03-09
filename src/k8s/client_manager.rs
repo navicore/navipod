@@ -215,33 +215,30 @@ mod tests {
 
     #[test]
     fn test_should_refresh_client() {
-        use kube::error::ErrorResponse;
+        use kube::core::Status;
 
         // Test 401 error should trigger refresh
-        let auth_error = kube::Error::Api(ErrorResponse {
-            status: "Failure".to_string(),
-            message: "Unauthorized".to_string(),
-            reason: "Unauthorized".to_string(),
-            code: 401,
-        });
+        let auth_error = kube::Error::Api(
+            Status::failure("Unauthorized", "Unauthorized")
+                .with_code(401)
+                .boxed(),
+        );
         assert!(should_refresh_client(&auth_error));
 
         // Test 403 error should trigger refresh
-        let forbidden_error = kube::Error::Api(ErrorResponse {
-            status: "Failure".to_string(),
-            message: "Forbidden".to_string(),
-            reason: "Forbidden".to_string(),
-            code: 403,
-        });
+        let forbidden_error = kube::Error::Api(
+            Status::failure("Forbidden", "Forbidden")
+                .with_code(403)
+                .boxed(),
+        );
         assert!(should_refresh_client(&forbidden_error));
 
         // Test other errors should not trigger refresh
-        let not_found_error = kube::Error::Api(ErrorResponse {
-            status: "Failure".to_string(),
-            message: "Not Found".to_string(),
-            reason: "NotFound".to_string(),
-            code: 404,
-        });
+        let not_found_error = kube::Error::Api(
+            Status::failure("Not Found", "NotFound")
+                .with_code(404)
+                .boxed(),
+        );
         assert!(!should_refresh_client(&not_found_error));
     }
 }

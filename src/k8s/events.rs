@@ -8,10 +8,15 @@ use kube::{Api, Client};
 
 use chrono::{DateTime, Duration, Utc};
 
+fn timestamp_to_chrono(ts: &k8s_openapi::jiff::Timestamp) -> DateTime<Utc> {
+    DateTime::from_timestamp(ts.as_second(), ts.subsec_nanosecond().cast_unsigned())
+        .unwrap_or_default()
+}
+
 fn calculate_event_age(event_time: Option<&Time>) -> String {
     event_time.map_or_else(String::new, |time| {
         let now = Utc::now();
-        let event_datetime: DateTime<Utc> = time.0;
+        let event_datetime = timestamp_to_chrono(&time.0);
         let duration = now.signed_duration_since(event_datetime);
         format_duration(duration)
     })
@@ -60,8 +65,12 @@ pub async fn list_k8sevents(client: Client) -> Result<Vec<Event>, kube::Error> {
     unfiltered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
-            .map_or(fallback_time, |t| t.0)
-            .cmp(&a.last_timestamp.clone().map_or(fallback_time, |t| t.0))
+            .map_or(fallback_time, |t| timestamp_to_chrono(&t.0))
+            .cmp(
+                &a.last_timestamp
+                    .clone()
+                    .map_or(fallback_time, |t| timestamp_to_chrono(&t.0)),
+            )
     });
 
     Ok(unfiltered_events)
@@ -85,8 +94,12 @@ pub async fn list_all() -> NvResult<Vec<ResourceEvent>> {
     unfiltered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
-            .map_or(fallback_time, |t| t.0)
-            .cmp(&a.last_timestamp.clone().map_or(fallback_time, |t| t.0))
+            .map_or(fallback_time, |t| timestamp_to_chrono(&t.0))
+            .cmp(
+                &a.last_timestamp
+                    .clone()
+                    .map_or(fallback_time, |t| timestamp_to_chrono(&t.0)),
+            )
     });
 
     let mut resource_events: Vec<ResourceEvent> = unfiltered_events
@@ -128,8 +141,12 @@ pub async fn list_events_for_resource(
     filtered_events.sort_by(|a, b| {
         b.last_timestamp
             .clone()
-            .map_or(fallback_time, |t| t.0)
-            .cmp(&a.last_timestamp.clone().map_or(fallback_time, |t| t.0))
+            .map_or(fallback_time, |t| timestamp_to_chrono(&t.0))
+            .cmp(
+                &a.last_timestamp
+                    .clone()
+                    .map_or(fallback_time, |t| timestamp_to_chrono(&t.0)),
+            )
     });
 
     let mut resource_events: Vec<ResourceEvent> = filtered_events

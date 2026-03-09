@@ -18,7 +18,11 @@ fn calculate_pod_age(pod: &Pod) -> String {
     pod.metadata.creation_timestamp.as_ref().map_or_else(
         || "Unk".to_string(),
         |creation_timestamp| {
-            let ts: DateTime<_> = creation_timestamp.0;
+            let ts: DateTime<Utc> = DateTime::from_timestamp(
+                creation_timestamp.0.as_second(),
+                creation_timestamp.0.subsec_nanosecond().cast_unsigned(),
+            )
+            .unwrap_or_default();
             let now = Utc::now();
             let duration = now.signed_duration_since(ts);
             format_duration(duration)
@@ -33,26 +37,26 @@ fn get_pod_state(pod: &Pod) -> String {
     }
 
     // Then proceed to check the pod's status as before
-    if let Some(status) = &pod.status {
-        if let Some(phase) = &status.phase {
-            return match phase.as_str() {
-                "Pending" => "Pending".to_string(),
-                "Running" => {
-                    if status.conditions.as_ref().is_some_and(|conds| {
-                        conds
-                            .iter()
-                            .any(|c| c.type_ == "Ready" && c.status == "True")
-                    }) {
-                        "Running".to_string()
-                    } else {
-                        "Starting".to_string() // This might be a more accurate state for non-ready running pods
-                    }
+    if let Some(status) = &pod.status
+        && let Some(phase) = &status.phase
+    {
+        return match phase.as_str() {
+            "Pending" => "Pending".to_string(),
+            "Running" => {
+                if status.conditions.as_ref().is_some_and(|conds| {
+                    conds
+                        .iter()
+                        .any(|c| c.type_ == "Ready" && c.status == "True")
+                }) {
+                    "Running".to_string()
+                } else {
+                    "Starting".to_string() // This might be a more accurate state for non-ready running pods
                 }
-                "Succeeded" => "Succeeded".to_string(),
-                "Failed" => "Failed".to_string(),
-                _ => "Unknown".to_string(),
-            };
-        }
+            }
+            "Succeeded" => "Succeeded".to_string(),
+            "Failed" => "Failed".to_string(),
+            _ => "Unknown".to_string(),
+        };
     }
 
     "Unknown".to_string()
@@ -189,31 +193,31 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                         for container in &spec.containers {
                             if let Some(ref resources) = container.resources {
                                 if let Some(ref requests) = resources.requests {
-                                    if let Some(cpu) = requests.get("cpu") {
-                                        if let Some(val) = parse_cpu(&cpu.0) {
-                                            total_cpu_req += val;
-                                            has_cpu_req = true;
-                                        }
+                                    if let Some(cpu) = requests.get("cpu")
+                                        && let Some(val) = parse_cpu(&cpu.0)
+                                    {
+                                        total_cpu_req += val;
+                                        has_cpu_req = true;
                                     }
-                                    if let Some(mem) = requests.get("memory") {
-                                        if let Some(val) = parse_memory(&mem.0) {
-                                            total_mem_req += val;
-                                            has_mem_req = true;
-                                        }
+                                    if let Some(mem) = requests.get("memory")
+                                        && let Some(val) = parse_memory(&mem.0)
+                                    {
+                                        total_mem_req += val;
+                                        has_mem_req = true;
                                     }
                                 }
                                 if let Some(ref limits) = resources.limits {
-                                    if let Some(cpu) = limits.get("cpu") {
-                                        if let Some(val) = parse_cpu(&cpu.0) {
-                                            total_cpu_lim += val;
-                                            has_cpu_lim = true;
-                                        }
+                                    if let Some(cpu) = limits.get("cpu")
+                                        && let Some(val) = parse_cpu(&cpu.0)
+                                    {
+                                        total_cpu_lim += val;
+                                        has_cpu_lim = true;
                                     }
-                                    if let Some(mem) = limits.get("memory") {
-                                        if let Some(val) = parse_memory(&mem.0) {
-                                            total_mem_lim += val;
-                                            has_mem_lim = true;
-                                        }
+                                    if let Some(mem) = limits.get("memory")
+                                        && let Some(val) = parse_memory(&mem.0)
+                                    {
+                                        total_mem_lim += val;
+                                        has_mem_lim = true;
                                     }
                                 }
                             }
@@ -301,9 +305,9 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
                     .map_or((None, None), |(cpu, mem)| (Some(*cpu), Some(*mem)));
 
                 let data = RsPod {
-                    name: instance_name.to_string(),
-                    status: status.to_string(),
-                    description: kind.to_string(),
+                    name: instance_name.clone(),
+                    status: status.clone(),
+                    description: kind.clone(),
                     age,
                     containers: format!("{actual_container_count}/{desired_container_count}"),
                     selectors,

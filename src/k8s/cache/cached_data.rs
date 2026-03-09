@@ -61,11 +61,7 @@ impl<T> CachedData<T> {
 
     pub fn time_until_expiry(&self) -> Option<Duration> {
         let elapsed = self.last_updated.elapsed();
-        if elapsed < self.ttl {
-            Some(self.ttl - elapsed)
-        } else {
-            None
-        }
+        self.ttl.checked_sub(elapsed)
     }
 }
 

@@ -612,17 +612,17 @@ fn calculate_resource_percentage(
     match (usage_str, limit_str) {
         (Some(usage), Some(limit)) => {
             // Try CPU parsing first
-            if let (Some(usage_val), Some(limit_val)) = (parse_cpu(usage), parse_cpu(limit)) {
-                if limit_val > 0.0 {
-                    return Some((usage_val / limit_val) * 100.0);
-                }
+            if let (Some(usage_val), Some(limit_val)) = (parse_cpu(usage), parse_cpu(limit))
+                && limit_val > 0.0
+            {
+                return Some((usage_val / limit_val) * 100.0);
             }
             // Try memory parsing
             #[allow(clippy::cast_precision_loss)]
-            if let (Some(usage_val), Some(limit_val)) = (parse_memory(usage), parse_memory(limit)) {
-                if limit_val > 0 {
-                    return Some((usage_val as f64 / limit_val as f64) * 100.0);
-                }
+            if let (Some(usage_val), Some(limit_val)) = (parse_memory(usage), parse_memory(limit))
+                && limit_val > 0
+            {
+                return Some((usage_val as f64 / limit_val as f64) * 100.0);
             }
             None
         }

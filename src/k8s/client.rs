@@ -6,19 +6,13 @@ use std::env;
 use tracing::{debug, warn};
 
 /// Controls how invalid user-agent headers are handled
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum HeaderValidationMode {
     /// Log warning and continue with default (production mode)
+    #[default]
     Lenient,
     /// Return error on invalid headers (development/testing mode)
     Strict,
-}
-
-impl Default for HeaderValidationMode {
-    fn default() -> Self {
-        // Default to lenient mode for backward compatibility
-        Self::Lenient
-    }
 }
 
 /// Helper function to add user-agent header to Kubernetes config

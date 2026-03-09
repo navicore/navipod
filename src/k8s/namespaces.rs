@@ -15,7 +15,11 @@ fn calculate_namespace_age(ns: &K8sNamespace) -> String {
     ns.metadata.creation_timestamp.as_ref().map_or_else(
         || "Unk".to_string(),
         |creation_timestamp| {
-            let ts: DateTime<_> = creation_timestamp.0;
+            let ts: DateTime<Utc> = DateTime::from_timestamp(
+                creation_timestamp.0.as_second(),
+                creation_timestamp.0.subsec_nanosecond().cast_unsigned(),
+            )
+            .unwrap_or_default();
             let now = Utc::now();
             let duration = now.signed_duration_since(ts);
             format_duration(duration)

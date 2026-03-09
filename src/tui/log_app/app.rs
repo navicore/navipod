@@ -346,12 +346,12 @@ impl App {
             }
             Enter => {
                 // Show detail popup for selected log entry
-                if let Some(selected) = self.base.state.selected() {
-                    if let Some(log_entry) = self.base.items.get(selected) {
-                        self.selected_log_detail = Some(log_entry.clone());
-                        self.show_detail_popup = true;
-                        self.detail_popup_scroll = 0;
-                    }
+                if let Some(selected) = self.base.state.selected()
+                    && let Some(log_entry) = self.base.items.get(selected)
+                {
+                    self.selected_log_detail = Some(log_entry.clone());
+                    self.show_detail_popup = true;
+                    self.detail_popup_scroll = 0;
                 }
                 Apps::Log { app: self.clone() }
             }
@@ -429,12 +429,11 @@ impl App {
     fn handle_filter_edit_event(&mut self, event: &Message) -> Apps {
         match event {
             Message::Key(Event::Key(key)) => {
-                if key.kind == KeyEventKind::Press {
-                    if let Some(app) =
+                if key.kind == KeyEventKind::Press
+                    && let Some(app) =
                         handle_filter_editing_keys(self, key, |app| Apps::Log { app })
-                    {
-                        return app;
-                    }
+                {
+                    return app;
                 }
                 Apps::Log { app: self.clone() }
             }

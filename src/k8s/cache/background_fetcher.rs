@@ -376,12 +376,12 @@ impl BackgroundFetcher {
                 }
             }
             DataRequest::Custom { .. } => Err(crate::error::Error::Kube(kube::Error::Api(
-                kube::error::ErrorResponse {
-                    status: "CustomNotImplemented".to_string(),
-                    message: "Custom fetchers not yet implemented".to_string(),
-                    reason: "NotImplemented".to_string(),
-                    code: 501,
-                },
+                kube::core::Status::failure(
+                    "Custom fetchers not yet implemented",
+                    "NotImplemented",
+                )
+                .with_code(501)
+                .boxed(),
             ))),
         }
     }
@@ -467,12 +467,12 @@ impl BackgroundFetcher {
 
             for request in requests {
                 let cache_key = request.cache_key();
-                if let Some(last_seen) = recent.get(&cache_key) {
-                    if *last_seen > cutoff_time {
-                        dedup_count += 1;
-                        debug!("🔄 DEDUP: Skipping recent request for {}", cache_key);
-                        continue;
-                    }
+                if let Some(last_seen) = recent.get(&cache_key)
+                    && *last_seen > cutoff_time
+                {
+                    dedup_count += 1;
+                    debug!("🔄 DEDUP: Skipping recent request for {}", cache_key);
+                    continue;
                 }
                 recent.insert(cache_key.clone(), now);
                 unique_requests.push(request);

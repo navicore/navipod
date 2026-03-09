@@ -398,11 +398,95 @@ fn process_pod_list(
             .and_then(|status| status.container_statuses.clone())
             .unwrap_or_default();
 
-        if let Some(name) = pod.metadata.name {
-            if name == pod_name.clone() {
-                let container_selectors = pod.metadata.labels;
-                if let Some(spec) = pod.spec {
-                    for container in spec.containers {
+        if let Some(name) = pod.metadata.name
+            && name == pod_name.clone()
+        {
+            let container_selectors = pod.metadata.labels;
+            if let Some(spec) = pod.spec {
+                for container in spec.containers {
+                    // Extract probes first before moving other fields
+                    let mut probes = extract_container_probes(&container);
+
+                    // Add metrics endpoints from pod annotations
+                    if let Some(ref annotations) = pod.metadata.annotations {
+                        let metrics_probes =
+                            extract_metrics_from_annotations(annotations, container.ports.as_ref());
+                        probes.extend(metrics_probes);
+                    }
+
+                    // Extract resource limits and requests
+                    let (cpu_request, cpu_limit, memory_request, memory_limit) =
+                        extract_container_resources(&container);
+
+                    // Get actual usage from metrics for this container
+                    let (cpu_usage, memory_usage) = metrics_lookup
+                        .get(&pod_name)
+                        .and_then(|m| m.get(&container.name))
+                        .map_or((None, None), |container_metrics| {
+                            // Record metrics in history for trend visualization
+                            crate::cache_manager::record_container_metrics(
+                                &pod_name,
+                                &container.name,
+                                container_metrics.cpu_usage,
+                                container_metrics.memory_usage,
+                            );
+
+                            (
+                                container_metrics.cpu_usage.map(format_cpu),
+                                container_metrics.memory_usage.map(format_memory),
+                            )
+                        });
+
+                    let image = container.image.unwrap_or_else(|| "unknown".to_string());
+                    let ports = format_ports(container.ports);
+                    let restarts = container_statuses
+                        .iter()
+                        .find(|cs| cs.name == container.name)
+                        .map_or(0, |cs| cs.restart_count)
+                        .to_string();
+
+                    let volume_mounts = container.volume_mounts;
+                    let mounts: Vec<ContainerMount> = volume_mounts
+                        .unwrap_or_else(Vec::new)
+                        .into_iter()
+                        .map(|vm| ContainerMount {
+                            name: vm.name,
+                            value: vm.mount_path,
+                        })
+                        .collect();
+
+                    let env = container.env;
+                    let envvars: Vec<ContainerEnvVar> = env
+                        .unwrap_or_else(Vec::new)
+                        .into_iter()
+                        .map(|e| ContainerEnvVar {
+                            name: e.name,
+                            value: e.value.unwrap_or_default(),
+                        })
+                        .collect();
+                    let c = Container {
+                        name: container.name,
+                        description: "a pod container".to_string(),
+                        restarts,
+                        image,
+                        ports,
+                        mounts,
+                        envvars,
+                        probes,
+                        selectors: container_selectors.clone(),
+                        pod_name: pod_name.clone(),
+                        cpu_request,
+                        cpu_limit,
+                        cpu_usage,
+                        memory_request,
+                        memory_limit,
+                        memory_usage,
+                    };
+                    container_vec.push(c);
+                }
+
+                if let Some(init_containers) = spec.init_containers {
+                    for container in init_containers {
                         // Extract probes first before moving other fields
                         let mut probes = extract_container_probes(&container);
 
@@ -419,7 +503,7 @@ fn process_pod_list(
                         let (cpu_request, cpu_limit, memory_request, memory_limit) =
                             extract_container_resources(&container);
 
-                        // Get actual usage from metrics for this container
+                        // Get actual usage from metrics for this init container
                         let (cpu_usage, memory_usage) = metrics_lookup
                             .get(&pod_name)
                             .and_then(|m| m.get(&container.name))
@@ -439,7 +523,6 @@ fn process_pod_list(
                             });
 
                         let image = container.image.unwrap_or_else(|| "unknown".to_string());
-                        let ports = format_ports(container.ports);
                         let restarts = container_statuses
                             .iter()
                             .find(|cs| cs.name == container.name)
@@ -467,10 +550,10 @@ fn process_pod_list(
                             .collect();
                         let c = Container {
                             name: container.name,
-                            description: "a pod container".to_string(),
+                            description: "an init container".to_string(), // Distinguish init containers
                             restarts,
                             image,
-                            ports,
+                            ports: String::new(),
                             mounts,
                             envvars,
                             probes,
@@ -484,91 +567,6 @@ fn process_pod_list(
                             memory_usage,
                         };
                         container_vec.push(c);
-                    }
-
-                    if let Some(init_containers) = spec.init_containers {
-                        for container in init_containers {
-                            // Extract probes first before moving other fields
-                            let mut probes = extract_container_probes(&container);
-
-                            // Add metrics endpoints from pod annotations
-                            if let Some(ref annotations) = pod.metadata.annotations {
-                                let metrics_probes = extract_metrics_from_annotations(
-                                    annotations,
-                                    container.ports.as_ref(),
-                                );
-                                probes.extend(metrics_probes);
-                            }
-
-                            // Extract resource limits and requests
-                            let (cpu_request, cpu_limit, memory_request, memory_limit) =
-                                extract_container_resources(&container);
-
-                            // Get actual usage from metrics for this init container
-                            let (cpu_usage, memory_usage) = metrics_lookup
-                                .get(&pod_name)
-                                .and_then(|m| m.get(&container.name))
-                                .map_or((None, None), |container_metrics| {
-                                    // Record metrics in history for trend visualization
-                                    crate::cache_manager::record_container_metrics(
-                                        &pod_name,
-                                        &container.name,
-                                        container_metrics.cpu_usage,
-                                        container_metrics.memory_usage,
-                                    );
-
-                                    (
-                                        container_metrics.cpu_usage.map(format_cpu),
-                                        container_metrics.memory_usage.map(format_memory),
-                                    )
-                                });
-
-                            let image = container.image.unwrap_or_else(|| "unknown".to_string());
-                            let restarts = container_statuses
-                                .iter()
-                                .find(|cs| cs.name == container.name)
-                                .map_or(0, |cs| cs.restart_count)
-                                .to_string();
-
-                            let volume_mounts = container.volume_mounts;
-                            let mounts: Vec<ContainerMount> = volume_mounts
-                                .unwrap_or_else(Vec::new)
-                                .into_iter()
-                                .map(|vm| ContainerMount {
-                                    name: vm.name,
-                                    value: vm.mount_path,
-                                })
-                                .collect();
-
-                            let env = container.env;
-                            let envvars: Vec<ContainerEnvVar> = env
-                                .unwrap_or_else(Vec::new)
-                                .into_iter()
-                                .map(|e| ContainerEnvVar {
-                                    name: e.name,
-                                    value: e.value.unwrap_or_default(),
-                                })
-                                .collect();
-                            let c = Container {
-                                name: container.name,
-                                description: "an init container".to_string(), // Distinguish init containers
-                                restarts,
-                                image,
-                                ports: String::new(),
-                                mounts,
-                                envvars,
-                                probes,
-                                selectors: container_selectors.clone(),
-                                pod_name: pod_name.clone(),
-                                cpu_request,
-                                cpu_limit,
-                                cpu_usage,
-                                memory_request,
-                                memory_limit,
-                                memory_usage,
-                            };
-                            container_vec.push(c);
-                        }
                     }
                 }
             }

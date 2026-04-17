@@ -121,12 +121,14 @@ impl AppBehavior for App {
                     && ds_items.is_empty()
                     && ss_items.is_empty()
                 {
-                    debug!("Workloads stream: cold cache, fetching RS+DS+SS immediately");
+                    debug!("Workloads stream: cold cache, fetching RS+DS+SS in parallel");
                     cache_manager::start_blocking_operation();
-                    let rs_fetch = list_replicas().await.unwrap_or_default();
-                    let ds_fetch = list_daemonsets().await.unwrap_or_default();
-                    let ss_fetch = list_statefulsets().await.unwrap_or_default();
+                    let (rs_res, ds_res, ss_res) =
+                        tokio::join!(list_replicas(), list_daemonsets(), list_statefulsets());
                     cache_manager::end_blocking_operation();
+                    let rs_fetch = rs_res.unwrap_or_default();
+                    let ds_fetch = ds_res.unwrap_or_default();
+                    let ss_fetch = ss_res.unwrap_or_default();
 
                     if !rs_fetch.is_empty() {
                         let _ = cache
@@ -580,5 +582,49 @@ impl App {
         }
 
         Ok(Some(Apps::Rs { app: self.clone() }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rs(name: &str, kind: &str) -> Rs {
+        Rs {
+            name: name.to_string(),
+            owner: String::new(),
+            description: kind.to_string(),
+            age: String::new(),
+            pods: String::new(),
+            selectors: None,
+            events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn merge_workloads_sorts_by_kind_then_name() {
+        let rs_list = vec![rs("web", "ReplicaSet"), rs("api", "ReplicaSet")];
+        let ds_list = vec![rs("kube-proxy", "DaemonSet")];
+        let ss_list = vec![rs("kafka", "StatefulSet"), rs("etcd", "StatefulSet")];
+
+        let merged = merge_workloads(rs_list, ds_list, ss_list);
+
+        let order: Vec<(&str, &str)> = merged
+            .iter()
+            .map(|r| (r.description.as_str(), r.name.as_str()))
+            .collect();
+
+        // DaemonSet < ReplicaSet < StatefulSet (lex order on description),
+        // then by name within each group.
+        assert_eq!(
+            order,
+            vec![
+                ("DaemonSet", "kube-proxy"),
+                ("ReplicaSet", "api"),
+                ("ReplicaSet", "web"),
+                ("StatefulSet", "etcd"),
+                ("StatefulSet", "kafka"),
+            ]
+        );
     }
 }

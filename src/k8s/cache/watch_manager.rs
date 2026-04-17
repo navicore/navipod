@@ -22,6 +22,10 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
+/// Number of resource watch streams managed by `WatchManager`. Keep in sync
+/// with the watchers spawned in `WatchManager::start()`.
+const ACTIVE_WATCHER_COUNT: usize = 5;
+
 /// Represents different types of K8s resources we can watch
 #[derive(Debug, Clone)]
 pub enum WatchedResource {
@@ -69,7 +73,7 @@ impl WatchManager {
         let client = client::new(Some(USER_AGENT)).await?;
         let (invalidation_tx, invalidation_rx) = mpsc::channel(INVALIDATION_CHANNEL_CAPACITY);
         let stats = Arc::new(std::sync::RwLock::new(WatchStats {
-            active_watchers: 5,
+            active_watchers: ACTIVE_WATCHER_COUNT,
             total_invalidations: 0,
             connection_status: WatchConnectionStatus::Connected,
         }));
@@ -646,7 +650,7 @@ impl WatchManager {
     pub fn stats(&self) -> WatchStats {
         self.stats.read().map_or(
             WatchStats {
-                active_watchers: 5,
+                active_watchers: ACTIVE_WATCHER_COUNT,
                 total_invalidations: 0,
                 connection_status: WatchConnectionStatus::Disconnected,
             },

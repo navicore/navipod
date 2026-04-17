@@ -186,3 +186,26 @@ impl Clone for FetchResult {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn statefulset_cache_key_uses_ss_prefix() {
+        let req = DataRequest::StatefulSets {
+            namespace: Some("default".to_string()),
+            labels: BTreeMap::new(),
+        };
+        assert_eq!(req.cache_key(), "ss:default:{}");
+    }
+
+    #[test]
+    fn statefulset_cache_key_without_namespace_uses_all() {
+        let req = DataRequest::StatefulSets {
+            namespace: None,
+            labels: BTreeMap::new(),
+        };
+        assert_eq!(req.cache_key(), "ss:all:{}");
+    }
+}

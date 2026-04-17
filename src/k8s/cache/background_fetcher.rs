@@ -645,6 +645,22 @@ impl BackgroundFetcher {
 mod tests {
     use super::*;
 
+    #[test]
+    fn parse_cache_key_roundtrip_for_statefulset() {
+        let req = DataRequest::StatefulSets {
+            namespace: Some("default".to_string()),
+            labels: std::collections::BTreeMap::new(),
+        };
+        let key = req.cache_key();
+
+        match BackgroundFetcher::parse_cache_key(&key) {
+            Some(DataRequest::StatefulSets { namespace, .. }) => {
+                assert_eq!(namespace, Some("default".to_string()));
+            }
+            other => panic!("expected StatefulSets request, got {other:?}"),
+        }
+    }
+
     #[tokio::test]
     async fn test_task_priority_ordering() {
         let high_priority = FetchTask {

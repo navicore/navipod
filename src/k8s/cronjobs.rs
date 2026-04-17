@@ -64,6 +64,10 @@ pub async fn list_cronjobs() -> Result<Vec<Rs>> {
     for cj in cj_list.items {
         let age = calculate_cronjob_age(&cj);
         let instance_name = cj.metadata.name.as_deref().unwrap_or("unknown").to_string();
+        // Trailing space: `list_events_for_resource` does a prefix match on
+        // `involvedObject.name`. Appending a space prevents `backup` from
+        // matching events for `backup-nightly`. Matches the convention used
+        // by `list_jobs` and the RS/DS/SS listers.
         let f_instance_name = format!("{instance_name} ");
 
         let active_count = cj
@@ -119,14 +123,21 @@ pub async fn find_latest_active_job_for_cronjob(cj_name: &str) -> Result<Option<
         }
     };
 
-    let latest = job_list
-        .items
-        .into_iter()
+    Ok(select_latest_active_child_job_name(job_list.items, cj_name))
+}
+
+/// Pure ranking/selection step of `find_latest_active_job_for_cronjob`.
+///
+/// Given an arbitrary Job list, returns the `metadata.name` of the Job
+/// owned by `cj_name` that has `status.active > 0` and the most recent
+/// `creation_timestamp`. Extracted so the filter+rank logic can be unit
+/// tested without a live Jobs API.
+fn select_latest_active_child_job_name(jobs: Vec<Job>, cj_name: &str) -> Option<String> {
+    jobs.into_iter()
         .filter(|job| job_is_child_of_cronjob(job, cj_name))
         .filter(|job| job.status.as_ref().and_then(|s| s.active).unwrap_or(0) > 0)
-        .max_by_key(|job| job.metadata.creation_timestamp.clone());
-
-    Ok(latest.and_then(|j| j.metadata.name))
+        .max_by_key(|job| job.metadata.creation_timestamp.clone())
+        .and_then(|j| j.metadata.name)
 }
 
 fn job_is_child_of_cronjob(job: &Job, cj_name: &str) -> bool {
@@ -138,9 +149,10 @@ fn job_is_child_of_cronjob(job: &Job, cj_name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::job_is_child_of_cronjob;
-    use k8s_openapi::api::batch::v1::Job;
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
+    use super::{job_is_child_of_cronjob, select_latest_active_child_job_name};
+    use k8s_openapi::api::batch::v1::{Job, JobStatus};
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference, Time};
+    use k8s_openapi::jiff::Timestamp;
 
     fn job_with_owners(owners: Option<Vec<OwnerReference>>) -> Job {
         Job {
@@ -157,6 +169,22 @@ mod tests {
             kind: kind.to_string(),
             name: name.to_string(),
             ..OwnerReference::default()
+        }
+    }
+
+    fn job_for_cronjob(name: &str, cj_name: &str, active: i32, created_epoch: i64) -> Job {
+        Job {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                owner_references: Some(vec![owner("CronJob", cj_name)]),
+                creation_timestamp: Some(Time(Timestamp::from_second(created_epoch).unwrap())),
+                ..ObjectMeta::default()
+            },
+            status: Some(JobStatus {
+                active: Some(active),
+                ..JobStatus::default()
+            }),
+            ..Job::default()
         }
     }
 
@@ -182,5 +210,65 @@ mod tests {
     fn job_is_child_of_cronjob_rejects_no_owners() {
         let job = job_with_owners(None);
         assert!(!job_is_child_of_cronjob(&job, "backup-nightly"));
+    }
+
+    #[test]
+    fn select_latest_active_child_job_name_returns_none_for_empty_list() {
+        assert_eq!(
+            select_latest_active_child_job_name(vec![], "backup-nightly"),
+            None
+        );
+    }
+
+    #[test]
+    fn select_latest_active_child_job_name_ignores_non_children() {
+        let jobs = vec![job_for_cronjob("unrelated", "other-cj", 1, 100)];
+        assert_eq!(
+            select_latest_active_child_job_name(jobs, "backup-nightly"),
+            None
+        );
+    }
+
+    #[test]
+    fn select_latest_active_child_job_name_ignores_inactive_children() {
+        let jobs = vec![job_for_cronjob("stale", "backup-nightly", 0, 100)];
+        assert_eq!(
+            select_latest_active_child_job_name(jobs, "backup-nightly"),
+            None
+        );
+    }
+
+    #[test]
+    fn select_latest_active_child_job_name_picks_single_active_child() {
+        let jobs = vec![job_for_cronjob("run-1", "backup-nightly", 1, 100)];
+        assert_eq!(
+            select_latest_active_child_job_name(jobs, "backup-nightly"),
+            Some("run-1".to_string())
+        );
+    }
+
+    #[test]
+    fn select_latest_active_child_job_name_picks_most_recent_among_active() {
+        // Two active children, different creation timestamps.
+        let jobs = vec![
+            job_for_cronjob("older", "backup-nightly", 1, 100),
+            job_for_cronjob("newer", "backup-nightly", 1, 200),
+            job_for_cronjob("oldest-inactive", "backup-nightly", 0, 300),
+        ];
+        assert_eq!(
+            select_latest_active_child_job_name(jobs, "backup-nightly"),
+            Some("newer".to_string())
+        );
+    }
+
+    #[test]
+    fn select_latest_active_child_job_name_skips_matched_job_with_no_name() {
+        // max_by_key returns a Job with no metadata.name → and_then yields None.
+        let mut job = job_for_cronjob("placeholder", "backup-nightly", 1, 100);
+        job.metadata.name = None;
+        assert_eq!(
+            select_latest_active_child_job_name(vec![job], "backup-nightly"),
+            None
+        );
     }
 }

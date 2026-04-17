@@ -734,8 +734,15 @@ impl App {
                 };
             }
             if selection.description == CRONJOB_KIND {
-                match find_latest_active_job_for_cronjob(&selection.name).await {
-                    Ok(Some(job_name)) => {
+                // Bounded so a slow/unreachable API can't freeze the key-event
+                // loop. Timeout → stay on landing, same as the Err path.
+                let resolve = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    find_latest_active_job_for_cronjob(&selection.name),
+                )
+                .await;
+                match resolve {
+                    Ok(Ok(Some(job_name))) => {
                         debug!(
                             "changing app from rs to pod (cronjob={} -> job={})...",
                             selection.name, job_name
@@ -744,16 +751,22 @@ impl App {
                             app: pod_app::app::App::new(PodSelector::ByJob(job_name), Vec::new()),
                         };
                     }
-                    Ok(None) => {
+                    Ok(Ok(None)) => {
                         debug!(
                             "cronjob {} has no active child job — staying on landing",
                             selection.name
                         );
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         warn!(
                             "failed to resolve latest active job for cronjob {}: {}",
                             selection.name, e
+                        );
+                    }
+                    Err(_) => {
+                        warn!(
+                            "timeout resolving latest active job for cronjob {} — staying on landing",
+                            selection.name
                         );
                     }
                 }

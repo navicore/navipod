@@ -17,6 +17,7 @@ use crate::k8s::pods::list_rspods;
 use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;
 use crate::k8s::rs_ingress::list_ingresses;
+use crate::k8s::ss::list_statefulsets;
 
 #[derive(Debug)]
 struct FetchTask {
@@ -346,6 +347,10 @@ impl BackgroundFetcher {
                 let data = list_daemonsets().await?;
                 Ok(FetchResult::DaemonSets(data))
             }
+            DataRequest::StatefulSets { .. } => {
+                let data = list_statefulsets().await?;
+                Ok(FetchResult::StatefulSets(data))
+            }
             DataRequest::Pods {
                 namespace: _,
                 selector,
@@ -571,6 +576,14 @@ impl BackgroundFetcher {
                 },
                 labels: std::collections::BTreeMap::new(),
             }),
+            "ss" => Some(DataRequest::StatefulSets {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
             "pods" => Some(DataRequest::Pods {
                 namespace: (*parts.get(1)?).to_string(),
                 selector: super::fetcher::PodSelector::All,
@@ -631,6 +644,22 @@ impl BackgroundFetcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_cache_key_roundtrip_for_statefulset() {
+        let req = DataRequest::StatefulSets {
+            namespace: Some("default".to_string()),
+            labels: std::collections::BTreeMap::new(),
+        };
+        let key = req.cache_key();
+
+        match BackgroundFetcher::parse_cache_key(&key) {
+            Some(DataRequest::StatefulSets { namespace, .. }) => {
+                assert_eq!(namespace, Some("default".to_string()));
+            }
+            other => panic!("expected StatefulSets request, got {other:?}"),
+        }
+    }
 
     #[tokio::test]
     async fn test_task_priority_ordering() {

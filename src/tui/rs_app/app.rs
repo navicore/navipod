@@ -3,6 +3,7 @@ use crate::impl_tui_table_state;
 use crate::k8s::cache::{DataRequest, FetchResult};
 use crate::k8s::ds::list_daemonsets;
 use crate::k8s::rs::list_replicas;
+use crate::k8s::ss::list_statefulsets;
 use crate::tui::common::base_table_state::BaseTableState;
 use crate::tui::common::key_handler::{KeyHandlerResult, handle_common_keys};
 use crate::tui::data::Rs;
@@ -75,12 +76,16 @@ impl AppBehavior for App {
                 labels: std::collections::BTreeMap::new(),
             };
             let ds_request = DataRequest::DaemonSets {
+                namespace: Some(namespace.clone()),
+                labels: std::collections::BTreeMap::new(),
+            };
+            let ss_request = DataRequest::StatefulSets {
                 namespace: Some(namespace),
                 labels: std::collections::BTreeMap::new(),
             };
 
-            // Subscribe to cache updates for both workload kinds so we
-            // re-emit a merged list when either changes.
+            // Subscribe to cache updates for all workload kinds so we
+            // re-emit a merged list when any changes.
             let (rs_sub_id, mut rs_rx) = cache
                 .subscription_manager
                 .subscribe("rs:*".to_string())
@@ -89,11 +94,15 @@ impl AppBehavior for App {
                 .subscription_manager
                 .subscribe("ds:*".to_string())
                 .await;
+            let (ss_sub_id, mut ss_rx) = cache
+                .subscription_manager
+                .subscribe("ss:*".to_string())
+                .await;
 
             let mut last_sent = initial_items;
 
             // Send an initial merged view from cache (or a direct fetch if
-            // both caches are empty — e.g. right after a namespace switch).
+            // all caches are empty — e.g. right after a namespace switch).
             {
                 let rs_items = match cache.get(&rs_request).await {
                     Some(FetchResult::ReplicaSets(v)) => v,
@@ -103,13 +112,23 @@ impl AppBehavior for App {
                     Some(FetchResult::DaemonSets(v)) => v,
                     _ => Vec::new(),
                 };
+                let ss_items = match cache.get(&ss_request).await {
+                    Some(FetchResult::StatefulSets(v)) => v,
+                    _ => Vec::new(),
+                };
 
-                let mut merged = if rs_items.is_empty() && ds_items.is_empty() {
-                    debug!("Workloads stream: cold cache, fetching RS+DS immediately");
+                let mut merged = if rs_items.is_empty()
+                    && ds_items.is_empty()
+                    && ss_items.is_empty()
+                {
+                    debug!("Workloads stream: cold cache, fetching RS+DS+SS in parallel");
                     cache_manager::start_blocking_operation();
-                    let rs_fetch = list_replicas().await.unwrap_or_default();
-                    let ds_fetch = list_daemonsets().await.unwrap_or_default();
+                    let (rs_res, ds_res, ss_res) =
+                        tokio::join!(list_replicas(), list_daemonsets(), list_statefulsets());
                     cache_manager::end_blocking_operation();
+                    let rs_fetch = rs_res.unwrap_or_default();
+                    let ds_fetch = ds_res.unwrap_or_default();
+                    let ss_fetch = ss_res.unwrap_or_default();
 
                     if !rs_fetch.is_empty() {
                         let _ = cache
@@ -123,16 +142,23 @@ impl AppBehavior for App {
                             .await;
                         ReplicaSetDomainService::trigger_pod_prefetch(&ds_fetch, "IMMEDIATE").await;
                     }
+                    if !ss_fetch.is_empty() {
+                        let _ = cache
+                            .put(&ss_request, FetchResult::StatefulSets(ss_fetch.clone()))
+                            .await;
+                        ReplicaSetDomainService::trigger_pod_prefetch(&ss_fetch, "IMMEDIATE").await;
+                    }
 
-                    merge_workloads(rs_fetch, ds_fetch)
+                    merge_workloads(rs_fetch, ds_fetch, ss_fetch)
                 } else {
-                    merge_workloads(rs_items, ds_items)
+                    merge_workloads(rs_items, ds_items, ss_items)
                 };
 
                 if !merged.is_empty() && merged != last_sent {
                     if tx.send(Message::Rs(merged.clone())).await.is_err() {
                         cache.subscription_manager.unsubscribe(&rs_sub_id).await;
                         cache.subscription_manager.unsubscribe(&ds_sub_id).await;
+                        cache.subscription_manager.unsubscribe(&ss_sub_id).await;
                         return;
                     }
                     std::mem::swap(&mut last_sent, &mut merged);
@@ -151,6 +177,12 @@ impl AppBehavior for App {
                     }
                     update = ds_rx.recv() => {
                         if let Some(crate::k8s::cache::DataUpdate::DaemonSets(v)) = update {
+                            ReplicaSetDomainService::trigger_pod_prefetch(&v, "UPDATE").await;
+                            refresh = true;
+                        }
+                    }
+                    update = ss_rx.recv() => {
+                        if let Some(crate::k8s::cache::DataUpdate::StatefulSets(v)) = update {
                             ReplicaSetDomainService::trigger_pod_prefetch(&v, "UPDATE").await;
                             refresh = true;
                         }
@@ -216,7 +248,33 @@ impl AppBehavior for App {
                     }
                 };
 
-                let mut merged = merge_workloads(rs_items, ds_items);
+                let ss_items = if let Some(FetchResult::StatefulSets(v)) =
+                    cache.get(&ss_request).await
+                {
+                    v
+                } else {
+                    warn!("🔴 CACHE MISS: StatefulSets, calling K8s API (blocking)");
+                    cache_manager::start_blocking_operation();
+                    let api = list_statefulsets().await;
+                    cache_manager::end_blocking_operation();
+                    if let Ok(v) = api {
+                        if !v.is_empty() {
+                            let _ = cache
+                                .put(&ss_request, FetchResult::StatefulSets(v.clone()))
+                                .await;
+                            ReplicaSetDomainService::trigger_pod_prefetch(&v, "IMMEDIATE").await;
+                        }
+                        v
+                    } else if let Some(FetchResult::StatefulSets(v)) =
+                        cache.get_or_mark_stale(&ss_request).await
+                    {
+                        v
+                    } else {
+                        Vec::new()
+                    }
+                };
+
+                let mut merged = merge_workloads(rs_items, ds_items, ss_items);
                 if merged != last_sent && tx.send(Message::Rs(merged.clone())).await.is_err() {
                     break;
                 }
@@ -225,19 +283,21 @@ impl AppBehavior for App {
 
             cache.subscription_manager.unsubscribe(&rs_sub_id).await;
             cache.subscription_manager.unsubscribe(&ds_sub_id).await;
+            cache.subscription_manager.unsubscribe(&ss_sub_id).await;
         });
 
         ReceiverStream::new(rx)
     }
 }
 
-/// Combine `ReplicaSet` and `DaemonSet` rows into a single workload list
-/// sorted by kind then name, so the landing has a stable order regardless
-/// of which cache updated most recently.
-fn merge_workloads(rs: Vec<Rs>, ds: Vec<Rs>) -> Vec<Rs> {
-    let mut merged = Vec::with_capacity(rs.len() + ds.len());
+/// Combine `ReplicaSet`, `DaemonSet`, and `StatefulSet` rows into a single
+/// workload list sorted by kind then name, so the landing has a stable order
+/// regardless of which cache updated most recently.
+fn merge_workloads(rs: Vec<Rs>, ds: Vec<Rs>, ss: Vec<Rs>) -> Vec<Rs> {
+    let mut merged = Vec::with_capacity(rs.len() + ds.len() + ss.len());
     merged.extend(rs);
     merged.extend(ds);
+    merged.extend(ss);
     merged.sort_by(|a, b| a.description.cmp(&b.description).then(a.name.cmp(&b.name)));
     merged
 }
@@ -421,12 +481,13 @@ impl App {
         Apps::Rs { app: self.clone() }
     }
 
-    /// View YAML for selected workload row (`ReplicaSet` or `DaemonSet`).
+    /// View YAML for selected workload row (`ReplicaSet`, `DaemonSet`, or `StatefulSet`).
     fn handle_yaml_view(&mut self) -> Apps {
         if let Some(selection) = self.get_selected_item() {
             // `description` carries the workload kind for merged rows.
             let resource_type = match selection.description.as_str() {
                 "DaemonSet" => "daemonset",
+                "StatefulSet" => "statefulset",
                 _ => "replicaset",
             }
             .to_string();
@@ -521,5 +582,49 @@ impl App {
         }
 
         Ok(Some(Apps::Rs { app: self.clone() }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rs(name: &str, kind: &str) -> Rs {
+        Rs {
+            name: name.to_string(),
+            owner: String::new(),
+            description: kind.to_string(),
+            age: String::new(),
+            pods: String::new(),
+            selectors: None,
+            events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn merge_workloads_sorts_by_kind_then_name() {
+        let rs_list = vec![rs("web", "ReplicaSet"), rs("api", "ReplicaSet")];
+        let ds_list = vec![rs("kube-proxy", "DaemonSet")];
+        let ss_list = vec![rs("kafka", "StatefulSet"), rs("etcd", "StatefulSet")];
+
+        let merged = merge_workloads(rs_list, ds_list, ss_list);
+
+        let order: Vec<(&str, &str)> = merged
+            .iter()
+            .map(|r| (r.description.as_str(), r.name.as_str()))
+            .collect();
+
+        // DaemonSet < ReplicaSet < StatefulSet (lex order on description),
+        // then by name within each group.
+        assert_eq!(
+            order,
+            vec![
+                ("DaemonSet", "kube-proxy"),
+                ("ReplicaSet", "api"),
+                ("ReplicaSet", "web"),
+                ("StatefulSet", "etcd"),
+                ("StatefulSet", "kafka"),
+            ]
+        );
     }
 }

@@ -12,7 +12,7 @@ use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
 use crate::k8s::{USER_AGENT, client};
-use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet};
+use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet, StatefulSet};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
 use kube::{Client, ResourceExt};
@@ -22,12 +22,17 @@ use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
+/// Number of resource watch streams managed by `WatchManager`. Keep in sync
+/// with the watchers spawned in `WatchManager::start()`.
+const ACTIVE_WATCHER_COUNT: usize = 5;
+
 /// Represents different types of K8s resources we can watch
 #[derive(Debug, Clone)]
 pub enum WatchedResource {
     Pods,
     ReplicaSets,
     DaemonSets,
+    StatefulSets,
     Events,
 }
 
@@ -68,7 +73,7 @@ impl WatchManager {
         let client = client::new(Some(USER_AGENT)).await?;
         let (invalidation_tx, invalidation_rx) = mpsc::channel(INVALIDATION_CHANNEL_CAPACITY);
         let stats = Arc::new(std::sync::RwLock::new(WatchStats {
-            active_watchers: 4,
+            active_watchers: ACTIVE_WATCHER_COUNT,
             total_invalidations: 0,
             connection_status: WatchConnectionStatus::Connected,
         }));
@@ -131,9 +136,16 @@ impl WatchManager {
             invalidation_tx.clone(),
             namespace.clone(),
         );
+        let ss_handle = Self::start_statefulset_watcher(
+            client.clone(),
+            invalidation_tx.clone(),
+            namespace.clone(),
+        );
         let event_handle = Self::start_event_watcher(client, invalidation_tx, namespace);
 
-        info!("🔍 Watch streams started for Pods, ReplicaSets, DaemonSets, and Events");
+        info!(
+            "🔍 Watch streams started for Pods, ReplicaSets, DaemonSets, StatefulSets, and Events"
+        );
 
         let handle = WatchManagerHandle {
             task_handles: vec![
@@ -141,6 +153,7 @@ impl WatchManager {
                 pod_handle,
                 rs_handle,
                 ds_handle,
+                ss_handle,
                 event_handle,
             ],
         };
@@ -246,6 +259,24 @@ impl WatchManager {
                 invalidation_tx,
                 namespace,
                 Self::watch_daemonsets,
+            )
+            .await;
+        })
+    }
+
+    /// Start watching `StatefulSet` resources
+    fn start_statefulset_watcher(
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            Self::run_resource_watcher(
+                "StatefulSet",
+                client,
+                invalidation_tx,
+                namespace,
+                Self::watch_statefulsets,
             )
             .await;
         })
@@ -500,6 +531,53 @@ impl WatchManager {
         Ok(())
     }
 
+    /// Watch `StatefulSet` resources and send invalidation events
+    async fn watch_statefulsets(
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+    ) -> Result<()> {
+        use futures::{TryStreamExt, pin_mut};
+
+        let statefulsets: Api<StatefulSet> = Api::namespaced(client, &namespace);
+        let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
+
+        let stream = statefulsets.watch(&wp, "0").await?;
+        pin_mut!(stream);
+
+        while let Some(event) = stream.try_next().await? {
+            match event {
+                WatchEvent::Added(ss) => {
+                    let ns = ss.namespace().unwrap_or_default();
+                    let pattern = format!("ss:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    info!("➕ StatefulSet added: {}/{}", ns, ss.name_any());
+                }
+                WatchEvent::Modified(ss) => {
+                    let ns = ss.namespace().unwrap_or_default();
+                    let pattern = format!("ss:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    debug!("📝 StatefulSet modified: {}/{}", ns, ss.name_any());
+                }
+                WatchEvent::Deleted(ss) => {
+                    let ns = ss.namespace().unwrap_or_default();
+                    let pattern = format!("ss:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    info!("🗑️  StatefulSet deleted: {}/{}", ns, ss.name_any());
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
     /// Watch Event resources and send invalidation events
     async fn watch_events(
         client: Client,
@@ -551,6 +629,14 @@ impl WatchManager {
                 },
                 labels: std::collections::BTreeMap::new(),
             }),
+            "ss" => Some(DataRequest::StatefulSets {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
             "pods" => Some(DataRequest::Pods {
                 namespace: (*parts.get(1)?).to_string(),
                 selector: crate::k8s::cache::PodSelector::All,
@@ -564,7 +650,7 @@ impl WatchManager {
     pub fn stats(&self) -> WatchStats {
         self.stats.read().map_or(
             WatchStats {
-                active_watchers: 4,
+                active_watchers: ACTIVE_WATCHER_COUNT,
                 total_invalidations: 0,
                 connection_status: WatchConnectionStatus::Disconnected,
             },

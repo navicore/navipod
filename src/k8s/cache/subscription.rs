@@ -9,6 +9,7 @@ use uuid::Uuid;
 pub enum DataUpdate {
     ReplicaSets(Vec<Rs>),
     DaemonSets(Vec<Rs>),
+    StatefulSets(Vec<Rs>),
     Pods(Vec<RsPod>),
     Containers(Vec<Container>),
     Events(Vec<ResourceEvent>),
@@ -20,6 +21,7 @@ impl From<FetchResult> for DataUpdate {
         match result {
             FetchResult::ReplicaSets(data) => Self::ReplicaSets(data),
             FetchResult::DaemonSets(data) => Self::DaemonSets(data),
+            FetchResult::StatefulSets(data) => Self::StatefulSets(data),
             FetchResult::Pods(data) => Self::Pods(data),
             FetchResult::Containers(data) => Self::Containers(data),
             FetchResult::Events(data) => Self::Events(data),

@@ -105,10 +105,15 @@ shippable and leaves the tree in a working state.
   helper in `src/k8s/pods.rs` keeps projection logic DRY between
   `list_rspods` and `list_unowned_pods`. No new watch — reuses the Pods
   watch.
-- **Slice 4 — Jobs.** First slice where the selector model breaks:
-  Job→Pod goes through `owner_references`, not `spec.selector`. Default
-  filter `status.active > 0`; completed Jobs only visible via `/`.
-  New `job:` cache prefix and watch.
+- **Slice 4 — Jobs.** ✅ *Implemented (pending merge).* First slice where
+  the selector model broke: Job→Pod goes through `owner_references`, not
+  `spec.selector`. `list_jobs` filters at fetch time to `status.active > 0`;
+  new `PodSelector::ByJob(String)` and `list_pods_by_job(name)` drive the
+  drill-down. New `DataRequest::Jobs`, `FetchResult::Jobs`,
+  `DataUpdate::Jobs`, `WatchedResource::Jobs`, `job:` cache prefix,
+  `DEFAULT_JOB_TTL_SECS = 120`, sixth watcher. **Deferred:** revealing
+  completed Jobs via `/` — the current `/` is a row text-filter, toggling
+  fetch-scope from it is a separate UX slice.
 - **Slice 5 — CronJobs.** Depends on Slice 4. Row represents the
   CronJob; `Enter` resolves to the latest active Job's pods
   (`owner_references` chain: CronJob → Job → Pod). Sane watch backoff —

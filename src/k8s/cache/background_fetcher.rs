@@ -13,7 +13,8 @@ use tracing::{debug, error, info, warn};
 use crate::k8s::containers::list as list_containers;
 use crate::k8s::ds::list_daemonsets;
 use crate::k8s::events::list_all as list_events;
-use crate::k8s::pods::{list_rspods, list_unowned_pods};
+use crate::k8s::jobs::list_jobs;
+use crate::k8s::pods::{list_pods_by_job, list_rspods, list_unowned_pods};
 use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;
 use crate::k8s::rs_ingress::list_ingresses;
@@ -351,12 +352,20 @@ impl BackgroundFetcher {
                 let data = list_statefulsets().await?;
                 Ok(FetchResult::StatefulSets(data))
             }
+            DataRequest::Jobs { .. } => {
+                let data = list_jobs().await?;
+                Ok(FetchResult::Jobs(data))
+            }
             DataRequest::Pods {
                 namespace: _,
                 selector,
             } => match selector {
                 super::fetcher::PodSelector::Unowned => {
                     let data = list_unowned_pods().await?;
+                    Ok(FetchResult::Pods(data))
+                }
+                super::fetcher::PodSelector::ByJob(name) => {
+                    let data = list_pods_by_job(name.clone()).await?;
                     Ok(FetchResult::Pods(data))
                 }
                 super::fetcher::PodSelector::ByLabels(labels) => {

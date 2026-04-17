@@ -164,6 +164,21 @@ Active development - New features and improvements are regularly added. The proj
 
 Contributions are welcome. Please ensure all changes maintain the existing code quality standards and pass the project's clippy lints.
 
+Before pushing, run the full CI suite locally — the `justfile` is the single source of truth, and GitHub Actions invokes the same recipe:
+
+```bash
+just ci
+```
+
+`just ci` runs, in order:
+
+- `fmt-check` — `cargo fmt --all -- --check`
+- `lint` — strict clippy (`-D warnings -D clippy::pedantic -D clippy::nursery`, plus `unwrap_used`/`expect_used` denied in library code)
+- `test` — library tests and cache integration tests (`--locked`)
+- `build` — `cargo build --locked --release`
+
+The toolchain version is pinned in `rust-toolchain.toml` and must match every CI workflow's `dtolnay/rust-toolchain@master` `toolchain:` input.
+
 ## License
 
 See LICENSE file for details.

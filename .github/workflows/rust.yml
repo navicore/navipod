@@ -43,8 +43,10 @@ jobs:
       run: bash ./tests/scripts/check-test-deployment.sh
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+      # Pinned to match rust-toolchain.toml — these two MUST stay in sync.
+      uses: dtolnay/rust-toolchain@master
       with:
+        toolchain: 1.93.0
         components: rustfmt, clippy
 
     - name: Install Just

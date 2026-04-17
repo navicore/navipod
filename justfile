@@ -10,27 +10,27 @@ default:
 # Build release binary
 build:
     @echo "Building release..."
-    cargo build --release
+    cargo build --locked --release
 
 # Run all tests
 test:
     @echo "Running tests..."
-    cargo test --lib
-    cargo test --test cache_integration_test
-    cargo test --test k8s_cache_integration
+    cargo test --locked --lib
+    cargo test --locked --test cache_integration_test
+    cargo test --locked --test k8s_cache_integration
 
 # Run clippy with strict lints (denies all warnings - blocks CI)
 # Note: unwrap/expect are denied in lib code but allowed in tests
 lint:
     @echo "Running strict clippy on library code..."
-    cargo clippy --lib --all-features -- \
+    cargo clippy --locked --lib --all-features -- \
         -D warnings \
         -D clippy::pedantic \
         -D clippy::nursery \
         -D clippy::unwrap_used \
         -D clippy::expect_used
     @echo "Running clippy on tests (unwrap allowed)..."
-    cargo clippy --tests --all-features -- \
+    cargo clippy --locked --tests --all-features -- \
         -D warnings \
         -D clippy::pedantic \
         -D clippy::nursery
@@ -48,7 +48,7 @@ fmt-check:
 # Run clippy and auto-fix what it can
 clippy-fix:
     @echo "Running clippy with auto-fix..."
-    cargo clippy --fix --allow-dirty --allow-staged -- \
+    cargo clippy --locked --fix --allow-dirty --allow-staged -- \
         -W clippy::pedantic \
         -W clippy::nursery \
         -W clippy::unwrap_used \
@@ -77,12 +77,12 @@ clean:
 # Run cache-specific tests
 cache-test:
     @echo "Running cache tests..."
-    cargo test --lib k8s::cache
-    cargo test --test cache_integration_test
+    cargo test --locked --lib k8s::cache
+    cargo test --locked --test cache_integration_test
 
 # Show test output (verbose)
 test-verbose:
-    cargo test -- --nocapture
+    cargo test --locked -- --nocapture
 
 # Generate documentation
 doc:

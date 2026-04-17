@@ -18,7 +18,6 @@ use crossterm::event::{Event, KeyCode, KeyEventKind};
 use futures::Stream;
 use ratatui::prelude::*;
 use ratatui::widgets::ScrollbarState;
-use std::collections::BTreeMap;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,7 +32,7 @@ const POLL_MS: u64 = 1000;
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) base: BaseTableState<RsPod>,
-    pub(crate) selector: BTreeMap<String, String>,
+    pub(crate) selector: PodSelector,
 }
 
 impl_tui_table_state!(App, RsPod);
@@ -82,7 +81,7 @@ impl AppBehavior for pod_app::app::App {
             let cache = cache_manager::get_cache_or_default();
             let request = DataRequest::Pods {
                 namespace: cache_manager::get_current_namespace_or_default(),
-                selector: PodSelector::ByLabels(selector.clone()),
+                selector: selector.clone(),
             };
 
             debug!("Pod app requesting cache key: {}", request.cache_key());
@@ -163,7 +162,7 @@ impl AppBehavior for pod_app::app::App {
 }
 
 impl App {
-    pub fn new(selector: BTreeMap<String, String>, data_vec: Vec<RsPod>) -> Self {
+    pub fn new(selector: PodSelector, data_vec: Vec<RsPod>) -> Self {
         Self {
             base: BaseTableState::new(data_vec),
             selector,

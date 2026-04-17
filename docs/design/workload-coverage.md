@@ -91,18 +91,20 @@ shippable and leaves the tree in a working state.
   `Rs` row shape with `description = "DaemonSet"`. New cache variant,
   watch, prefetch chain, UI title now "Workloads". Proves the extension
   pattern.
-- **Slice 2 — StatefulSets.** Near-copy of Slice 1. Typed
+- **Slice 2 — StatefulSets.** ✅ *Merged.* Near-copy of Slice 1. Typed
   `Api<StatefulSet>`, status fields `ready_replicas` / `replicas`,
   `spec.selector.match_labels` for pod lookup. New `ss:` cache prefix,
   new `WatchedResource::StatefulSets`. No UI model changes beyond adding
   another kind tag.
-- **Slice 3 — Unowned leaf.** Highest user-visible payoff — unlocks
-  static-pod visibility (kube-apiserver, etcd, scheduler,
+- **Slice 3 — Unowned leaf.** ✅ *Merged.* Highest user-visible payoff —
+  unlocks static-pod visibility (kube-apiserver, etcd, scheduler,
   controller-manager). Not a typed K8s resource: synthesized from the
   existing pod fetch by filtering `owner_references` empty or
-  `kind = Node`. One synthetic row in the landing with the count;
-  selection routes to `pod_app` with a filter predicate (not a selector).
-  No new watch — reuses the Pods watch.
+  `kind = Node`. New `PodSelector::Unowned` variant drives both the
+  rs_app landing row and the pod_app drill-down; a shared `project_pod`
+  helper in `src/k8s/pods.rs` keeps projection logic DRY between
+  `list_rspods` and `list_unowned_pods`. No new watch — reuses the Pods
+  watch.
 - **Slice 4 — Jobs.** First slice where the selector model breaks:
   Job→Pod goes through `owner_references`, not `spec.selector`. Default
   filter `status.active > 0`; completed Jobs only visible via `/`.

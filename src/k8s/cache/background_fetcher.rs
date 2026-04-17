@@ -13,7 +13,7 @@ use tracing::{debug, error, info, warn};
 use crate::k8s::containers::list as list_containers;
 use crate::k8s::ds::list_daemonsets;
 use crate::k8s::events::list_all as list_events;
-use crate::k8s::pods::list_rspods;
+use crate::k8s::pods::{list_rspods, list_unowned_pods};
 use crate::k8s::rs::get_replicaset;
 use crate::k8s::rs::list_replicas;
 use crate::k8s::rs_ingress::list_ingresses;
@@ -354,14 +354,20 @@ impl BackgroundFetcher {
             DataRequest::Pods {
                 namespace: _,
                 selector,
-            } => {
-                let labels = match selector {
-                    super::fetcher::PodSelector::ByLabels(labels) => labels.clone(),
-                    _ => std::collections::BTreeMap::new(),
-                };
-                let data = list_rspods(labels).await?;
-                Ok(FetchResult::Pods(data))
-            }
+            } => match selector {
+                super::fetcher::PodSelector::Unowned => {
+                    let data = list_unowned_pods().await?;
+                    Ok(FetchResult::Pods(data))
+                }
+                super::fetcher::PodSelector::ByLabels(labels) => {
+                    let data = list_rspods(labels.clone()).await?;
+                    Ok(FetchResult::Pods(data))
+                }
+                _ => {
+                    let data = list_rspods(std::collections::BTreeMap::new()).await?;
+                    Ok(FetchResult::Pods(data))
+                }
+            },
             DataRequest::Containers {
                 pod_name,
                 namespace: _,

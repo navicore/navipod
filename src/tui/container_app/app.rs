@@ -199,7 +199,9 @@ impl App {
                     let data_vec = vec![];
                     return Apps::Pod {
                         app: crate::tui::pod_app::app::App::new(
-                            std::collections::BTreeMap::new(),
+                            crate::k8s::cache::PodSelector::ByLabels(
+                                std::collections::BTreeMap::new(),
+                            ),
                             data_vec,
                         ),
                     };

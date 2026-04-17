@@ -58,6 +58,9 @@ pub enum PodSelector {
     All,
     ByLabels(BTreeMap<String, String>),
     ByName(String),
+    /// Pods whose `owner_references` are missing or whose owner kind is
+    /// `Node` (static pods). Powers the synthesized "Unowned" workload row.
+    Unowned,
 }
 
 #[derive(Debug, Clone)]
@@ -207,5 +210,19 @@ mod tests {
             labels: BTreeMap::new(),
         };
         assert_eq!(req.cache_key(), "ss:all:{}");
+    }
+
+    #[test]
+    fn unowned_pod_selector_has_distinct_cache_key() {
+        let unowned = DataRequest::Pods {
+            namespace: "kube-system".to_string(),
+            selector: PodSelector::Unowned,
+        };
+        let empty_labels = DataRequest::Pods {
+            namespace: "kube-system".to_string(),
+            selector: PodSelector::ByLabels(BTreeMap::new()),
+        };
+        assert_ne!(unowned.cache_key(), empty_labels.cache_key());
+        assert!(unowned.cache_key().contains("Unowned"));
     }
 }

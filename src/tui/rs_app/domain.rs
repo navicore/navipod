@@ -119,7 +119,10 @@ impl DomainService<Rs> for ReplicaSetDomainService {
                         || Err("No selectors available for selected ReplicaSet".into()),
                         |selectors| {
                             Ok(Some(Apps::Pod {
-                                app: pod_app::app::App::new(selectors.clone(), Vec::new()),
+                                app: pod_app::app::App::new(
+                                    crate::k8s::cache::PodSelector::ByLabels(selectors.clone()),
+                                    Vec::new(),
+                                ),
                             }))
                         },
                     )

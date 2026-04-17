@@ -2,6 +2,7 @@ use crate::cache_manager;
 use crate::impl_tui_table_state;
 use crate::k8s::cache::{DataRequest, FetchResult, PodSelector};
 use crate::k8s::ds::list_daemonsets;
+use crate::k8s::jobs::list_jobs;
 use crate::k8s::pods::list_unowned_pods;
 use crate::k8s::rs::list_replicas;
 use crate::k8s::ss::list_statefulsets;
@@ -36,6 +37,10 @@ const POLL_MS: u64 = 5000;
 /// row. Referenced at synthesis and at route-on-Enter; kept in a constant
 /// so the two sites can't drift.
 const UNOWNED_KIND: &str = "Unowned";
+
+/// Display string written to `Rs.description` for Job rows. Kept as a
+/// constant so synthesis, routing, and the YAML view arm stay in sync.
+const JOB_KIND: &str = "Job";
 
 #[derive(Clone, Debug)]
 pub struct App {
@@ -89,6 +94,10 @@ impl AppBehavior for App {
                 namespace: Some(namespace.clone()),
                 labels: std::collections::BTreeMap::new(),
             };
+            let job_request = DataRequest::Jobs {
+                namespace: Some(namespace.clone()),
+                labels: std::collections::BTreeMap::new(),
+            };
             let unowned_request = DataRequest::Pods {
                 namespace,
                 selector: PodSelector::Unowned,
@@ -107,6 +116,10 @@ impl AppBehavior for App {
             let (ss_sub_id, mut ss_rx) = cache
                 .subscription_manager
                 .subscribe("ss:*".to_string())
+                .await;
+            let (job_sub_id, mut job_rx) = cache
+                .subscription_manager
+                .subscribe("job:*".to_string())
                 .await;
             let (pods_sub_id, mut pods_rx) = cache
                 .subscription_manager
@@ -130,6 +143,10 @@ impl AppBehavior for App {
                     Some(FetchResult::StatefulSets(v)) => v,
                     _ => Vec::new(),
                 };
+                let job_items = match cache.get(&job_request).await {
+                    Some(FetchResult::Jobs(v)) => v,
+                    _ => Vec::new(),
+                };
                 let unowned_items = match cache.get(&unowned_request).await {
                     Some(FetchResult::Pods(v)) => v,
                     _ => Vec::new(),
@@ -138,20 +155,25 @@ impl AppBehavior for App {
                 let mut merged = if rs_items.is_empty()
                     && ds_items.is_empty()
                     && ss_items.is_empty()
+                    && job_items.is_empty()
                     && unowned_items.is_empty()
                 {
-                    debug!("Workloads stream: cold cache, fetching RS+DS+SS+Unowned in parallel");
+                    debug!(
+                        "Workloads stream: cold cache, fetching RS+DS+SS+Jobs+Unowned in parallel"
+                    );
                     cache_manager::start_blocking_operation();
-                    let (rs_res, ds_res, ss_res, unowned_res) = tokio::join!(
+                    let (rs_res, ds_res, ss_res, job_res, unowned_res) = tokio::join!(
                         list_replicas(),
                         list_daemonsets(),
                         list_statefulsets(),
+                        list_jobs(),
                         list_unowned_pods()
                     );
                     cache_manager::end_blocking_operation();
                     let rs_fetch = rs_res.unwrap_or_default();
                     let ds_fetch = ds_res.unwrap_or_default();
                     let ss_fetch = ss_res.unwrap_or_default();
+                    let job_fetch = job_res.unwrap_or_default();
                     let unowned_fetch = unowned_res.unwrap_or_default();
 
                     if !rs_fetch.is_empty() {
@@ -172,15 +194,20 @@ impl AppBehavior for App {
                             .await;
                         ReplicaSetDomainService::trigger_pod_prefetch(&ss_fetch, "IMMEDIATE").await;
                     }
+                    if !job_fetch.is_empty() {
+                        let _ = cache
+                            .put(&job_request, FetchResult::Jobs(job_fetch.clone()))
+                            .await;
+                    }
                     if !unowned_fetch.is_empty() {
                         let _ = cache
                             .put(&unowned_request, FetchResult::Pods(unowned_fetch.clone()))
                             .await;
                     }
 
-                    merge_workloads(rs_fetch, ds_fetch, ss_fetch, &unowned_fetch)
+                    merge_workloads(rs_fetch, ds_fetch, ss_fetch, job_fetch, &unowned_fetch)
                 } else {
-                    merge_workloads(rs_items, ds_items, ss_items, &unowned_items)
+                    merge_workloads(rs_items, ds_items, ss_items, job_items, &unowned_items)
                 };
 
                 if !merged.is_empty() && merged != last_sent {
@@ -188,6 +215,7 @@ impl AppBehavior for App {
                         cache.subscription_manager.unsubscribe(&rs_sub_id).await;
                         cache.subscription_manager.unsubscribe(&ds_sub_id).await;
                         cache.subscription_manager.unsubscribe(&ss_sub_id).await;
+                        cache.subscription_manager.unsubscribe(&job_sub_id).await;
                         cache.subscription_manager.unsubscribe(&pods_sub_id).await;
                         return;
                     }
@@ -214,6 +242,13 @@ impl AppBehavior for App {
                     update = ss_rx.recv() => {
                         if let Some(crate::k8s::cache::DataUpdate::StatefulSets(v)) = update {
                             ReplicaSetDomainService::trigger_pod_prefetch(&v, "UPDATE").await;
+                            refresh = true;
+                        }
+                    }
+                    update = job_rx.recv() => {
+                        // Job updates don't drive pod prefetch the same way —
+                        // Jobs don't have a label selector for us to use.
+                        if let Some(crate::k8s::cache::DataUpdate::Jobs(_)) = update {
                             refresh = true;
                         }
                     }
@@ -311,6 +346,29 @@ impl AppBehavior for App {
                     }
                 };
 
+                let job_items = if let Some(FetchResult::Jobs(v)) = cache.get(&job_request).await {
+                    v
+                } else {
+                    // Cache miss for Jobs: many namespaces have none, so
+                    // this rarely runs. Blocking matches the other arms.
+                    debug!("Workloads stream: Jobs cache miss, direct fetch");
+                    cache_manager::start_blocking_operation();
+                    let api = list_jobs().await;
+                    cache_manager::end_blocking_operation();
+                    if let Ok(v) = api {
+                        if !v.is_empty() {
+                            let _ = cache.put(&job_request, FetchResult::Jobs(v.clone())).await;
+                        }
+                        v
+                    } else if let Some(FetchResult::Jobs(v)) =
+                        cache.get_or_mark_stale(&job_request).await
+                    {
+                        v
+                    } else {
+                        Vec::new()
+                    }
+                };
+
                 let unowned_items =
                     if let Some(FetchResult::Pods(v)) = cache.get(&unowned_request).await {
                         v
@@ -338,7 +396,8 @@ impl AppBehavior for App {
                         }
                     };
 
-                let mut merged = merge_workloads(rs_items, ds_items, ss_items, &unowned_items);
+                let mut merged =
+                    merge_workloads(rs_items, ds_items, ss_items, job_items, &unowned_items);
                 if merged != last_sent && tx.send(Message::Rs(merged.clone())).await.is_err() {
                     break;
                 }
@@ -348,6 +407,7 @@ impl AppBehavior for App {
             cache.subscription_manager.unsubscribe(&rs_sub_id).await;
             cache.subscription_manager.unsubscribe(&ds_sub_id).await;
             cache.subscription_manager.unsubscribe(&ss_sub_id).await;
+            cache.subscription_manager.unsubscribe(&job_sub_id).await;
             cache.subscription_manager.unsubscribe(&pods_sub_id).await;
         });
 
@@ -355,18 +415,27 @@ impl AppBehavior for App {
     }
 }
 
-/// Combine `ReplicaSet`, `DaemonSet`, `StatefulSet`, and unowned-pod rows
-/// into a single workload list sorted by kind then name, so the landing has
-/// a stable order regardless of which cache updated most recently.
+/// Combine `ReplicaSet`, `DaemonSet`, `StatefulSet`, Job, and unowned-pod
+/// rows into a single workload list sorted by kind then name, so the
+/// landing has a stable order regardless of which cache updated most
+/// recently.
 ///
-/// Unowned pods are collapsed into a single synthetic row with
-/// `description = "Unowned"` and a pod count. If there are no unowned pods
-/// the row is omitted.
-fn merge_workloads(rs: Vec<Rs>, ds: Vec<Rs>, ss: Vec<Rs>, unowned: &[RsPod]) -> Vec<Rs> {
-    let mut merged = Vec::with_capacity(rs.len() + ds.len() + ss.len() + 1);
+/// Jobs are already filtered to `status.active > 0` upstream in
+/// `list_jobs`. Unowned pods are collapsed into a single synthetic row
+/// with `description = "Unowned"` and a pod count; the row is omitted if
+/// there are no unowned pods.
+fn merge_workloads(
+    rs: Vec<Rs>,
+    ds: Vec<Rs>,
+    ss: Vec<Rs>,
+    jobs: Vec<Rs>,
+    unowned: &[RsPod],
+) -> Vec<Rs> {
+    let mut merged = Vec::with_capacity(rs.len() + ds.len() + ss.len() + jobs.len() + 1);
     merged.extend(rs);
     merged.extend(ds);
     merged.extend(ss);
+    merged.extend(jobs);
     if let Some(row) = synthesize_unowned_row(unowned) {
         merged.push(row);
     }
@@ -557,15 +626,25 @@ impl App {
         }))
     }
 
-    /// Switch to Pods app. Routes the synthesized unowned-pods row to a
-    /// selector-less pod list driven by `PodSelector::Unowned`; everything
-    /// else (RS/DS/SS) goes through `PodSelector::ByLabels`.
+    /// Switch to Pods app. Routing depends on the selected row's kind:
+    /// `Unowned` → `PodSelector::Unowned` (predicate, no selector);
+    /// `Job` → `PodSelector::ByJob(name)` (owner-reference walk, labels
+    /// don't identify Job pods); everything else (RS/DS/SS) → labels.
     fn handle_switch_to_pods(&mut self) -> Apps {
         if let Some(selection) = self.get_selected_item() {
             if selection.description == UNOWNED_KIND {
                 debug!("changing app from rs to pod (unowned)...");
                 return Apps::Pod {
                     app: pod_app::app::App::new(PodSelector::Unowned, Vec::new()),
+                };
+            }
+            if selection.description == JOB_KIND {
+                debug!("changing app from rs to pod (job={})...", selection.name);
+                return Apps::Pod {
+                    app: pod_app::app::App::new(
+                        PodSelector::ByJob(selection.name.clone()),
+                        Vec::new(),
+                    ),
                 };
             }
             if let Some(selectors) = selection.selectors.clone() {
@@ -591,6 +670,7 @@ impl App {
             let resource_type = match selection.description.as_str() {
                 "DaemonSet" => "daemonset",
                 "StatefulSet" => "statefulset",
+                "Job" => "job",
                 _ => "replicaset",
             }
             .to_string();
@@ -710,14 +790,14 @@ mod tests {
         let ds_list = vec![rs("kube-proxy", "DaemonSet")];
         let ss_list = vec![rs("kafka", "StatefulSet"), rs("etcd", "StatefulSet")];
 
-        let merged = merge_workloads(rs_list, ds_list, ss_list, &[]);
+        let merged = merge_workloads(rs_list, ds_list, ss_list, vec![], &[]);
 
         let order: Vec<(&str, &str)> = merged
             .iter()
             .map(|r| (r.description.as_str(), r.name.as_str()))
             .collect();
 
-        // DaemonSet < ReplicaSet < StatefulSet (lex order on description),
+        // DaemonSet < Job < ReplicaSet < StatefulSet (lex order on description),
         // then by name within each group. No Unowned row when list is empty.
         assert_eq!(
             order,
@@ -727,6 +807,33 @@ mod tests {
                 ("ReplicaSet", "web"),
                 ("StatefulSet", "etcd"),
                 ("StatefulSet", "kafka"),
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_workloads_sorts_jobs_between_daemonset_and_replicaset() {
+        let merged = merge_workloads(
+            vec![rs("web", "ReplicaSet")],
+            vec![rs("kube-proxy", "DaemonSet")],
+            vec![rs("etcd", "StatefulSet")],
+            vec![rs("backup-nightly", "Job"), rs("apply-config", "Job")],
+            &[],
+        );
+
+        let order: Vec<(&str, &str)> = merged
+            .iter()
+            .map(|r| (r.description.as_str(), r.name.as_str()))
+            .collect();
+
+        assert_eq!(
+            order,
+            vec![
+                ("DaemonSet", "kube-proxy"),
+                ("Job", "apply-config"),
+                ("Job", "backup-nightly"),
+                ("ReplicaSet", "web"),
+                ("StatefulSet", "etcd"),
             ]
         );
     }
@@ -762,7 +869,7 @@ mod tests {
             pod("kube-scheduler-node1", "StaticPod"),
         ];
 
-        let merged = merge_workloads(rs_list, ds_list, ss_list, &unowned);
+        let merged = merge_workloads(rs_list, ds_list, ss_list, vec![], &unowned);
 
         let last = merged.last().expect("unowned row should be present");
         assert_eq!(last.description, "Unowned");
@@ -777,7 +884,7 @@ mod tests {
 
     #[test]
     fn merge_workloads_omits_unowned_row_when_empty() {
-        let merged = merge_workloads(vec![rs("web", "ReplicaSet")], vec![], vec![], &[]);
+        let merged = merge_workloads(vec![rs("web", "ReplicaSet")], vec![], vec![], vec![], &[]);
         assert!(merged.iter().all(|r| r.description != "Unowned"));
     }
 }

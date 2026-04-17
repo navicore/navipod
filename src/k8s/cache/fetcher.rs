@@ -1,7 +1,7 @@
 use super::config::{
     DEFAULT_CONTAINER_TTL_SECS, DEFAULT_DAEMONSET_TTL_SECS, DEFAULT_EVENT_TTL_SECS,
-    DEFAULT_INGRESS_TTL_SECS, DEFAULT_POD_TTL_SECS, DEFAULT_REPLICASET_TTL_SECS,
-    DEFAULT_STATEFULSET_TTL_SECS,
+    DEFAULT_INGRESS_TTL_SECS, DEFAULT_JOB_TTL_SECS, DEFAULT_POD_TTL_SECS,
+    DEFAULT_REPLICASET_TTL_SECS, DEFAULT_STATEFULSET_TTL_SECS,
 };
 use crate::error::Result;
 use crate::tui::data::{Container, Ingress, Rs, RsPod};
@@ -28,6 +28,10 @@ pub enum DataRequest {
         labels: BTreeMap<String, String>,
     },
     StatefulSets {
+        namespace: Option<String>,
+        labels: BTreeMap<String, String>,
+    },
+    Jobs {
         namespace: Option<String>,
         labels: BTreeMap<String, String>,
     },
@@ -61,6 +65,10 @@ pub enum PodSelector {
     /// Pods whose `owner_references` are missing or whose owner kind is
     /// `Node` (static pods). Powers the synthesized "Unowned" workload row.
     Unowned,
+    /// Pods whose `owner_references` contain a `Job` with the given name.
+    /// Jobs don't use label selection for pod lookup — the owner reference
+    /// is authoritative.
+    ByJob(String),
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +92,9 @@ impl DataRequest {
             }
             Self::StatefulSets { namespace, labels } => {
                 format!("ss:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
+            }
+            Self::Jobs { namespace, labels } => {
+                format!("job:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
             }
             Self::Pods {
                 namespace,
@@ -119,6 +130,7 @@ impl DataRequest {
             Self::ReplicaSets { .. } => Duration::from_secs(DEFAULT_REPLICASET_TTL_SECS),
             Self::DaemonSets { .. } => Duration::from_secs(DEFAULT_DAEMONSET_TTL_SECS),
             Self::StatefulSets { .. } => Duration::from_secs(DEFAULT_STATEFULSET_TTL_SECS),
+            Self::Jobs { .. } => Duration::from_secs(DEFAULT_JOB_TTL_SECS),
             Self::Pods { .. } => Duration::from_secs(DEFAULT_POD_TTL_SECS),
             Self::Containers { .. } => Duration::from_secs(DEFAULT_CONTAINER_TTL_SECS),
             Self::Events { .. } => Duration::from_secs(DEFAULT_EVENT_TTL_SECS),
@@ -134,6 +146,7 @@ impl DataRequest {
             Self::ReplicaSets { .. }
             | Self::DaemonSets { .. }
             | Self::StatefulSets { .. }
+            | Self::Jobs { .. }
             | Self::Custom { .. } => FetchPriority::Medium,
             Self::Events { .. } | Self::Ingresses { .. } => FetchPriority::Low,
         }
@@ -170,6 +183,7 @@ pub enum FetchResult {
     ReplicaSets(Vec<Rs>),
     DaemonSets(Vec<Rs>),
     StatefulSets(Vec<Rs>),
+    Jobs(Vec<Rs>),
     Pods(Vec<RsPod>),
     Containers(Vec<Container>),
     Events(Vec<crate::tui::data::ResourceEvent>),
@@ -182,6 +196,7 @@ impl Clone for FetchResult {
             Self::ReplicaSets(data) => Self::ReplicaSets(data.clone()),
             Self::DaemonSets(data) => Self::DaemonSets(data.clone()),
             Self::StatefulSets(data) => Self::StatefulSets(data.clone()),
+            Self::Jobs(data) => Self::Jobs(data.clone()),
             Self::Pods(data) => Self::Pods(data.clone()),
             Self::Containers(data) => Self::Containers(data.clone()),
             Self::Events(data) => Self::Events(data.clone()),
@@ -224,5 +239,29 @@ mod tests {
         };
         assert_ne!(unowned.cache_key(), empty_labels.cache_key());
         assert!(unowned.cache_key().contains("Unowned"));
+    }
+
+    #[test]
+    fn jobs_cache_key_uses_job_prefix() {
+        let req = DataRequest::Jobs {
+            namespace: Some("default".to_string()),
+            labels: BTreeMap::new(),
+        };
+        assert_eq!(req.cache_key(), "job:default:{}");
+    }
+
+    #[test]
+    fn by_job_selector_has_distinct_cache_key_per_job_name() {
+        let a = DataRequest::Pods {
+            namespace: "default".to_string(),
+            selector: PodSelector::ByJob("backup-nightly".to_string()),
+        };
+        let b = DataRequest::Pods {
+            namespace: "default".to_string(),
+            selector: PodSelector::ByJob("backup-weekly".to_string()),
+        };
+        assert_ne!(a.cache_key(), b.cache_key());
+        assert!(a.cache_key().contains("ByJob"));
+        assert!(a.cache_key().contains("backup-nightly"));
     }
 }

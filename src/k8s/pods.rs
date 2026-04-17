@@ -402,6 +402,47 @@ pub async fn list_unowned_pods() -> Result<Vec<RsPod>> {
     Ok(pod_vec)
 }
 
+/// List pods owned by a `Job` with the given name.
+///
+/// Jobs don't use label selection for pod lookup — the `owner_references`
+/// chain is authoritative. Matches pods whose `owner_references` contain
+/// any reference with `kind == "Job"` and `name == job_name`.
+///
+/// # Errors
+///
+/// Will return `Err` if data can not be retrieved from k8s cluster api
+pub async fn list_pods_by_job(job_name: String) -> Result<Vec<RsPod>> {
+    let client = new(Some(USER_AGENT)).await?;
+
+    let inputs = load_pod_projection_inputs(&client, "").await?;
+
+    let mut pod_vec = Vec::new();
+    for pod in inputs.pods {
+        if pod_belongs_to_job(&pod, &job_name) {
+            let rs_pod = project_pod(
+                &pod,
+                "Job",
+                &inputs.events,
+                &inputs.metrics_lookup,
+                &inputs.node_info,
+            )
+            .await?;
+            pod_vec.push(rs_pod);
+        }
+    }
+
+    Ok(pod_vec)
+}
+
+/// Returns true if any `owner_references` entry on `pod` refers to a Job
+/// with the given name.
+fn pod_belongs_to_job(pod: &Pod, job_name: &str) -> bool {
+    pod.metadata
+        .owner_references
+        .as_ref()
+        .is_some_and(|refs| refs.iter().any(|o| o.kind == "Job" && o.name == job_name))
+}
+
 /// Classify a pod for the Unowned leaf.
 ///
 /// Returns `Some("Unowned")` for pods with no `owner_references` (or an
@@ -420,7 +461,7 @@ fn classify_unowned_pod(pod: &Pod) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::classify_unowned_pod;
+    use super::{classify_unowned_pod, pod_belongs_to_job};
     use k8s_openapi::api::core::v1::Pod;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 
@@ -437,6 +478,14 @@ mod tests {
     fn owner(kind: &str) -> OwnerReference {
         OwnerReference {
             kind: kind.to_string(),
+            ..OwnerReference::default()
+        }
+    }
+
+    fn owner_named(kind: &str, name: &str) -> OwnerReference {
+        OwnerReference {
+            kind: kind.to_string(),
+            name: name.to_string(),
             ..OwnerReference::default()
         }
     }
@@ -482,5 +531,29 @@ mod tests {
             ]))),
             None,
         );
+    }
+
+    #[test]
+    fn pod_belongs_to_job_matches_exact_job_name() {
+        let pod = pod_with_owners(Some(vec![owner_named("Job", "backup-nightly")]));
+        assert!(pod_belongs_to_job(&pod, "backup-nightly"));
+    }
+
+    #[test]
+    fn pod_belongs_to_job_rejects_different_name() {
+        let pod = pod_with_owners(Some(vec![owner_named("Job", "backup-nightly")]));
+        assert!(!pod_belongs_to_job(&pod, "backup-weekly"));
+    }
+
+    #[test]
+    fn pod_belongs_to_job_rejects_same_name_different_kind() {
+        let pod = pod_with_owners(Some(vec![owner_named("ReplicaSet", "backup-nightly")]));
+        assert!(!pod_belongs_to_job(&pod, "backup-nightly"));
+    }
+
+    #[test]
+    fn pod_belongs_to_job_rejects_no_owners() {
+        let pod = pod_with_owners(None);
+        assert!(!pod_belongs_to_job(&pod, "backup-nightly"));
     }
 }

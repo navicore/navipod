@@ -72,7 +72,10 @@ fn render_header(
 
     // Namespace context
     let current_ns = cache_manager::get_current_namespace_or_default();
-    let namespace_text = format!("namespace: {current_ns} • {} items", app.get_items().len());
+    let namespace_text = format!(
+        "namespace: {current_ns} [n] • {} items",
+        app.get_items().len()
+    );
     let namespace = Paragraph::new(namespace_text)
         .style(theme.text_style(TextType::Caption).bg(theme.bg_primary))
         .alignment(Alignment::Center)

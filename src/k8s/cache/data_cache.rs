@@ -247,7 +247,8 @@ impl K8sDataCache {
             FetchResult::ReplicaSets(items)
             | FetchResult::DaemonSets(items)
             | FetchResult::StatefulSets(items)
-            | FetchResult::Jobs(items) => items.len() * 1024,
+            | FetchResult::Jobs(items)
+            | FetchResult::CronJobs(items) => items.len() * 1024,
             FetchResult::Pods(items) => items.len() * 2048,
             FetchResult::Containers(items) => items.len() * 512,
             FetchResult::Events(items) => items.len() * 256,

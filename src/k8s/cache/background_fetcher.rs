@@ -11,6 +11,7 @@ use tracing::{debug, error, info, warn};
 
 // Import existing fetching functions
 use crate::k8s::containers::list as list_containers;
+use crate::k8s::cronjobs::list_cronjobs;
 use crate::k8s::ds::list_daemonsets;
 use crate::k8s::events::list_all as list_events;
 use crate::k8s::jobs::list_jobs;
@@ -356,6 +357,10 @@ impl BackgroundFetcher {
                 let data = list_jobs().await?;
                 Ok(FetchResult::Jobs(data))
             }
+            DataRequest::CronJobs { .. } => {
+                let data = list_cronjobs().await?;
+                Ok(FetchResult::CronJobs(data))
+            }
             DataRequest::Pods {
                 namespace: _,
                 selector,
@@ -606,6 +611,22 @@ impl BackgroundFetcher {
                 labels: std::collections::BTreeMap::new(),
             }),
             "ss" => Some(DataRequest::StatefulSets {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
+            "job" => Some(DataRequest::Jobs {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
+            "cj" => Some(DataRequest::CronJobs {
                 namespace: if parts.get(1)? == &"all" {
                     None
                 } else {

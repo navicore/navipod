@@ -37,6 +37,7 @@ pub const DEFAULT_REPLICASET_TTL_SECS: u64 = 300; // 5 minutes
 pub const DEFAULT_DAEMONSET_TTL_SECS: u64 = 300; // 5 minutes
 pub const DEFAULT_STATEFULSET_TTL_SECS: u64 = 300; // 5 minutes
 pub const DEFAULT_JOB_TTL_SECS: u64 = 120; // 2 minutes — Jobs churn faster than long-lived workloads
+pub const DEFAULT_CRONJOB_TTL_SECS: u64 = 60; // 1 minute — CronJob status ticks on every schedule fire
 pub const DEFAULT_POD_TTL_SECS: u64 = 120; // 2 minutes
 pub const DEFAULT_EVENT_TTL_SECS: u64 = 180; // 3 minutes
 pub const DEFAULT_CONTAINER_TTL_SECS: u64 = 120; // 2 minutes
@@ -56,6 +57,7 @@ pub struct PredictiveCacheConfig {
     pub daemonset_ttl_secs: u64,
     pub statefulset_ttl_secs: u64,
     pub job_ttl_secs: u64,
+    pub cronjob_ttl_secs: u64,
     pub pod_ttl_secs: u64,
     pub event_ttl_secs: u64,
     pub container_ttl_secs: u64,
@@ -72,6 +74,7 @@ impl Default for PredictiveCacheConfig {
             daemonset_ttl_secs: DEFAULT_DAEMONSET_TTL_SECS,
             statefulset_ttl_secs: DEFAULT_STATEFULSET_TTL_SECS,
             job_ttl_secs: DEFAULT_JOB_TTL_SECS,
+            cronjob_ttl_secs: DEFAULT_CRONJOB_TTL_SECS,
             pod_ttl_secs: DEFAULT_POD_TTL_SECS,
             event_ttl_secs: DEFAULT_EVENT_TTL_SECS,
             container_ttl_secs: DEFAULT_CONTAINER_TTL_SECS,

@@ -244,7 +244,7 @@ impl K8sDataCache {
     fn estimate_size(&self, data: &FetchResult) -> usize {
         // Rough estimation of memory usage
         match data {
-            FetchResult::ReplicaSets(items) => items.len() * 1024,
+            FetchResult::ReplicaSets(items) | FetchResult::DaemonSets(items) => items.len() * 1024,
             FetchResult::Pods(items) => items.len() * 2048,
             FetchResult::Containers(items) => items.len() * 512,
             FetchResult::Events(items) => items.len() * 256,
@@ -365,38 +365,42 @@ impl K8sDataCache {
         match (request, data) {
             (
                 DataRequest::ReplicaSets { namespace, .. },
-                super::fetcher::FetchResult::ReplicaSets(replicasets),
+                super::fetcher::FetchResult::ReplicaSets(workloads),
+            )
+            | (
+                DataRequest::DaemonSets { namespace, .. },
+                super::fetcher::FetchResult::DaemonSets(workloads),
             ) => {
-                // When we just fetched ReplicaSets, immediately prefetch pods for their selectors
+                // When we just fetched workload rows (RS or DS), immediately
+                // prefetch pods for their selectors.
                 let namespace = namespace
                     .clone()
                     .unwrap_or_else(crate::cache_manager::get_current_namespace_or_default);
 
                 debug!(
-                    "🔮 PREFETCH WITH DATA: Generating Pod requests for {} ReplicaSets in namespace: {}",
-                    replicasets.len(),
+                    "🔮 PREFETCH WITH DATA: Generating Pod requests for {} workloads in namespace: {}",
+                    workloads.len(),
                     namespace
                 );
 
                 let mut prefetch_requests = Vec::new();
 
-                for rs in replicasets.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
-                    // Limit to avoid overwhelming
-                    if let Some(selectors) = &rs.selectors {
+                for wl in workloads.iter().take(DEFAULT_MAX_PREFETCH_REPLICASETS) {
+                    if let Some(selectors) = &wl.selectors {
                         let pod_request = DataRequest::Pods {
                             namespace: namespace.clone(),
                             selector: PodSelector::ByLabels(selectors.clone()),
                         };
                         prefetch_requests.push(pod_request);
                         debug!(
-                            "🔮 PREFETCH WITH DATA: Generated Pod request for RS {} with selectors: {:?}",
-                            rs.name, selectors
+                            "🔮 PREFETCH WITH DATA: Generated Pod request for {} {} with selectors: {:?}",
+                            wl.description, wl.name, selectors
                         );
                     }
                 }
 
                 info!(
-                    "🔮 PREFETCH WITH DATA: Generated {} Pod requests for fresh ReplicaSet data",
+                    "🔮 PREFETCH WITH DATA: Generated {} Pod requests for fresh workload data",
                     prefetch_requests.len()
                 );
                 prefetch_requests

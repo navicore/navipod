@@ -34,7 +34,8 @@ pub const DEFAULT_MAX_PREFETCH_REPLICASETS: usize = 10;
 
 /// Default TTL values for different resource types (in seconds)
 pub const DEFAULT_REPLICASET_TTL_SECS: u64 = 300; // 5 minutes
-pub const DEFAULT_POD_TTL_SECS: u64 = 120; // 2 minutes  
+pub const DEFAULT_DAEMONSET_TTL_SECS: u64 = 300; // 5 minutes
+pub const DEFAULT_POD_TTL_SECS: u64 = 120; // 2 minutes
 pub const DEFAULT_EVENT_TTL_SECS: u64 = 180; // 3 minutes
 pub const DEFAULT_CONTAINER_TTL_SECS: u64 = 120; // 2 minutes
 pub const DEFAULT_INGRESS_TTL_SECS: u64 = 180; // 3 minutes
@@ -50,6 +51,7 @@ pub struct PredictiveCacheConfig {
     pub max_prefetch_replicasets: usize,
     /// TTL values for different resource types
     pub replicaset_ttl_secs: u64,
+    pub daemonset_ttl_secs: u64,
     pub pod_ttl_secs: u64,
     pub event_ttl_secs: u64,
     pub container_ttl_secs: u64,
@@ -63,6 +65,7 @@ impl Default for PredictiveCacheConfig {
             max_prefetch_queue_size: DEFAULT_MAX_PREFETCH_QUEUE_SIZE,
             max_prefetch_replicasets: DEFAULT_MAX_PREFETCH_REPLICASETS,
             replicaset_ttl_secs: DEFAULT_REPLICASET_TTL_SECS,
+            daemonset_ttl_secs: DEFAULT_DAEMONSET_TTL_SECS,
             pod_ttl_secs: DEFAULT_POD_TTL_SECS,
             event_ttl_secs: DEFAULT_EVENT_TTL_SECS,
             container_ttl_secs: DEFAULT_CONTAINER_TTL_SECS,

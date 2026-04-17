@@ -64,7 +64,7 @@ fn render_header(
     .split(area);
 
     // Title with icon
-    let title_text = format!("{} ReplicaSets", Symbols::REPLICASET);
+    let title_text = format!("{} Workloads", Symbols::REPLICASET);
     let title = Paragraph::new(title_text)
         .style(theme.text_style(TextType::Title).bg(theme.bg_primary))
         .block(Block::default().borders(Borders::NONE));
@@ -247,7 +247,12 @@ fn render_replicaset_card(
             Span::styled(&rs.age, theme.text_style(TextType::Caption)),
         ]),
         Line::from(vec![
-            Span::raw("    Replicas: "),
+            Span::raw("    "),
+            Span::raw(if rs.description == "DaemonSet" {
+                "Nodes:    "
+            } else {
+                "Replicas: "
+            }),
             Span::styled(
                 format!("{current_replicas}/{desired_replicas} "),
                 theme.text_style(TextType::Body),

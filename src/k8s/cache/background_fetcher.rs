@@ -11,6 +11,7 @@ use tracing::{debug, error, info, warn};
 
 // Import existing fetching functions
 use crate::k8s::containers::list as list_containers;
+use crate::k8s::ds::list_daemonsets;
 use crate::k8s::events::list_all as list_events;
 use crate::k8s::pods::list_rspods;
 use crate::k8s::rs::get_replicaset;
@@ -341,6 +342,10 @@ impl BackgroundFetcher {
                 let data = list_replicas().await?;
                 Ok(FetchResult::ReplicaSets(data))
             }
+            DataRequest::DaemonSets { .. } => {
+                let data = list_daemonsets().await?;
+                Ok(FetchResult::DaemonSets(data))
+            }
             DataRequest::Pods {
                 namespace: _,
                 selector,
@@ -551,6 +556,14 @@ impl BackgroundFetcher {
 
         match *(parts.first()?) {
             "rs" => Some(DataRequest::ReplicaSets {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
+            "ds" => Some(DataRequest::DaemonSets {
                 namespace: if parts.get(1)? == &"all" {
                     None
                 } else {

@@ -12,7 +12,7 @@ use super::data_cache::K8sDataCache;
 use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
 use crate::k8s::{USER_AGENT, client};
-use k8s_openapi::api::apps::v1::ReplicaSet;
+use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
 use kube::{Client, ResourceExt};
@@ -27,6 +27,7 @@ use tracing::{debug, error, info, warn};
 pub enum WatchedResource {
     Pods,
     ReplicaSets,
+    DaemonSets,
     Events,
 }
 
@@ -67,7 +68,7 @@ impl WatchManager {
         let client = client::new(Some(USER_AGENT)).await?;
         let (invalidation_tx, invalidation_rx) = mpsc::channel(INVALIDATION_CHANNEL_CAPACITY);
         let stats = Arc::new(std::sync::RwLock::new(WatchStats {
-            active_watchers: 3,
+            active_watchers: 4,
             total_invalidations: 0,
             connection_status: WatchConnectionStatus::Connected,
         }));
@@ -125,12 +126,23 @@ impl WatchManager {
             invalidation_tx.clone(),
             namespace.clone(),
         );
+        let ds_handle = Self::start_daemonset_watcher(
+            client.clone(),
+            invalidation_tx.clone(),
+            namespace.clone(),
+        );
         let event_handle = Self::start_event_watcher(client, invalidation_tx, namespace);
 
-        info!("🔍 Watch streams started for Pods, ReplicaSets, and Events");
+        info!("🔍 Watch streams started for Pods, ReplicaSets, DaemonSets, and Events");
 
         let handle = WatchManagerHandle {
-            task_handles: vec![processor_handle, pod_handle, rs_handle, event_handle],
+            task_handles: vec![
+                processor_handle,
+                pod_handle,
+                rs_handle,
+                ds_handle,
+                event_handle,
+            ],
         };
 
         (shutdown_tx, handle)
@@ -216,6 +228,24 @@ impl WatchManager {
                 invalidation_tx,
                 namespace,
                 Self::watch_replicasets,
+            )
+            .await;
+        })
+    }
+
+    /// Start watching `DaemonSet` resources
+    fn start_daemonset_watcher(
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            Self::run_resource_watcher(
+                "DaemonSet",
+                client,
+                invalidation_tx,
+                namespace,
+                Self::watch_daemonsets,
             )
             .await;
         })
@@ -423,6 +453,53 @@ impl WatchManager {
         Ok(())
     }
 
+    /// Watch `DaemonSet` resources and send invalidation events
+    async fn watch_daemonsets(
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+    ) -> Result<()> {
+        use futures::{TryStreamExt, pin_mut};
+
+        let daemonsets: Api<DaemonSet> = Api::namespaced(client, &namespace);
+        let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
+
+        let stream = daemonsets.watch(&wp, "0").await?;
+        pin_mut!(stream);
+
+        while let Some(event) = stream.try_next().await? {
+            match event {
+                WatchEvent::Added(ds) => {
+                    let ns = ds.namespace().unwrap_or_default();
+                    let pattern = format!("ds:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    info!("➕ DaemonSet added: {}/{}", ns, ds.name_any());
+                }
+                WatchEvent::Modified(ds) => {
+                    let ns = ds.namespace().unwrap_or_default();
+                    let pattern = format!("ds:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    debug!("📝 DaemonSet modified: {}/{}", ns, ds.name_any());
+                }
+                WatchEvent::Deleted(ds) => {
+                    let ns = ds.namespace().unwrap_or_default();
+                    let pattern = format!("ds:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    info!("🗑️  DaemonSet deleted: {}/{}", ns, ds.name_any());
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
     /// Watch Event resources and send invalidation events
     async fn watch_events(
         client: Client,
@@ -466,6 +543,14 @@ impl WatchManager {
                 },
                 labels: std::collections::BTreeMap::new(),
             }),
+            "ds" => Some(DataRequest::DaemonSets {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
             "pods" => Some(DataRequest::Pods {
                 namespace: (*parts.get(1)?).to_string(),
                 selector: crate::k8s::cache::PodSelector::All,
@@ -479,7 +564,7 @@ impl WatchManager {
     pub fn stats(&self) -> WatchStats {
         self.stats.read().map_or(
             WatchStats {
-                active_watchers: 3,
+                active_watchers: 4,
                 total_invalidations: 0,
                 connection_status: WatchConnectionStatus::Disconnected,
             },

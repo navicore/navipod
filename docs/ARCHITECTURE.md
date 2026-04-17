@@ -61,7 +61,8 @@ Everything else (the cache, the UI, the metrics history store) is in-process.
 - **`client.rs` / `client_manager.rs`** — kube `Client` construction; lenient
   vs strict user-agent handling. `USER_AGENT` defined in `k8s/mod.rs` as
   `navipod/<pkg-version>`, overridable via `NAVIPOD_USER_AGENT`.
-- **Resource modules** — `pods`, `rs` (ReplicaSets), `containers`, `events`,
+- **Resource modules** — `pods`, `rs` (ReplicaSets), `ds` (DaemonSets),
+  `ss` (StatefulSets), `jobs`, `cronjobs`, `containers`, `events`,
   `namespaces`, `resources`, `rs_ingress`, `pod_ingress`, `probes`.
 - **`metrics_client.rs` / `metrics_history.rs`** — Prometheus scraping and
   an in-memory time-series store for sparkline rendering in the TUI.
@@ -74,16 +75,19 @@ Everything else (the cache, the UI, the metrics history store) is in-process.
 
 The core invariant: **widgets never call the K8s API directly.** They issue
 `DataRequest`s; the cache returns fresh data if available, otherwise the
-`BackgroundFetcher` fills it. `WatchManager` runs K8s watch streams for Pods,
-ReplicaSets, and Events and pushes `InvalidationEvent`s so the cache stays
-current without polling.
+`BackgroundFetcher` fills it. `WatchManager` runs K8s watch streams for
+Pods, ReplicaSets, DaemonSets, StatefulSets, Jobs, CronJobs, and Events
+(seven watchers total, tracked by `ACTIVE_WATCHER_COUNT`) and pushes
+`InvalidationEvent`s so the cache stays current without polling.
 
 - **`data_cache.rs`** — `K8sDataCache`: `HashMap<String, CachedEntry>` behind
   a `tokio::sync::RwLock`, with a memory-byte budget and a
   `SubscriptionManager`. Cache keys come from `DataRequest::cache_key()`.
-- **`fetcher.rs`** — `DataRequest` enum (`ReplicaSets`, `Pods`, `Containers`,
-  `Events`, `Ingresses`, `Custom`), `PodSelector`, `ResourceRef`,
-  `FetchParams`, `FetchPriority`, `FetchResult`, `DataFetcher` trait.
+- **`fetcher.rs`** — `DataRequest` enum (`ReplicaSets`, `DaemonSets`,
+  `StatefulSets`, `Jobs`, `CronJobs`, `Pods`, `Containers`, `Events`,
+  `Ingresses`, `Custom`), `PodSelector` (including `Unowned` and
+  `ByJob(String)`), `ResourceRef`, `FetchParams`, `FetchPriority`,
+  `FetchResult`, `DataFetcher` trait.
 - **`background_fetcher.rs`** — priority-queue-driven worker pool; started
   via `start()` which returns `(Arc<Self>, mpsc::Sender<()>)` for shutdown.
 - **`watch_manager.rs`** — long-running watch loops per resource type with
@@ -130,9 +134,12 @@ expires, issued_by }` for the cert view.
 - **`Ingress`** — ingress rule with TLS host list.
 - **`ResourceEvent`** — a K8s `Event` flattened for table display.
 
-The **navigation invariant** is the tree `ReplicaSet → Pod → Container →
-Logs` with `ReplicaSet → Ingress → Cert` as a side branch. The cache key
-shape and `DataRequest` variants mirror this tree.
+The **navigation invariant** is a Workloads landing (ReplicaSet,
+DaemonSet, StatefulSet, Job, CronJob, plus a synthesized `Unowned` row
+for static/nodeless pods) → Pod → Container → Logs, with
+`ReplicaSet → Ingress → Cert` as a side branch. CronJob selection
+resolves to the latest active child Job via `owner_references` before
+routing. The cache key shape and `DataRequest` variants mirror this tree.
 
 ## Crosscutting Concepts
 

@@ -114,7 +114,7 @@ shippable and leaves the tree in a working state.
   `DEFAULT_JOB_TTL_SECS = 120`, sixth watcher. **Deferred:** revealing
   completed Jobs via `/` — the current `/` is a row text-filter, toggling
   fetch-scope from it is a separate UX slice.
-- **Slice 5 — CronJobs.** ✅ *Implemented (pending merge).* Row represents
+- **Slice 5 — CronJobs.** ✅ *Merged.* Row represents
   the CronJob and is shown regardless of activity — the schedule
   definition itself is the operationally interesting thing. `Enter`
   walks the `owner_references` chain (CronJob → Job → Pod):

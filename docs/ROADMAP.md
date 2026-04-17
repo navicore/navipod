@@ -5,8 +5,8 @@
 - TUI and CLI both functional: `tui`, `explain-pod`, `scan-metrics`,
   `export-triples`, `export-turtle`, `report`, `generate-completion`.
 - Background cache + watch-driven invalidation in place for Pods,
-  ReplicaSets, and Events; Containers and Ingresses go through the cache
-  via list-fetchers.
+  ReplicaSets, DaemonSets, StatefulSets, Jobs, CronJobs, and Events;
+  Containers and Ingresses go through the cache via list-fetchers.
 - Prometheus metrics collection with in-memory history store feeds
   sparklines in the TUI.
 - TLS certificate inspection for ingress hosts.

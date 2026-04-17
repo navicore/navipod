@@ -286,20 +286,24 @@ async fn project_pod(
     })
 }
 
+/// Bundle of per-call auxiliary data consumed by `project_pod`.
+///
+/// Named so callers don't have to carry the 4-tuple shape around.
+struct PodProjectionInputs {
+    pods: Vec<Pod>,
+    events: Vec<Event>,
+    metrics_lookup: HashMap<String, HashMap<String, ContainerMetric>>,
+    node_info: HashMap<String, (f64, f64)>,
+}
+
 /// Fetch pods, events, metrics, and nodes in parallel for projection.
 ///
 /// Shared between `list_rspods` (label-selected, owner-filtered) and
 /// `list_unowned_pods` (unselected, filter-predicate).
-#[allow(clippy::type_complexity)]
 async fn load_pod_projection_inputs(
     client: &kube::Client,
     label_selector: &str,
-) -> Result<(
-    Vec<Pod>,
-    Vec<Event>,
-    HashMap<String, HashMap<String, ContainerMetric>>,
-    HashMap<String, (f64, f64)>,
-)> {
+) -> Result<PodProjectionInputs> {
     let namespace = get_current_namespace_or_default();
     let pods_api: Api<Pod> = Api::namespaced(client.clone(), &namespace);
     let nodes_api: Api<Node> = Api::all(client.clone());
@@ -329,7 +333,12 @@ async fn load_pod_projection_inputs(
     });
     let node_info = build_node_info(&node_list.items, &node_metrics);
 
-    Ok((pod_list.items, events, metrics_lookup, node_info))
+    Ok(PodProjectionInputs {
+        pods: pod_list.items,
+        events,
+        metrics_lookup,
+        node_info,
+    })
 }
 
 /// # Errors
@@ -339,15 +348,20 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
     let client = new(Some(USER_AGENT)).await?;
     let label_selector = format_label_selector(&selector);
 
-    let (pods, events, metrics_lookup, node_info) =
-        load_pod_projection_inputs(&client, &label_selector).await?;
+    let inputs = load_pod_projection_inputs(&client, &label_selector).await?;
 
     let mut pod_vec = Vec::new();
-    for pod in pods {
+    for pod in inputs.pods {
         if let Some(owners) = &pod.metadata.owner_references {
             for owner in owners {
-                let rs_pod =
-                    project_pod(&pod, &owner.kind, &events, &metrics_lookup, &node_info).await?;
+                let rs_pod = project_pod(
+                    &pod,
+                    &owner.kind,
+                    &inputs.events,
+                    &inputs.metrics_lookup,
+                    &inputs.node_info,
+                )
+                .await?;
                 pod_vec.push(rs_pod);
             }
         }
@@ -368,21 +382,105 @@ pub async fn list_rspods(selector: BTreeMap<String, String>) -> Result<Vec<RsPod
 pub async fn list_unowned_pods() -> Result<Vec<RsPod>> {
     let client = new(Some(USER_AGENT)).await?;
 
-    let (pods, events, metrics_lookup, node_info) = load_pod_projection_inputs(&client, "").await?;
+    let inputs = load_pod_projection_inputs(&client, "").await?;
 
     let mut pod_vec = Vec::new();
-    for pod in pods {
-        let kind = match pod.metadata.owner_references.as_ref() {
-            None => Some("Unowned"),
-            Some(refs) if refs.is_empty() => Some("Unowned"),
-            Some(refs) if refs.iter().all(|o| o.kind == "Node") => Some("StaticPod"),
-            Some(_) => None,
-        };
-        if let Some(kind) = kind {
-            let rs_pod = project_pod(&pod, kind, &events, &metrics_lookup, &node_info).await?;
+    for pod in inputs.pods {
+        if let Some(kind) = classify_unowned_pod(&pod) {
+            let rs_pod = project_pod(
+                &pod,
+                kind,
+                &inputs.events,
+                &inputs.metrics_lookup,
+                &inputs.node_info,
+            )
+            .await?;
             pod_vec.push(rs_pod);
         }
     }
 
     Ok(pod_vec)
+}
+
+/// Classify a pod for the Unowned leaf.
+///
+/// Returns `Some("Unowned")` for pods with no `owner_references` (or an
+/// empty list), `Some("StaticPod")` when every owner is a `Node` (kubelet
+/// mirror pods like kube-apiserver/etcd on a kubeadm control plane), and
+/// `None` when any workload controller owns the pod — those belong under
+/// their workload row, not the Unowned leaf.
+fn classify_unowned_pod(pod: &Pod) -> Option<&'static str> {
+    match pod.metadata.owner_references.as_ref() {
+        None => Some("Unowned"),
+        Some(refs) if refs.is_empty() => Some("Unowned"),
+        Some(refs) if refs.iter().all(|o| o.kind == "Node") => Some("StaticPod"),
+        Some(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::classify_unowned_pod;
+    use k8s_openapi::api::core::v1::Pod;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
+
+    fn pod_with_owners(owners: Option<Vec<OwnerReference>>) -> Pod {
+        Pod {
+            metadata: ObjectMeta {
+                owner_references: owners,
+                ..ObjectMeta::default()
+            },
+            ..Pod::default()
+        }
+    }
+
+    fn owner(kind: &str) -> OwnerReference {
+        OwnerReference {
+            kind: kind.to_string(),
+            ..OwnerReference::default()
+        }
+    }
+
+    #[test]
+    fn classify_none_owners_is_unowned() {
+        assert_eq!(
+            classify_unowned_pod(&pod_with_owners(None)),
+            Some("Unowned")
+        );
+    }
+
+    #[test]
+    fn classify_empty_owners_is_unowned() {
+        assert_eq!(
+            classify_unowned_pod(&pod_with_owners(Some(Vec::new()))),
+            Some("Unowned"),
+        );
+    }
+
+    #[test]
+    fn classify_all_node_owners_is_static_pod() {
+        assert_eq!(
+            classify_unowned_pod(&pod_with_owners(Some(vec![owner("Node")]))),
+            Some("StaticPod"),
+        );
+    }
+
+    #[test]
+    fn classify_workload_owner_returns_none() {
+        assert_eq!(
+            classify_unowned_pod(&pod_with_owners(Some(vec![owner("ReplicaSet")]))),
+            None,
+        );
+    }
+
+    #[test]
+    fn classify_mixed_node_and_workload_owners_returns_none() {
+        assert_eq!(
+            classify_unowned_pod(&pod_with_owners(Some(vec![
+                owner("Node"),
+                owner("ReplicaSet")
+            ]))),
+            None,
+        );
+    }
 }

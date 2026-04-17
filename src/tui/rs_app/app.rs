@@ -32,6 +32,11 @@ use tracing::{debug, warn};
 
 const POLL_MS: u64 = 5000;
 
+/// Display string written to `Rs.description` for the synthesized unowned
+/// row. Referenced at synthesis and at route-on-Enter; kept in a constant
+/// so the two sites can't drift.
+const UNOWNED_KIND: &str = "Unowned";
+
 #[derive(Clone, Debug)]
 pub struct App {
     pub(crate) base: BaseTableState<Rs>,
@@ -372,6 +377,11 @@ fn merge_workloads(rs: Vec<Rs>, ds: Vec<Rs>, ss: Vec<Rs>, unowned: &[RsPod]) -> 
 /// Collapse the unowned-pod list into a single landing row, or `None` when
 /// the list is empty (so the row doesn't appear on clusters where every pod
 /// has an owner controller).
+///
+/// `age` is intentionally blank: the row aggregates a heterogeneous set of
+/// pods (e.g. kube-apiserver, etcd, scheduler on kubeadm), so there is no
+/// single meaningful creation time. Per-pod ages are visible one `Enter`
+/// deeper in `pod_app`.
 fn synthesize_unowned_row(unowned: &[RsPod]) -> Option<Rs> {
     if unowned.is_empty() {
         return None;
@@ -380,7 +390,7 @@ fn synthesize_unowned_row(unowned: &[RsPod]) -> Option<Rs> {
     Some(Rs {
         name: "(unowned)".to_string(),
         owner: String::new(),
-        description: "Unowned".to_string(),
+        description: UNOWNED_KIND.to_string(),
         age: String::new(),
         pods: format!("{count}"),
         selectors: None,
@@ -547,12 +557,12 @@ impl App {
         }))
     }
 
-    /// Switch to Pods app. Routes the synthesized "Unowned" row to a
+    /// Switch to Pods app. Routes the synthesized unowned-pods row to a
     /// selector-less pod list driven by `PodSelector::Unowned`; everything
     /// else (RS/DS/SS) goes through `PodSelector::ByLabels`.
     fn handle_switch_to_pods(&mut self) -> Apps {
         if let Some(selection) = self.get_selected_item() {
-            if selection.description == "Unowned" {
+            if selection.description == UNOWNED_KIND {
                 debug!("changing app from rs to pod (unowned)...");
                 return Apps::Pod {
                     app: pod_app::app::App::new(PodSelector::Unowned, Vec::new()),

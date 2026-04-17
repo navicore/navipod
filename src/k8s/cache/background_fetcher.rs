@@ -363,9 +363,23 @@ impl BackgroundFetcher {
                     let data = list_rspods(labels.clone()).await?;
                     Ok(FetchResult::Pods(data))
                 }
-                _ => {
+                // `All` is what the refresh loop's `parse_cache_key` produces
+                // for any `pods:*` key whose selector it can't round-trip.
+                // Treat it as "fetch pods with no label filter" — matches
+                // the variant's documented intent and what list_rspods with
+                // empty labels already does.
+                super::fetcher::PodSelector::All => {
                     let data = list_rspods(std::collections::BTreeMap::new()).await?;
                     Ok(FetchResult::Pods(data))
+                }
+                // ByName has no fetcher yet; silently returning all pods
+                // would be actively wrong. Log and return empty.
+                super::fetcher::PodSelector::ByName(name) => {
+                    warn!(
+                        "📛 PodSelector::ByName({}) has no fetcher wired — returning empty",
+                        name
+                    );
+                    Ok(FetchResult::Pods(Vec::new()))
                 }
             },
             DataRequest::Containers {

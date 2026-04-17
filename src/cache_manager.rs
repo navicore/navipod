@@ -165,8 +165,8 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     );
 
     // Direct fetch essential data for immediate UI responsiveness
-    let essential_request = DataRequest::ReplicaSets {
-        namespace: Some(namespace),
+    let rs_request = DataRequest::ReplicaSets {
+        namespace: Some(namespace.clone()),
         labels: std::collections::BTreeMap::new(),
     };
 
@@ -177,7 +177,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     match rs_result {
         Ok(rs_data) => {
             let fetch_result = FetchResult::ReplicaSets(rs_data);
-            if let Err(e) = cache.put(&essential_request, fetch_result).await {
+            if let Err(e) = cache.put(&rs_request, fetch_result).await {
                 warn!("Failed to populate cache with ReplicaSet data: {}", e);
             } else {
                 info!("🚀 Cache pre-populated with ReplicaSet data for instant UI startup");
@@ -185,6 +185,31 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         }
         Err(e) => {
             warn!("Failed to fetch initial ReplicaSet data: {}", e);
+        }
+    }
+
+    // Same for DaemonSets — the workloads landing merges RS and DS rows,
+    // so priming both avoids a stutter on first draw for control-plane
+    // namespaces where most pods are DS-owned.
+    let ds_request = DataRequest::DaemonSets {
+        namespace: Some(namespace),
+        labels: std::collections::BTreeMap::new(),
+    };
+
+    start_blocking_operation();
+    let ds_result = crate::k8s::ds::list_daemonsets().await;
+    end_blocking_operation();
+    match ds_result {
+        Ok(ds_data) => {
+            let fetch_result = FetchResult::DaemonSets(ds_data);
+            if let Err(e) = cache.put(&ds_request, fetch_result).await {
+                warn!("Failed to populate cache with DaemonSet data: {}", e);
+            } else {
+                info!("🚀 Cache pre-populated with DaemonSet data for instant UI startup");
+            }
+        }
+        Err(e) => {
+            warn!("Failed to fetch initial DaemonSet data: {}", e);
         }
     }
 

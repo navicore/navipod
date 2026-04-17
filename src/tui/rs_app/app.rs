@@ -1,6 +1,7 @@
 use crate::cache_manager;
 use crate::impl_tui_table_state;
 use crate::k8s::cache::{DataRequest, FetchResult};
+use crate::k8s::ds::list_daemonsets;
 use crate::k8s::rs::list_replicas;
 use crate::tui::common::base_table_state::BaseTableState;
 use crate::tui::common::key_handler::{KeyHandlerResult, handle_common_keys};
@@ -64,117 +65,181 @@ impl AppBehavior for App {
     #[allow(clippy::too_many_lines)]
     fn stream(&self, should_stop: Arc<AtomicBool>) -> impl Stream<Item = Message> {
         let (tx, rx) = mpsc::channel(1);
-        let initial_items = self.get_items().to_vec(); // Clone or get owned data from self
+        let initial_items = self.get_items().to_vec();
 
         tokio::spawn(async move {
             let cache = cache_manager::get_cache_or_default();
-            let request = DataRequest::ReplicaSets {
-                namespace: Some(cache_manager::get_current_namespace_or_default()),
+            let namespace = cache_manager::get_current_namespace_or_default();
+            let rs_request = DataRequest::ReplicaSets {
+                namespace: Some(namespace.clone()),
+                labels: std::collections::BTreeMap::new(),
+            };
+            let ds_request = DataRequest::DaemonSets {
+                namespace: Some(namespace),
                 labels: std::collections::BTreeMap::new(),
             };
 
-            // Subscribe to cache updates
-            let (sub_id, mut cache_rx) = cache
+            // Subscribe to cache updates for both workload kinds so we
+            // re-emit a merged list when either changes.
+            let (rs_sub_id, mut rs_rx) = cache
                 .subscription_manager
                 .subscribe("rs:*".to_string())
                 .await;
+            let (ds_sub_id, mut ds_rx) = cache
+                .subscription_manager
+                .subscribe("ds:*".to_string())
+                .await;
 
-            // Start with cached data if available, or fetch immediately if starting empty
-            if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
-                if !cached_items.is_empty()
-                    && cached_items != initial_items
-                    && tx.send(Message::Rs(cached_items)).await.is_err()
-                {
-                    cache.subscription_manager.unsubscribe(&sub_id).await;
-                    return;
-                }
-            } else if initial_items.is_empty() {
-                // No cache and starting empty (e.g., after namespace switch) - fetch immediately
-                debug!("RS stream: No cache and empty initial items, fetching immediately");
-                cache_manager::start_blocking_operation();
-                let fetch_result = list_replicas().await;
-                cache_manager::end_blocking_operation();
-                if let Ok(new_items) = fetch_result
-                    && !new_items.is_empty()
-                {
-                    // Store in cache
-                    let cached = FetchResult::ReplicaSets(new_items.clone());
-                    let _ = cache.put(&request, cached).await;
-                    ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE").await;
-                    if tx.send(Message::Rs(new_items)).await.is_err() {
-                        cache.subscription_manager.unsubscribe(&sub_id).await;
+            let mut last_sent = initial_items;
+
+            // Send an initial merged view from cache (or a direct fetch if
+            // both caches are empty — e.g. right after a namespace switch).
+            {
+                let rs_items = match cache.get(&rs_request).await {
+                    Some(FetchResult::ReplicaSets(v)) => v,
+                    _ => Vec::new(),
+                };
+                let ds_items = match cache.get(&ds_request).await {
+                    Some(FetchResult::DaemonSets(v)) => v,
+                    _ => Vec::new(),
+                };
+
+                let mut merged = if rs_items.is_empty() && ds_items.is_empty() {
+                    debug!("Workloads stream: cold cache, fetching RS+DS immediately");
+                    cache_manager::start_blocking_operation();
+                    let rs_fetch = list_replicas().await.unwrap_or_default();
+                    let ds_fetch = list_daemonsets().await.unwrap_or_default();
+                    cache_manager::end_blocking_operation();
+
+                    if !rs_fetch.is_empty() {
+                        let _ = cache
+                            .put(&rs_request, FetchResult::ReplicaSets(rs_fetch.clone()))
+                            .await;
+                        ReplicaSetDomainService::trigger_pod_prefetch(&rs_fetch, "IMMEDIATE").await;
+                    }
+                    if !ds_fetch.is_empty() {
+                        let _ = cache
+                            .put(&ds_request, FetchResult::DaemonSets(ds_fetch.clone()))
+                            .await;
+                        ReplicaSetDomainService::trigger_pod_prefetch(&ds_fetch, "IMMEDIATE").await;
+                    }
+
+                    merge_workloads(rs_fetch, ds_fetch)
+                } else {
+                    merge_workloads(rs_items, ds_items)
+                };
+
+                if !merged.is_empty() && merged != last_sent {
+                    if tx.send(Message::Rs(merged.clone())).await.is_err() {
+                        cache.subscription_manager.unsubscribe(&rs_sub_id).await;
+                        cache.subscription_manager.unsubscribe(&ds_sub_id).await;
                         return;
                     }
+                    std::mem::swap(&mut last_sent, &mut merged);
                 }
             }
 
-            // Listen for cache updates or fallback to direct polling
             while !should_stop.load(Ordering::Relaxed) {
-                tokio::select! {
-                    // Try to get updates from cache first
-                    update = cache_rx.recv() => {
-                        if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(new_items)) = update {
-                            // IMMEDIATE PREFETCH: Trigger Pod fetching for subscription updates too
-                            ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "UPDATE").await;
+                let mut refresh = false;
 
-                            if !new_items.is_empty() && new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
-                                break;
-                            }
+                tokio::select! {
+                    update = rs_rx.recv() => {
+                        if let Some(crate::k8s::cache::DataUpdate::ReplicaSets(v)) = update {
+                            ReplicaSetDomainService::trigger_pod_prefetch(&v, "UPDATE").await;
+                            refresh = true;
                         }
                     }
-                    // Fallback: check cache periodically and refresh if needed
+                    update = ds_rx.recv() => {
+                        if let Some(crate::k8s::cache::DataUpdate::DaemonSets(v)) = update {
+                            ReplicaSetDomainService::trigger_pod_prefetch(&v, "UPDATE").await;
+                            refresh = true;
+                        }
+                    }
                     () = sleep(Duration::from_millis(POLL_MS)) => {
-                        // Try cache first
-
-                     if let Some(FetchResult::ReplicaSets(cached_items)) = cache.get(&request).await {
-                         debug!("⚡ Using cached ReplicaSets data ({} items)", cached_items.len());
-                         // IMMEDIATE PREFETCH: Trigger Pod fetching for cached ReplicaSets too
-                         ReplicaSetDomainService::trigger_pod_prefetch(&cached_items, "CACHED").await;
-
-                         if !cached_items.is_empty() && cached_items != initial_items && tx.send(Message::Rs(cached_items)).await.is_err() {
-                             break;
-                         }
-                     } else {
-                         // Cache miss - fall back to direct API call with blocking activity tracking
-                         warn!("🔴 CACHE MISS: ReplicaSets cache miss, calling K8s API (blocking)");
-                         cache_manager::start_blocking_operation();
-                         let api_result = list_replicas().await;
-                         cache_manager::end_blocking_operation();
-                         match api_result {
-                             Ok(new_items) => {
-                                 if !new_items.is_empty() {
-                                     // Store in cache for next time
-                                     let fetch_result = FetchResult::ReplicaSets(new_items.clone());
-                                     let _ = cache.put(&request, fetch_result).await;
-
-                                     // IMMEDIATE PREFETCH: Trigger Pod fetching for visible ReplicaSets
-                                     ReplicaSetDomainService::trigger_pod_prefetch(&new_items, "IMMEDIATE").await;
-
-                                     if new_items != initial_items && tx.send(Message::Rs(new_items)).await.is_err() {
-                                         break;
-                                     }
-                                 }
-                             }
-                             Err(_e) => {
-
-                                 // Still try to use stale cache data
-                                 if let Some(FetchResult::ReplicaSets(stale_items)) = cache.get_or_mark_stale(&request).await
-                                     && !stale_items.is_empty() && stale_items != initial_items && tx.send(Message::Rs(stale_items)).await.is_err() {
-                                         break;
-                                     }
-                             }
-                         }
-                     }
+                        refresh = true;
                     }
                 }
+
+                if !refresh {
+                    continue;
+                }
+
+                let rs_items = if let Some(FetchResult::ReplicaSets(v)) =
+                    cache.get(&rs_request).await
+                {
+                    v
+                } else {
+                    warn!("🔴 CACHE MISS: ReplicaSets, calling K8s API (blocking)");
+                    cache_manager::start_blocking_operation();
+                    let api = list_replicas().await;
+                    cache_manager::end_blocking_operation();
+                    if let Ok(v) = api {
+                        if !v.is_empty() {
+                            let _ = cache
+                                .put(&rs_request, FetchResult::ReplicaSets(v.clone()))
+                                .await;
+                            ReplicaSetDomainService::trigger_pod_prefetch(&v, "IMMEDIATE").await;
+                        }
+                        v
+                    } else if let Some(FetchResult::ReplicaSets(v)) =
+                        cache.get_or_mark_stale(&rs_request).await
+                    {
+                        v
+                    } else {
+                        Vec::new()
+                    }
+                };
+
+                let ds_items = if let Some(FetchResult::DaemonSets(v)) =
+                    cache.get(&ds_request).await
+                {
+                    v
+                } else {
+                    warn!("🔴 CACHE MISS: DaemonSets, calling K8s API (blocking)");
+                    cache_manager::start_blocking_operation();
+                    let api = list_daemonsets().await;
+                    cache_manager::end_blocking_operation();
+                    if let Ok(v) = api {
+                        if !v.is_empty() {
+                            let _ = cache
+                                .put(&ds_request, FetchResult::DaemonSets(v.clone()))
+                                .await;
+                            ReplicaSetDomainService::trigger_pod_prefetch(&v, "IMMEDIATE").await;
+                        }
+                        v
+                    } else if let Some(FetchResult::DaemonSets(v)) =
+                        cache.get_or_mark_stale(&ds_request).await
+                    {
+                        v
+                    } else {
+                        Vec::new()
+                    }
+                };
+
+                let mut merged = merge_workloads(rs_items, ds_items);
+                if merged != last_sent && tx.send(Message::Rs(merged.clone())).await.is_err() {
+                    break;
+                }
+                std::mem::swap(&mut last_sent, &mut merged);
             }
 
-            // Cleanup subscription
-            cache.subscription_manager.unsubscribe(&sub_id).await;
+            cache.subscription_manager.unsubscribe(&rs_sub_id).await;
+            cache.subscription_manager.unsubscribe(&ds_sub_id).await;
         });
 
         ReceiverStream::new(rx)
     }
+}
+
+/// Combine `ReplicaSet` and `DaemonSet` rows into a single workload list
+/// sorted by kind then name, so the landing has a stable order regardless
+/// of which cache updated most recently.
+fn merge_workloads(rs: Vec<Rs>, ds: Vec<Rs>) -> Vec<Rs> {
+    let mut merged = Vec::with_capacity(rs.len() + ds.len());
+    merged.extend(rs);
+    merged.extend(ds);
+    merged.sort_by(|a, b| a.description.cmp(&b.description).then(a.name.cmp(&b.name)));
+    merged
 }
 
 impl App {
@@ -356,11 +421,17 @@ impl App {
         Apps::Rs { app: self.clone() }
     }
 
-    /// View YAML for selected `ReplicaSet`
+    /// View YAML for selected workload row (`ReplicaSet` or `DaemonSet`).
     fn handle_yaml_view(&mut self) -> Apps {
         if let Some(selection) = self.get_selected_item() {
+            // `description` carries the workload kind for merged rows.
+            let resource_type = match selection.description.as_str() {
+                "DaemonSet" => "daemonset",
+                _ => "replicaset",
+            }
+            .to_string();
             self.base.yaml_editor = YamlEditor::new(
-                "replicaset".to_string(),
+                resource_type,
                 selection.name.clone(),
                 Some(cache_manager::get_current_namespace_or_default()),
             );

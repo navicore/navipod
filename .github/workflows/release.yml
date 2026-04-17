@@ -1,8 +1,9 @@
 name: Release
 
-# Fires when a GitHub Release is published with a tag like `vX.Y.Z`.
-# Bumps the version in Cargo.toml to match the tag, pushes the bump
-# back to main, and publishes to crates.io.
+# Fires when a GitHub Release is published with a semver tag like `X.Y.Z`
+# (a leading `v` is tolerated but not required — repo convention is bare
+# numeric tags). Bumps the version in Cargo.toml to match the tag, pushes
+# the bump back to main, and publishes to crates.io.
 #
 # Secrets required:
 #   - PAT: personal access token with `contents: write` on this repo
@@ -20,7 +21,6 @@ jobs:
   publish:
     name: Publish to crates.io
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: Checkout
@@ -38,6 +38,12 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
+          # Accept `X.Y.Z` (repo convention) or `vX.Y.Z` — reject anything else
+          # so a typo tag like `release-foo` can't trigger a publish.
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not a semver release tag (X.Y.Z)"
+            exit 1
+          fi
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing version: $VERSION"

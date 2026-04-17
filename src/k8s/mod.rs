@@ -2,6 +2,7 @@ pub mod cache;
 pub mod client;
 pub mod client_manager;
 pub mod containers;
+pub mod cronjobs;
 pub mod ds;
 pub mod events;
 pub mod jobs;

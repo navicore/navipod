@@ -13,7 +13,7 @@ use super::fetcher::{DataRequest, FetchResult};
 use crate::error::Result;
 use crate::k8s::{USER_AGENT, client};
 use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet, StatefulSet};
-use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{Event, Pod};
 use kube::api::{Api, WatchEvent, WatchParams};
 use kube::{Client, ResourceExt};
@@ -25,7 +25,7 @@ use tracing::{debug, error, info, warn};
 
 /// Number of resource watch streams managed by `WatchManager`. Keep in sync
 /// with the watchers spawned in `WatchManager::start()`.
-const ACTIVE_WATCHER_COUNT: usize = 6;
+const ACTIVE_WATCHER_COUNT: usize = 7;
 
 /// Represents different types of K8s resources we can watch
 #[derive(Debug, Clone)]
@@ -35,6 +35,7 @@ pub enum WatchedResource {
     DaemonSets,
     StatefulSets,
     Jobs,
+    CronJobs,
     Events,
 }
 
@@ -145,10 +146,12 @@ impl WatchManager {
         );
         let job_handle =
             Self::start_job_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
+        let cj_handle =
+            Self::start_cronjob_watcher(client.clone(), invalidation_tx.clone(), namespace.clone());
         let event_handle = Self::start_event_watcher(client, invalidation_tx, namespace);
 
         info!(
-            "🔍 Watch streams started for Pods, ReplicaSets, DaemonSets, StatefulSets, Jobs, and Events"
+            "🔍 Watch streams started for Pods, ReplicaSets, DaemonSets, StatefulSets, Jobs, CronJobs, and Events"
         );
 
         let handle = WatchManagerHandle {
@@ -159,6 +162,7 @@ impl WatchManager {
                 ds_handle,
                 ss_handle,
                 job_handle,
+                cj_handle,
                 event_handle,
             ],
         };
@@ -296,6 +300,24 @@ impl WatchManager {
         tokio::spawn(async move {
             Self::run_resource_watcher("Job", client, invalidation_tx, namespace, Self::watch_jobs)
                 .await;
+        })
+    }
+
+    /// Start watching `CronJob` resources
+    fn start_cronjob_watcher(
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+    ) -> tokio::task::JoinHandle<()> {
+        tokio::spawn(async move {
+            Self::run_resource_watcher(
+                "CronJob",
+                client,
+                invalidation_tx,
+                namespace,
+                Self::watch_cronjobs,
+            )
+            .await;
         })
     }
 
@@ -648,6 +670,59 @@ impl WatchManager {
         Ok(())
     }
 
+    /// Watch `CronJob` resources and send invalidation events.
+    ///
+    /// `CronJob` `status.lastScheduleTime` ticks on every schedule fire,
+    /// so Modified events are noisy by design. We emit a `cj:{ns}:*`
+    /// invalidation unconditionally — the landing only re-renders a
+    /// count, so the re-render cost is negligible. Added/Deleted are
+    /// the operationally interesting cases.
+    async fn watch_cronjobs(
+        client: Client,
+        invalidation_tx: mpsc::Sender<InvalidationEvent>,
+        namespace: String,
+    ) -> Result<()> {
+        use futures::{TryStreamExt, pin_mut};
+
+        let cronjobs: Api<CronJob> = Api::namespaced(client, &namespace);
+        let wp = WatchParams::default().timeout(WATCH_TIMEOUT_SECONDS);
+
+        let stream = cronjobs.watch(&wp, "0").await?;
+        pin_mut!(stream);
+
+        while let Some(event) = stream.try_next().await? {
+            match event {
+                WatchEvent::Added(cj) => {
+                    let ns = cj.namespace().unwrap_or_default();
+                    let pattern = format!("cj:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    info!("➕ CronJob added: {}/{}", ns, cj.name_any());
+                }
+                WatchEvent::Modified(cj) => {
+                    let ns = cj.namespace().unwrap_or_default();
+                    let pattern = format!("cj:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    debug!("📝 CronJob modified: {}/{}", ns, cj.name_any());
+                }
+                WatchEvent::Deleted(cj) => {
+                    let ns = cj.namespace().unwrap_or_default();
+                    let pattern = format!("cj:{ns}:*");
+                    let _ = invalidation_tx
+                        .send(InvalidationEvent::Pattern(pattern))
+                        .await;
+                    info!("🗑️  CronJob deleted: {}/{}", ns, cj.name_any());
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
     /// Watch Event resources and send invalidation events
     async fn watch_events(
         client: Client,
@@ -708,6 +783,14 @@ impl WatchManager {
                 labels: std::collections::BTreeMap::new(),
             }),
             "job" => Some(DataRequest::Jobs {
+                namespace: if parts.get(1)? == &"all" {
+                    None
+                } else {
+                    Some(parts[1].to_string())
+                },
+                labels: std::collections::BTreeMap::new(),
+            }),
+            "cj" => Some(DataRequest::CronJobs {
                 namespace: if parts.get(1)? == &"all" {
                     None
                 } else {

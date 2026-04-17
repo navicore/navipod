@@ -1,6 +1,6 @@
 use super::config::{
-    DEFAULT_CONTAINER_TTL_SECS, DEFAULT_DAEMONSET_TTL_SECS, DEFAULT_EVENT_TTL_SECS,
-    DEFAULT_INGRESS_TTL_SECS, DEFAULT_JOB_TTL_SECS, DEFAULT_POD_TTL_SECS,
+    DEFAULT_CONTAINER_TTL_SECS, DEFAULT_CRONJOB_TTL_SECS, DEFAULT_DAEMONSET_TTL_SECS,
+    DEFAULT_EVENT_TTL_SECS, DEFAULT_INGRESS_TTL_SECS, DEFAULT_JOB_TTL_SECS, DEFAULT_POD_TTL_SECS,
     DEFAULT_REPLICASET_TTL_SECS, DEFAULT_STATEFULSET_TTL_SECS,
 };
 use crate::error::Result;
@@ -32,6 +32,10 @@ pub enum DataRequest {
         labels: BTreeMap<String, String>,
     },
     Jobs {
+        namespace: Option<String>,
+        labels: BTreeMap<String, String>,
+    },
+    CronJobs {
         namespace: Option<String>,
         labels: BTreeMap<String, String>,
     },
@@ -96,6 +100,9 @@ impl DataRequest {
             Self::Jobs { namespace, labels } => {
                 format!("job:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
             }
+            Self::CronJobs { namespace, labels } => {
+                format!("cj:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
+            }
             Self::Pods {
                 namespace,
                 selector,
@@ -131,6 +138,7 @@ impl DataRequest {
             Self::DaemonSets { .. } => Duration::from_secs(DEFAULT_DAEMONSET_TTL_SECS),
             Self::StatefulSets { .. } => Duration::from_secs(DEFAULT_STATEFULSET_TTL_SECS),
             Self::Jobs { .. } => Duration::from_secs(DEFAULT_JOB_TTL_SECS),
+            Self::CronJobs { .. } => Duration::from_secs(DEFAULT_CRONJOB_TTL_SECS),
             Self::Pods { .. } => Duration::from_secs(DEFAULT_POD_TTL_SECS),
             Self::Containers { .. } => Duration::from_secs(DEFAULT_CONTAINER_TTL_SECS),
             Self::Events { .. } => Duration::from_secs(DEFAULT_EVENT_TTL_SECS),
@@ -147,6 +155,7 @@ impl DataRequest {
             | Self::DaemonSets { .. }
             | Self::StatefulSets { .. }
             | Self::Jobs { .. }
+            | Self::CronJobs { .. }
             | Self::Custom { .. } => FetchPriority::Medium,
             Self::Events { .. } | Self::Ingresses { .. } => FetchPriority::Low,
         }
@@ -184,6 +193,7 @@ pub enum FetchResult {
     DaemonSets(Vec<Rs>),
     StatefulSets(Vec<Rs>),
     Jobs(Vec<Rs>),
+    CronJobs(Vec<Rs>),
     Pods(Vec<RsPod>),
     Containers(Vec<Container>),
     Events(Vec<crate::tui::data::ResourceEvent>),
@@ -197,6 +207,7 @@ impl Clone for FetchResult {
             Self::DaemonSets(data) => Self::DaemonSets(data.clone()),
             Self::StatefulSets(data) => Self::StatefulSets(data.clone()),
             Self::Jobs(data) => Self::Jobs(data.clone()),
+            Self::CronJobs(data) => Self::CronJobs(data.clone()),
             Self::Pods(data) => Self::Pods(data.clone()),
             Self::Containers(data) => Self::Containers(data.clone()),
             Self::Events(data) => Self::Events(data.clone()),
@@ -248,6 +259,15 @@ mod tests {
             labels: BTreeMap::new(),
         };
         assert_eq!(req.cache_key(), "job:default:{}");
+    }
+
+    #[test]
+    fn cronjobs_cache_key_uses_cj_prefix() {
+        let req = DataRequest::CronJobs {
+            namespace: Some("default".to_string()),
+            labels: BTreeMap::new(),
+        };
+        assert_eq!(req.cache_key(), "cj:default:{}");
     }
 
     #[test]

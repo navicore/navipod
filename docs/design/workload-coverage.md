@@ -114,10 +114,19 @@ shippable and leaves the tree in a working state.
   `DEFAULT_JOB_TTL_SECS = 120`, sixth watcher. **Deferred:** revealing
   completed Jobs via `/` — the current `/` is a row text-filter, toggling
   fetch-scope from it is a separate UX slice.
-- **Slice 5 — CronJobs.** Depends on Slice 4. Row represents the
-  CronJob; `Enter` resolves to the latest active Job's pods
-  (`owner_references` chain: CronJob → Job → Pod). Sane watch backoff —
-  CronJob status churns on every tick. New `cj:` cache prefix and watch.
+- **Slice 5 — CronJobs.** ✅ *Implemented (pending merge).* Row represents
+  the CronJob and is shown regardless of activity — the schedule
+  definition itself is the operationally interesting thing. `Enter`
+  walks the `owner_references` chain (CronJob → Job → Pod):
+  `find_latest_active_job_for_cronjob` filters Jobs whose owners include
+  a CronJob with the given name, keeps those with `status.active > 0`,
+  picks the `max_by_key(creation_timestamp)`, and routes via
+  `PodSelector::ByJob(job_name)`. If no active child exists, Enter stays
+  on the landing rather than opening an empty pod list. New `cj:` cache
+  prefix, `DEFAULT_CRONJOB_TTL_SECS = 60` (tighter than Jobs because
+  `lastScheduleTime` ticks on every schedule fire), seventh watcher;
+  `handle_switch_to_pods` is now async to accommodate the owner-chain
+  lookup at Enter time.
 
 Slice-level checkpoint: after each slice, the corresponding pods in
 `kind`'s `kube-system` become navigable without regression to the RS

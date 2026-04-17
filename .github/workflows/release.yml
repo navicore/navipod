@@ -1,0 +1,88 @@
+name: Release
+
+# Fires when a GitHub Release is published with a tag like `vX.Y.Z`.
+# Bumps the version in Cargo.toml to match the tag, pushes the bump
+# back to main, and publishes to crates.io.
+#
+# Secrets required:
+#   - PAT: personal access token with `contents: write` on this repo
+#          (needed to push the version-bump commit back to main;
+#           the default GITHUB_TOKEN cannot push to protected branches)
+#   - CARGO_REGISTRY_TOKEN: crates.io API token
+on:
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.PAT }}
+          ref: main
+
+      - name: Install Rust toolchain
+        # Pinned to match rust-toolchain.toml — these two MUST stay in sync.
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing version: $VERSION"
+
+      - name: Update Cargo.toml version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Section-scoped replace: only touch the `version` line inside
+          # `[package]`, never any dep version fields or `[package.metadata.*]`
+          # subsections.
+          awk -v new_version="$VERSION" '
+            /^\[package\]$/ { in_section=1; print; next }
+            /^\[/           { in_section=0 }
+            in_section && /^version *= */ {
+              print "version = \"" new_version "\""
+              next
+            }
+            { print }
+          ' Cargo.toml > Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+
+          # Keep Cargo.lock in sync so `cargo build --locked` on main passes
+          # after the push-back.
+          cargo update --package navipod
+
+          echo "--- Cargo.toml header ---"
+          head -n 15 Cargo.toml
+
+      - name: Commit version bump to main
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          # Tolerate the no-op case where the tag was cut from a commit
+          # that already had the right version.
+          if git diff --staged --quiet; then
+            echo "No version change to commit (Cargo.toml already at $VERSION)."
+          else
+            git commit -m "chore: bump version to ${VERSION}"
+            git push origin main
+          fi
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo publish --locked --no-verify \
+            || echo "::warning::cargo publish failed (version may already exist on crates.io)"

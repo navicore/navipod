@@ -179,6 +179,24 @@ just ci
 
 The toolchain version is pinned in `rust-toolchain.toml` and must match every CI workflow's `dtolnay/rust-toolchain@master` `toolchain:` input.
 
+## Releasing
+
+Publishing to crates.io is automated. To cut a release:
+
+1. Create a GitHub release with tag `vX.Y.Z` (e.g., `v1.2.0`) targeting `main`.
+2. The `release.yml` workflow will automatically:
+   - Extract `X.Y.Z` from the tag
+   - Update `version` in `Cargo.toml` and `Cargo.lock` to match
+   - Commit the bump back to `main` as `github-actions[bot]`
+   - `cargo publish` to crates.io
+
+The version in `Cargo.toml` on `main` does not need to be bumped ahead of time — the release workflow is the source of truth.
+
+Required repository secrets (Settings → Secrets and variables → Actions):
+
+- `PAT` — personal access token with `contents: write` on this repo; needed to push the version-bump commit back to `main`
+- `CARGO_REGISTRY_TOKEN` — crates.io API token from <https://crates.io/settings/tokens>
+
 ## License
 
 See LICENSE file for details.

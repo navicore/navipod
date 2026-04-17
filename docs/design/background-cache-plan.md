@@ -1,4 +1,11 @@
-# NaviPod Improvement Plan: Background Data Architecture
+# Background Cache Plan (design)
+
+> **Status: phases 1–2 substantially landed**, phases 3–4 open. The shipped
+> cache, background fetcher, watch-driven invalidation, and per-view cache
+> migration are summarized in `docs/ARCHITECTURE.md`. Remaining work
+> (prefetch heuristics, freshness indicators, offline mode, cross-view
+> search) is tracked in `docs/ROADMAP.md`. This file is kept as the
+> original plan and open design space.
 
 ## Executive Summary
 Transform NaviPod from an on-demand K8s API caller to a proactive data caching system that provides instant navigation with reduced K8s API load.

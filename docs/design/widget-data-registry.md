@@ -1,4 +1,9 @@
-# NaviPod Architecture Guide: Extensible Data Layer
+# Widget Data Registry (design)
+
+> **Status: aspirational.** Describes a widget-requirements /
+> fetcher-registry model that is only partially realized in code. Current
+> shipped architecture is in `docs/ARCHITECTURE.md`; treat this file as a
+> direction, not a description of reality.
 
 ## Design Principles
 

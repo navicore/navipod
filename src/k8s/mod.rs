@@ -14,6 +14,7 @@ pub mod resources;
 pub mod rs;
 pub mod rs_ingress;
 pub mod scan;
+pub mod ss;
 pub mod utils;
 
 /// Default user agent for `NaviPod` - automatically uses the package version

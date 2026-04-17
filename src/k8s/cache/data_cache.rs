@@ -244,7 +244,9 @@ impl K8sDataCache {
     fn estimate_size(&self, data: &FetchResult) -> usize {
         // Rough estimation of memory usage
         match data {
-            FetchResult::ReplicaSets(items) | FetchResult::DaemonSets(items) => items.len() * 1024,
+            FetchResult::ReplicaSets(items)
+            | FetchResult::DaemonSets(items)
+            | FetchResult::StatefulSets(items) => items.len() * 1024,
             FetchResult::Pods(items) => items.len() * 2048,
             FetchResult::Containers(items) => items.len() * 512,
             FetchResult::Events(items) => items.len() * 256,
@@ -370,6 +372,10 @@ impl K8sDataCache {
             | (
                 DataRequest::DaemonSets { namespace, .. },
                 super::fetcher::FetchResult::DaemonSets(workloads),
+            )
+            | (
+                DataRequest::StatefulSets { namespace, .. },
+                super::fetcher::FetchResult::StatefulSets(workloads),
             ) => {
                 // When we just fetched workload rows (RS or DS), immediately
                 // prefetch pods for their selectors.

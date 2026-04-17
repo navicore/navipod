@@ -82,7 +82,41 @@ current shape because pods-under-a-workload is still a flat list.
   - Namespace switching (`cache_manager::switch_namespace`) must
     restart the new watches too, not just the existing three.
 
-## Checkpoints
+## Delivery Slices
+
+Ordered by increasing novelty and user value. Each slice is independently
+shippable and leaves the tree in a working state.
+
+- **Slice 1 — DaemonSets.** ✅ *Merged.* Typed `Api<DaemonSet>`, reuses
+  `Rs` row shape with `description = "DaemonSet"`. New cache variant,
+  watch, prefetch chain, UI title now "Workloads". Proves the extension
+  pattern.
+- **Slice 2 — StatefulSets.** Near-copy of Slice 1. Typed
+  `Api<StatefulSet>`, status fields `ready_replicas` / `replicas`,
+  `spec.selector.match_labels` for pod lookup. New `ss:` cache prefix,
+  new `WatchedResource::StatefulSets`. No UI model changes beyond adding
+  another kind tag.
+- **Slice 3 — Unowned leaf.** Highest user-visible payoff — unlocks
+  static-pod visibility (kube-apiserver, etcd, scheduler,
+  controller-manager). Not a typed K8s resource: synthesized from the
+  existing pod fetch by filtering `owner_references` empty or
+  `kind = Node`. One synthetic row in the landing with the count;
+  selection routes to `pod_app` with a filter predicate (not a selector).
+  No new watch — reuses the Pods watch.
+- **Slice 4 — Jobs.** First slice where the selector model breaks:
+  Job→Pod goes through `owner_references`, not `spec.selector`. Default
+  filter `status.active > 0`; completed Jobs only visible via `/`.
+  New `job:` cache prefix and watch.
+- **Slice 5 — CronJobs.** Depends on Slice 4. Row represents the
+  CronJob; `Enter` resolves to the latest active Job's pods
+  (`owner_references` chain: CronJob → Job → Pod). Sane watch backoff —
+  CronJob status churns on every tick. New `cj:` cache prefix and watch.
+
+Slice-level checkpoint: after each slice, the corresponding pods in
+`kind`'s `kube-system` become navigable without regression to the RS
+flow. After Slice 3 the full kube-system is inspectable end-to-end.
+
+## Checkpoints (whole feature)
 
 1. `kind create cluster` → launch navipod → `kube-system` shows
    `coredns` (RS), `kube-proxy`/`kindnet` (DS), and a single

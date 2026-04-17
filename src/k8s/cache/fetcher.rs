@@ -1,6 +1,7 @@
 use super::config::{
     DEFAULT_CONTAINER_TTL_SECS, DEFAULT_DAEMONSET_TTL_SECS, DEFAULT_EVENT_TTL_SECS,
     DEFAULT_INGRESS_TTL_SECS, DEFAULT_POD_TTL_SECS, DEFAULT_REPLICASET_TTL_SECS,
+    DEFAULT_STATEFULSET_TTL_SECS,
 };
 use crate::error::Result;
 use crate::tui::data::{Container, Ingress, Rs, RsPod};
@@ -23,6 +24,10 @@ pub enum DataRequest {
         labels: BTreeMap<String, String>,
     },
     DaemonSets {
+        namespace: Option<String>,
+        labels: BTreeMap<String, String>,
+    },
+    StatefulSets {
         namespace: Option<String>,
         labels: BTreeMap<String, String>,
     },
@@ -74,6 +79,9 @@ impl DataRequest {
             Self::DaemonSets { namespace, labels } => {
                 format!("ds:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
             }
+            Self::StatefulSets { namespace, labels } => {
+                format!("ss:{}:{labels:?}", namespace.as_deref().unwrap_or("all"))
+            }
             Self::Pods {
                 namespace,
                 selector,
@@ -107,6 +115,7 @@ impl DataRequest {
             // Use configurable TTL values for predictive cache
             Self::ReplicaSets { .. } => Duration::from_secs(DEFAULT_REPLICASET_TTL_SECS),
             Self::DaemonSets { .. } => Duration::from_secs(DEFAULT_DAEMONSET_TTL_SECS),
+            Self::StatefulSets { .. } => Duration::from_secs(DEFAULT_STATEFULSET_TTL_SECS),
             Self::Pods { .. } => Duration::from_secs(DEFAULT_POD_TTL_SECS),
             Self::Containers { .. } => Duration::from_secs(DEFAULT_CONTAINER_TTL_SECS),
             Self::Events { .. } => Duration::from_secs(DEFAULT_EVENT_TTL_SECS),
@@ -119,9 +128,10 @@ impl DataRequest {
     pub const fn priority(&self) -> FetchPriority {
         match self {
             Self::Pods { .. } | Self::Containers { .. } => FetchPriority::High,
-            Self::ReplicaSets { .. } | Self::DaemonSets { .. } | Self::Custom { .. } => {
-                FetchPriority::Medium
-            }
+            Self::ReplicaSets { .. }
+            | Self::DaemonSets { .. }
+            | Self::StatefulSets { .. }
+            | Self::Custom { .. } => FetchPriority::Medium,
             Self::Events { .. } | Self::Ingresses { .. } => FetchPriority::Low,
         }
     }
@@ -156,6 +166,7 @@ pub trait DataFetcher: Send + Sync {
 pub enum FetchResult {
     ReplicaSets(Vec<Rs>),
     DaemonSets(Vec<Rs>),
+    StatefulSets(Vec<Rs>),
     Pods(Vec<RsPod>),
     Containers(Vec<Container>),
     Events(Vec<crate::tui::data::ResourceEvent>),
@@ -167,6 +178,7 @@ impl Clone for FetchResult {
         match self {
             Self::ReplicaSets(data) => Self::ReplicaSets(data.clone()),
             Self::DaemonSets(data) => Self::DaemonSets(data.clone()),
+            Self::StatefulSets(data) => Self::StatefulSets(data.clone()),
             Self::Pods(data) => Self::Pods(data.clone()),
             Self::Containers(data) => Self::Containers(data.clone()),
             Self::Events(data) => Self::Events(data.clone()),

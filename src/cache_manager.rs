@@ -192,7 +192,7 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
     // so priming both avoids a stutter on first draw for control-plane
     // namespaces where most pods are DS-owned.
     let ds_request = DataRequest::DaemonSets {
-        namespace: Some(namespace),
+        namespace: Some(namespace.clone()),
         labels: std::collections::BTreeMap::new(),
     };
 
@@ -210,6 +210,29 @@ pub async fn initialize_cache(namespace: String) -> Result<()> {
         }
         Err(e) => {
             warn!("Failed to fetch initial DaemonSet data: {}", e);
+        }
+    }
+
+    // StatefulSets too — same rationale as DaemonSets.
+    let ss_request = DataRequest::StatefulSets {
+        namespace: Some(namespace),
+        labels: std::collections::BTreeMap::new(),
+    };
+
+    start_blocking_operation();
+    let ss_result = crate::k8s::ss::list_statefulsets().await;
+    end_blocking_operation();
+    match ss_result {
+        Ok(ss_data) => {
+            let fetch_result = FetchResult::StatefulSets(ss_data);
+            if let Err(e) = cache.put(&ss_request, fetch_result).await {
+                warn!("Failed to populate cache with StatefulSet data: {}", e);
+            } else {
+                info!("🚀 Cache pre-populated with StatefulSet data for instant UI startup");
+            }
+        }
+        Err(e) => {
+            warn!("Failed to fetch initial StatefulSet data: {}", e);
         }
     }
 

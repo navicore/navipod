@@ -151,9 +151,9 @@ fn render_replicaset_list(f: &mut Frame, app: &App, area: Rect, theme: &NaviThem
 
     let filter = app.get_filter();
     let title = if filter.is_empty() {
-        "ReplicaSets".to_string()
+        "Workloads".to_string()
     } else {
-        format!("ReplicaSets (filtered: {filter})")
+        format!("Workloads (filtered: {filter})")
     };
 
     // Render container block
@@ -433,7 +433,7 @@ fn render_filter_modal(f: &mut Frame, app: &App, theme: &NaviTheme) {
         })
         .block(
             Block::default()
-                .title(format!("{} Filter ReplicaSets", Symbols::CHEVRON_RIGHT))
+                .title(format!("{} Filter Workloads", Symbols::CHEVRON_RIGHT))
                 .title_style(theme.text_style(TextType::Subtitle).bg(theme.bg_secondary))
                 .borders(Borders::ALL)
                 .border_style(

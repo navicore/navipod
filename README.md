@@ -1,3 +1,8 @@
+<!-- ghmig:moved -->
+> **This repository has moved to [https://git.navicore.tech/navicore/navipod](https://git.navicore.tech/navicore/navipod).**
+>
+> The GitHub copy is archived and no longer maintained.
+
 [![Crates.io](https://img.shields.io/crates/v/navipod.svg)](https://crates.io/crates/navipod)
 [![Docs.rs](https://docs.rs/navipod/badge.svg)](https://docs.rs/navipod)
 [![Publish-Crate](https://github.com/navicore/navipod/actions/workflows/publish-crates.yml/badge.svg)](https://github.com/navicore/navipod/actions/workflows/publish-crates.yml)
@@ -200,4 +205,3 @@ Required repository secrets (Settings → Secrets and variables → Actions):
 ## License
 
 See LICENSE file for details.
-
